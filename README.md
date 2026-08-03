@@ -44,6 +44,9 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - Responsive WordPress/Elementor enquiry iframe at `/enquiry`
 - Website enquiries automatically create booking records and workflow tasks
 - Copyable auto-resizing iframe embed code in Packages & pricing
+- One-click initial quote email with a private link that opens directly on package selection
+- Secure client invoice and receipt downloads inside the same booking portal
+- Automatic package-accepted and invoice-ready email when SMTP is configured
 
 Studio Ninja import and gallery automation remain planned for later phases without restructuring the core data.
 

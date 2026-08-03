@@ -44,7 +44,8 @@ def test_phase_two_b_flow():
         health = client.get("/api/health")
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
-                                 "reminders_enabled": False}
+                                 "reminders_enabled": False,
+                                 "build": "2026.08.03-portal-invoices-v3"}
 
         homepage = client.get("/")
         assert homepage.status_code == 200
@@ -69,6 +70,9 @@ def test_phase_two_b_flow():
         assert wedding_contract["title"] == "Weddings By Mark Contract"
         assert wedding_contract["version"] == "Rev 1.3 - August 2022"
         assert "15. DELIVERY TIME FRAMES AND ALBUMS" in wedding_contract["body"]
+        quote_template = next(row for row in templates.json()["templates"]
+                              if row["brand"] == "wbm" and row["template_key"] == "quote")
+        assert "compare the available packages" in quote_template["body"]
 
         portal = client.post(f"/api/bookings/{wedding_data['id']}/portal", json={"expires_days": 90})
         assert portal.status_code == 201
@@ -76,6 +80,13 @@ def test_phase_two_b_flow():
         public_data = client.get(f"/api/client/{token}")
         assert public_data.status_code == 200
         assert public_data.json()["record"]["title"] == "Sophie & James"
+        prepared_quote = client.post(f"/api/bookings/{wedding_data['id']}/quote/send",
+                                     json={"expires_days": 90})
+        assert prepared_quote.status_code == 200
+        assert prepared_quote.json()["url"].endswith("?tab=quote")
+        assert prepared_quote.json()["email_sent"] is False
+        direct_quote_token = prepared_quote.json()["url"].split("/client/")[1].split("?")[0]
+        assert client.get(f"/api/client/{direct_quote_token}").status_code == 200
         form = client.post(f"/api/client/{token}/forms", json={
             "form_type": "booking_form", "data": {
                 "primary_full_name": "Sophie Taylor", "primary_phone": "07700 900123",
@@ -164,12 +175,28 @@ def test_phase_two_b_flow():
         assert quote.status_code == 201
         assert quote.json()["quote"]["total"] == 1019
         assert quote.json()["invoice"]["number"] == "WBM02003"
+        assert quote.json()["acceptance_email_sent"] is False
         assert [line["name"] for line in quote.json()["invoice"]["line_items"]] == [
             "Gold Package 3 2026/27/28", "Wedding album offer"
         ]
         refreshed_public = client.get(f"/api/client/{token}").json()
         assert refreshed_public["quote"]["invoice_number"] == "WBM02003"
         assert refreshed_public["record"]["quoted_total"] == 1019
+        assert refreshed_public["invoices"][0]["number"] == "WBM02003"
+        public_invoice_pdf = client.get(
+            f"/api/client/{token}/invoices/{quote.json()['invoice']['id']}/invoice.pdf"
+        )
+        assert public_invoice_pdf.status_code == 200
+        assert public_invoice_pdf.content.startswith(b"%PDF")
+        digital_portal = client.post(f"/api/bookings/{digital_data['id']}/portal",
+                                     json={"expires_days": 90}).json()
+        digital_token = digital_portal["url"].split("/client/")[1]
+        assert client.get(
+            f"/api/client/{digital_token}/invoices/{quote.json()['invoice']['id']}/invoice.pdf"
+        ).status_code == 404
+        assert client.get(
+            f"/api/client/{token}/invoices/{quote.json()['invoice']['id']}/receipt.pdf"
+        ).status_code == 422
         quote_pdf = client.get(f"/api/invoices/{quote.json()['invoice']['id']}/pdf")
         assert quote_pdf.status_code == 200
         assert quote_pdf.content.startswith(b"%PDF")

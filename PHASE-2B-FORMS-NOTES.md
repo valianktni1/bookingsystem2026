@@ -20,5 +20,11 @@
 - Optional SMTP acknowledgement email to the couple
 - Honeypot and per-address submission throttling
 - Embed code can be copied from **Packages & pricing** in the admin interface
+- A clear **Create & send quote** action is available on every wedding enquiry
+- The initial quote email opens directly on the package and add-on selection screen
+- Quote acceptance, generated invoice and form/agreement progress are visible together
+- The same private portal includes an Invoices tab with payment status and line items
+- Invoice PDFs and paid receipts can be downloaded securely by the correct client only
+- Package acceptance can send an automatic invoice-ready confirmation email
 
 The source contract wording should still be reviewed by the business owner or a qualified legal professional before production use. The software does not provide legal advice.

@@ -1,6 +1,7 @@
 const $ = selector => document.querySelector(selector);
 let data = null;
-let active = "Overview";
+const requestedTab = new URLSearchParams(location.search).get("tab");
+let active = requestedTab === "quote" ? "Choose package" : requestedTab === "invoices" ? "Invoices" : "Overview";
 const token = location.pathname.split("/").filter(Boolean).pop();
 
 const esc = (value = "") => String(value ?? "").replace(/[&<>'"]/g, char => ({
@@ -41,7 +42,7 @@ async function init() {
 
 function renderTabs() {
   const hasQuote = data.record.kind === "wedding" && data.catalog.packages.length;
-  const tabs = ["Overview", ...(hasQuote ? ["Choose package"] : []), "Booking form",
+  const tabs = ["Overview", ...(hasQuote ? ["Choose package"] : []), "Invoices", "Booking form",
     ...(data.record.kind === "wedding" ? ["Final details"] : []), "Agreement"];
   $("#tabs").innerHTML = tabs.map(tab => `<button class="${tab === active ? "active" : ""}" data-tab="${tab}">${tab}</button>`).join("");
   document.querySelectorAll("[data-tab]").forEach(button => button.onclick = () => {
@@ -53,6 +54,7 @@ function renderTabs() {
 function render() {
   if (active === "Overview") overview();
   else if (active === "Choose package") quotePanel();
+  else if (active === "Invoices") invoicesPanel();
   else if (active === "Booking form") bookingForm();
   else if (active === "Final details") finalForm();
   else agreement();
@@ -84,6 +86,14 @@ function quotePanel() {
   renderAddons();
 }
 
+function invoicesPanel() {
+  if (!data.invoices.length) {
+    $("#panel").innerHTML = `<h2>Your invoices</h2><p class="intro">Your invoice will appear here automatically after you accept your package or service quote.</p><div class="invoice-empty"><strong>No invoice yet</strong><span>Choose and accept your package first.</span></div>`;
+    return;
+  }
+  $("#panel").innerHTML = `<h2>Your invoices & payments</h2><p class="intro">Download your invoice for the bank-transfer details and use the invoice number as your payment reference.</p><div class="client-invoices">${data.invoices.map(invoice => `<article class="client-invoice"><header><div><strong>${esc(invoice.number)}</strong><span class="invoice-status ${invoice.status}">${esc(String(invoice.status).replaceAll("_", " "))}</span></div><b>${money(invoice.total)}</b></header>${invoice.line_items?.length ? `<div class="client-invoice-lines">${invoice.line_items.map(item => `<div><span>${esc(item.name)}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : invoice.description ? `<p>${esc(invoice.description)}</p>` : ""}<dl><dt>Issued</dt><dd>${date(invoice.issue_date)}</dd>${invoice.due_date ? `<dt>Balance due date</dt><dd>${date(invoice.due_date)}</dd>` : ""}<dt>Paid</dt><dd>${money(invoice.paid)}</dd><dt>Balance remaining</dt><dd><strong>${money(invoice.balance)}</strong></dd></dl><div class="client-invoice-actions"><a class="primary" href="/api/client/${token}/invoices/${invoice.id}/invoice.pdf">Download invoice PDF</a>${invoice.paid > 0 ? `<a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/receipt.pdf">Download receipt</a>` : ""}</div></article>`).join("")}</div>`;
+}
+
 function selectedPackage() {
   const id = document.querySelector('input[name="package_id"]:checked')?.value;
   return data.catalog.packages.find(item => item.id === id);
@@ -112,6 +122,7 @@ async function acceptSelectedQuote(event) {
     })});
     data = await api(`/api/client/${token}`);
     toast("Package accepted and invoice created");
+    active = "Invoices";
     renderTabs();
     render();
   } catch (error) { toast(error.message); }

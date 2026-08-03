@@ -1,0 +1,10 @@
+BookingSystem2026 - Quote and Client Portal Complete
+Build: 2026.08.03-portal-invoices-v3
+
+This build includes:
+- One-click create and send quote
+- Quote link opens directly on package selection
+- Client invoice area in the same private portal
+- Secure invoice and receipt PDF downloads
+- Automatic package-accepted and invoice-ready email
+- Booking form, questionnaire and contract in the same portal

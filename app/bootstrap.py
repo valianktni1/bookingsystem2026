@@ -158,13 +158,37 @@ A £150 deposit secures your date."""),
         "balance_due_7": ("Balance reminder - 7 days", "Balance due soon for {event_date}", "Hi {client_first_name},\n\nA quick reminder that the remaining balance is now due. Please use the invoice number as your bank-transfer reference.\n\nMark\n{business_name}"),
         "payment_received": ("Payment received", "Payment received - thank you", "Hi {client_first_name},\n\nThank you, your payment has been received and your record is now confirmed.\n\nMark\n{business_name}"),
         "enquiry_received": ("Website enquiry acknowledgement", "Thank you for your Weddings By Mark enquiry", "Hi {client_first_name},\n\nThank you for getting in touch about your wedding on {event_date} at {venue_or_project}. I have received your enquiry and will come back to you as soon as I can.\n\nIn the meantime, if you need to add anything, simply reply to this email.\n\nMark\nWeddings By Mark\n{business_phone}"),
+        "quote_accepted": ("Package accepted and invoice ready", "Your package is confirmed and your invoice is ready", "Hi {client_first_name},\n\nThank you for choosing your Weddings By Mark package. Your selection has been saved and your invoice is now available in your private booking portal:\n\n{portal_url}\n\nThe invoice contains the bank-transfer details and reference. You can use the same private link to complete your Wedding Booking Form, read and accept the agreement and return to your booking whenever needed.\n\nYour date is secured when the booking fee and agreement have been received.\n\nMark\nWeddings By Mark\n{business_phone}"),
     }
     for brand in (Brand.WBM, Brand.IVORY):
         for key, (name, subject, body) in template_rows.items():
-            if brand == Brand.IVORY and key in ("final_questionnaire", "enquiry_received"):
+            if brand == Brand.IVORY and key in ("final_questionnaire", "enquiry_received", "quote_accepted"):
                 continue
             if not db.scalar(select(EmailTemplate).where(EmailTemplate.brand == brand, EmailTemplate.template_key == key)):
                 db.add(EmailTemplate(brand=brand, template_key=key, display_name=name, subject=subject, body=body))
+
+    db.flush()
+    quote_template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
+                                                            EmailTemplate.template_key == "quote"))
+    if (quote_template and quote_template.display_name == "Quote email"
+            and quote_template.subject == "Your {business_name} quote"):
+        quote_template.display_name = "Initial package quote"
+        quote_template.subject = "Choose your Weddings By Mark package"
+        quote_template.body = """Hi {client_first_name},
+
+Thank you for your enquiry for {event_date} at {venue_or_project}.
+
+I have put together your private Weddings By Mark quote. Use the secure link below to compare the available packages, choose any optional extras and see the complete total before accepting:
+
+{portal_url}
+
+Once you accept your selection, your invoice will be created automatically. Your date is secured when the booking fee and agreement have been received.
+
+If you have any questions at all, simply reply to this email.
+
+Mark
+Weddings By Mark
+{business_phone}"""
 
     digital_contract = """Ivory Digital Project Agreement\n\n1. Work begins when the agreed initial payment and this agreement have been received.\n\n2. The client will supply text, images, access details and approvals needed to complete the project.\n\n3. Timescales depend on receiving content and feedback promptly.\n\n4. The remaining balance is payable as shown on the invoice.\n\n5. Third-party costs, domains or services not included in the written quote require approval before purchase.\n\n6. The client confirms they have permission to use all supplied content."""
     contracts = {Brand.WBM: (WBM_CONTRACT_TITLE, WBM_CONTRACT_VERSION, WBM_CONTRACT_BODY),

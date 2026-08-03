@@ -170,7 +170,8 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 @app.get("/api/health")
 def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
-            "reminders_enabled": settings.reminders_enabled}
+            "reminders_enabled": settings.reminders_enabled,
+            "build": "2026.08.03-portal-invoices-v3"}
 
 
 @app.get("/api/public/catalog")
@@ -778,6 +779,45 @@ def create_portal_link(booking_id: str, payload: PortalCreateIn, _: Admin = Depe
     return {"url": f"{settings.app_url.rstrip('/')}/client/{raw}", "expires_at": row.expires_at.isoformat()}
 
 
+@app.post("/api/bookings/{booking_id}/quote/send")
+def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
+                          _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(Booking.id == booking_id))
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    if booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING:
+        raise HTTPException(422, "Package quotes are only available for Weddings By Mark bookings")
+    if db.scalar(select(Quote).where(Quote.booking_id == booking.id, Quote.status == "accepted")):
+        raise HTTPException(409, "This couple has already accepted their package quote")
+    raw, row = issue_portal_token(db, booking.id, payload.expires_days)
+    quote_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=quote"
+    template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
+                                                     EmailTemplate.template_key == "quote",
+                                                     EmailTemplate.is_active.is_(True)))
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == Brand.WBM))
+    email_sent, email_error, subject = False, None, None
+    if not template:
+        email_error = "The quote email template is missing or inactive"
+    elif not smtp_ready(Brand.WBM):
+        email_error = "SMTP is not configured for Weddings By Mark"
+    else:
+        try:
+            subject, _ = send_template_email(booking, profile, template, quote_url)
+            email_sent = True
+            db.add(EmailLog(booking_id=booking.id, template_key="quote",
+                            recipient=booking.client.email, subject=subject, status="sent"))
+        except Exception as exc:
+            email_error = str(exc)
+            db.add(EmailLog(booking_id=booking.id, template_key="quote",
+                            recipient=booking.client.email, subject=template.subject,
+                            status="failed", error=email_error[:2000]))
+    audit(db, "send_quote", "booking", booking.id,
+          {"email_sent": email_sent, "expires_at": row.expires_at.isoformat()})
+    db.commit()
+    return {"url": quote_url, "expires_at": row.expires_at.isoformat(),
+            "email_sent": email_sent, "email_error": email_error, "subject": subject}
+
+
 @app.post("/api/bookings/{booking_id}/emails/send")
 def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends(current_admin),
                        db: Session = Depends(get_db)):
@@ -820,6 +860,10 @@ def public_portal_data(token: str, db: Session = Depends(get_db)):
     addons = db.scalars(select(AddOnOption).where(AddOnOption.brand == booking.brand,
                                                   AddOnOption.is_active.is_(True))
                         .order_by(AddOnOption.display_order, AddOnOption.price)).all()
+    client_invoices = db.scalars(select(Invoice).options(selectinload(Invoice.booking),
+                                                          selectinload(Invoice.payments))
+                                 .where(Invoice.booking_id == booking.id)
+                                 .order_by(Invoice.sequence.desc())).all()
     return {"business": {"name": profile.display_name, "email": profile.email, "phone": profile.phone},
             "record": {"title": booking.title, "kind": booking.kind.value,
                        "event_date": booking.event_date.isoformat() if booking.event_date else None,
@@ -829,7 +873,36 @@ def public_portal_data(token: str, db: Session = Depends(get_db)):
             "contract_template": ({"title": contract.title, "version": contract.version, "body": contract.body}
                                   if contract else None),
             "catalog": {"packages": [package_json(x) for x in packages],
-                        "addons": [addon_json(x) for x in addons]}, **status_data}
+                        "addons": [addon_json(x) for x in addons]},
+            "invoices": [invoice_json(x) for x in client_invoices], **status_data}
+
+
+def public_invoice_for_portal(db: Session, token: str, invoice_id: str) -> Invoice:
+    portal = resolve_portal(db, token)
+    invoice = db.scalar(select(Invoice).options(selectinload(Invoice.booking).selectinload(Booking.client),
+                                                selectinload(Invoice.payments))
+                        .where(Invoice.id == invoice_id, Invoice.booking_id == portal.booking_id))
+    if not invoice:
+        raise HTTPException(404, "Invoice not found for this private booking")
+    return invoice
+
+
+@app.get("/api/client/{token}/invoices/{invoice_id}/invoice.pdf")
+def public_invoice_pdf(token: str, invoice_id: str, db: Session = Depends(get_db)):
+    invoice = public_invoice_for_portal(db, token, invoice_id)
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
+    return Response(invoice_pdf(invoice, profile), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{invoice.number}.pdf"'})
+
+
+@app.get("/api/client/{token}/invoices/{invoice_id}/receipt.pdf")
+def public_receipt_pdf(token: str, invoice_id: str, db: Session = Depends(get_db)):
+    invoice = public_invoice_for_portal(db, token, invoice_id)
+    if invoice.paid <= 0:
+        raise HTTPException(422, "A receipt is available after a payment has been recorded")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
+    return Response(invoice_pdf(invoice, profile, receipt=True), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{invoice.number}-receipt.pdf"'})
 
 
 @app.post("/api/client/{token}/quote", status_code=201)
@@ -891,11 +964,29 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
     for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
                                               Task.title.ilike("%quote%"))).all():
         task.completed = True
+    acceptance_email_sent = False
+    acceptance_template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == booking.brand, EmailTemplate.template_key == "quote_accepted",
+        EmailTemplate.is_active.is_(True)))
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    if acceptance_template and profile and smtp_ready(booking.brand):
+        try:
+            invoice_portal_url = f"{settings.app_url.rstrip('/')}/client/{token}?tab=invoices"
+            subject, _ = send_template_email(booking, profile, acceptance_template, invoice_portal_url)
+            db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
+                            recipient=booking.client.email, subject=subject, status="sent"))
+            acceptance_email_sent = True
+        except Exception as exc:
+            db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
+                            recipient=booking.client.email, subject=acceptance_template.subject,
+                            status="failed", error=str(exc)[:2000]))
     audit(db, "accept_quote", "booking", booking.id,
           {"package": package.name, "addons": [x.name for x in addons],
-           "total": money(total), "invoice": number})
+           "total": money(total), "invoice": number,
+           "acceptance_email_sent": acceptance_email_sent})
     db.commit()
-    return {"ok": True, "quote": quote_json(quote), "invoice": invoice_json(invoice)}
+    return {"ok": True, "quote": quote_json(quote), "invoice": invoice_json(invoice),
+            "acceptance_email_sent": acceptance_email_sent}
 
 
 @app.post("/api/client/{token}/forms")
