@@ -1,7 +1,8 @@
 const $ = selector => document.querySelector(selector);
 let data = null;
 const requestedTab = new URLSearchParams(location.search).get("tab");
-let active = requestedTab === "quote" ? "Choose package" : requestedTab === "invoices" ? "Invoices" : "Overview";
+const requestedTabs = {quote: "Choose package", invoices: "Invoices", "final-details": "Final details", agreement: "Agreement"};
+let active = requestedTabs[requestedTab] || "Overview";
 const token = location.pathname.split("/").filter(Boolean).pop();
 
 const esc = (value = "") => String(value ?? "").replace(/[&<>'"]/g, char => ({
@@ -29,6 +30,7 @@ async function init() {
     $("#loading").classList.add("hidden");
     $("#portal").classList.remove("hidden");
     $("#business-name").textContent = data.business.name;
+    $("#booking-label").textContent = data.record.kind === "wedding" ? "YOUR WEDDING BOOKING" : "YOUR PROJECT";
     $("#record-title").textContent = data.record.title;
     $("#record-summary").textContent = `${date(data.record.event_date)} · ${data.record.venue_or_project || "Details to be confirmed"}`;
     renderTabs();
@@ -63,22 +65,23 @@ function render() {
 function overview() {
   const quoteState = data.quote ? "accepted" : "waiting";
   $("#panel").innerHTML = `<h2>Welcome, ${esc(data.record.client.first_name)}</h2>
-    <p class="intro">This is your secure area for choosing your package, completing your details and accepting the booking agreement.</p>
+    <p class="intro">This is your ${data.record.kind === "wedding" ? "wedding booking" : "project"} area for choosing your package, completing your details and accepting the agreement.</p>
     <div class="summary"><div><small>PACKAGE / SERVICE</small><strong>${esc(data.record.package_name || "To be confirmed")}</strong></div><div><small>TOTAL</small><strong>${money(data.record.quoted_total)}</strong></div><div><small>BOOKING FEE / DEPOSIT</small><strong>${money(data.record.deposit_amount)}</strong></div></div>
     <div style="margin-top:16px" class="complete">${data.record.kind === "wedding" ? `Package: ${quoteState} · ` : ""}Booking form: ${existing("booking_form").primary_phone || existing("booking_form").contact_phone ? "completed" : "waiting"} · Agreement: ${data.contract ? "accepted" : "waiting"}${data.record.kind === "wedding" ? ` · Final details: ${existing("final_questionnaire").timeline ? "completed" : "waiting"}` : ""}</div>`;
 }
 
 function quotePanel() {
   if (data.quote) {
+    const invoice = data.invoices.find(item => item.id === data.quote.invoice_id) || data.invoices[0];
     $("#panel").innerHTML = `<h2>Your package is confirmed</h2><p class="intro">Your selection has been saved and invoice ${data.quote.invoice_number ? esc(data.quote.invoice_number) : "has been created"}.</p>
       <div class="complete">Accepted on ${date(data.quote.accepted_at.slice(0, 10))}</div>
       <div class="quote-lines">${data.quote.line_items.map(item => `<div><span><strong>${esc(item.name)}</strong><small>${item.type === "addon" ? "Add-on" : "Package"}</small></span><b>${money(item.total)}</b></div>`).join("")}</div>
-      <div class="quote-total"><span><small>Total</small><strong>${money(data.quote.total)}</strong></span><span><small>Booking fee</small><strong>${money(data.quote.deposit_amount)}</strong></span></div>`;
+      <div class="quote-total"><span><small>Total</small><strong>${money(data.quote.total)}</strong></span><span><small>Booking fee</small><strong>${money(data.quote.deposit_amount)}</strong>${invoice?.deposit_due_date ? `<em>Due ${date(invoice.deposit_due_date)}</em>` : ""}</span>${invoice?.due_date ? `<span><small>Remaining balance</small><strong>${money(Number(data.quote.total) - Number(data.quote.deposit_amount))}</strong><em>Due ${date(invoice.due_date)}</em></span>` : ""}</div>`;
     return;
   }
   const packages = data.catalog.packages;
   $("#panel").innerHTML = `<h2>Choose your wedding package</h2><p class="intro">Select one package, then choose any available extras. Your total updates automatically. An invoice is created when you accept.</p>
-    <form id="quote-form"><div class="package-grid">${packages.map((item, index) => `<label class="package-card"><input type="radio" name="package_id" value="${item.id}" ${index === 0 ? "checked" : ""}><span class="package-check">✓</span><span class="package-name"><strong>${esc(item.name)}</strong><b>${money(item.price)}</b></span><small>${esc(item.description)}</small><em>${money(item.deposit_amount)} booking fee</em></label>`).join("")}</div>
+    <form id="quote-form"><div class="package-grid">${packages.map((item, index) => `<label class="package-card"><input type="radio" name="package_id" value="${item.id}" ${index === 0 ? "checked" : ""}><span class="package-check">✓</span><span class="package-name"><strong>${esc(item.name)}</strong><b>${money(item.price)}</b></span><small>${esc(item.description)}</small><em>${money(item.deposit_amount)} booking fee · due within one day of accepting</em></label>`).join("")}</div>
     <section class="addon-section"><h3>Optional add-ons</h3><p>Only extras available for your selected package are shown.</p><div id="addon-list"></div></section>
     <div class="quote-footer"><div><small>TOTAL</small><strong id="quote-total">£0.00</strong><span id="quote-deposit"></span></div><label class="quote-confirm"><input type="checkbox" name="confirmed" required><span>I confirm that this package, the selected add-ons and the total shown are correct.</span></label><button class="primary" type="submit">Accept package & create invoice</button></div></form>`;
   document.querySelectorAll('input[name="package_id"]').forEach(input => input.onchange = renderAddons);
@@ -91,7 +94,7 @@ function invoicesPanel() {
     $("#panel").innerHTML = `<h2>Your invoices</h2><p class="intro">Your invoice will appear here automatically after you accept your package or service quote.</p><div class="invoice-empty"><strong>No invoice yet</strong><span>Choose and accept your package first.</span></div>`;
     return;
   }
-  $("#panel").innerHTML = `<h2>Your invoices & payments</h2><p class="intro">Download your invoice for the bank-transfer details and use the invoice number as your payment reference.</p><div class="client-invoices">${data.invoices.map(invoice => `<article class="client-invoice"><header><div><strong>${esc(invoice.number)}</strong><span class="invoice-status ${invoice.status}">${esc(String(invoice.status).replaceAll("_", " "))}</span></div><b>${money(invoice.total)}</b></header>${invoice.line_items?.length ? `<div class="client-invoice-lines">${invoice.line_items.map(item => `<div><span>${esc(item.name)}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : invoice.description ? `<p>${esc(invoice.description)}</p>` : ""}<dl><dt>Issued</dt><dd>${date(invoice.issue_date)}</dd>${invoice.due_date ? `<dt>Balance due date</dt><dd>${date(invoice.due_date)}</dd>` : ""}<dt>Paid</dt><dd>${money(invoice.paid)}</dd><dt>Balance remaining</dt><dd><strong>${money(invoice.balance)}</strong></dd></dl><div class="client-invoice-actions"><a class="primary" href="/api/client/${token}/invoices/${invoice.id}/invoice.pdf">Download invoice PDF</a>${invoice.paid > 0 ? `<a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/receipt.pdf">Download receipt</a>` : ""}</div></article>`).join("")}</div>`;
+  $("#panel").innerHTML = `<h2>Your invoices & payments</h2><p class="intro">Download your invoice for the bank-transfer details and use the invoice number as your payment reference.</p><div class="client-invoices">${data.invoices.map(invoice => `<article class="client-invoice"><header><div><strong>${esc(invoice.number)}</strong><span class="invoice-status ${invoice.status}">${esc(String(invoice.status).replaceAll("_", " "))}</span></div><b>${money(invoice.total)}</b></header>${invoice.line_items?.length ? `<div class="client-invoice-lines">${invoice.line_items.map(item => `<div><span><b>${esc(item.name)}</b>${item.description ? `<small>${esc(item.description)}</small>` : ""}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : invoice.description ? `<p>${esc(invoice.description)}</p>` : ""}<dl><dt>Issued</dt><dd>${date(invoice.issue_date)}</dd>${invoice.deposit_due_date ? `<dt>Booking fee</dt><dd>${money(invoice.deposit_amount)} · due ${date(invoice.deposit_due_date)}</dd>` : ""}${invoice.due_date ? `<dt>Remaining balance</dt><dd>${money(Math.max(0, Number(invoice.total) - Number(invoice.deposit_amount || 0)))} · due ${date(invoice.due_date)}</dd>` : ""}<dt>Paid so far</dt><dd>${money(invoice.paid)}</dd><dt>Total outstanding</dt><dd><strong>${money(invoice.balance)}</strong></dd></dl><div class="client-invoice-actions"><a class="primary" href="/api/client/${token}/invoices/${invoice.id}/invoice.pdf">Download invoice PDF</a>${invoice.paid > 0 ? `<a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/receipt.pdf">Download receipt</a>` : ""}</div></article>`).join("")}</div>`;
 }
 
 function selectedPackage() {
@@ -110,12 +113,12 @@ function updateQuoteTotal() {
   const selectedIds = [...document.querySelectorAll('input[name="addon_id"]:checked')].map(x => x.value);
   const addonTotal = data.catalog.addons.filter(x => selectedIds.includes(x.id)).reduce((sum, x) => sum + Number(x.price), 0);
   $("#quote-total").textContent = money(Number(selected.price) + addonTotal);
-  $("#quote-deposit").textContent = `${money(selected.deposit_amount)} booking fee due by bank transfer`;
+  $("#quote-deposit").textContent = `${money(selected.deposit_amount)} booking fee due within one day of accepting`;
 }
 async function acceptSelectedQuote(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
-  if (!confirm("Accept this package and create the invoice? The selection cannot be changed from this private page afterwards.")) return;
+  if (!confirm("Accept this package and create the invoice? The selection cannot be changed from your wedding booking afterwards.")) return;
   try {
     await api(`/api/client/${token}/quote`, {method: "POST", body: JSON.stringify({
       package_id: form.get("package_id"), addon_ids: form.getAll("addon_id"), confirmed: form.get("confirmed") === "on"
@@ -138,13 +141,7 @@ function bookingForm() {
     $("#booking-form").onsubmit = event => submitForm(event, "booking_form");
     return;
   }
-  const paymentOptions = [
-    "£100 deposit + balance 45 days before the wedding",
-    "25% deposit + balance 45 days before the wedding",
-    "£100 deposit + 50% of the balance 90 days before and 50% 45 days before the wedding",
-    "£100 deposit + 3 equal payments, with the balance due 35 days before the wedding"
-  ];
-  const selectedPayments = Array.isArray(x.payment_options) ? x.payment_options : (x.payment_options ? [x.payment_options] : []);
+  const paymentSchedule = "Booking fee due within one day of accepting the quote; remaining balance due 45 days before the wedding";
   $("#panel").innerHTML = `<h2>Wedding Booking Form</h2><p class="intro">Thank you for taking the time to complete this questionnaire. Your answers will help me understand your day and plan everything perfectly.</p>${x.primary_full_name ? `<div class="complete">Previously submitted. You can update it below.</div><br>` : ""}<form id="booking-form"><div class="form-grid">
     ${field("Bride's/Groom's full name", "primary_full_name", x.primary_full_name || `${data.record.client.first_name} ${data.record.client.last_name || ""}`, false, "text", true)}
     ${field("Street address", "street_address", x.street_address || data.record.client.address || "", true, "text", true)}
@@ -161,7 +158,7 @@ function bookingForm() {
     ${field("Ceremony/service time", "ceremony_time", x.ceremony_time || "", false, "time", true)}
     <label class="full">Exact reception venue details<textarea name="reception_details" rows="4" required placeholder="If this is the same as the ceremony venue, please say so">${esc(x.reception_details || "")}</textarea></label>
     ${data.quote ? `<label class="full">Package selected<input name="package_selected" value="${esc(data.record.package_name)}" readonly></label>` : `<label class="full">Package selected<select name="package_selected" required><option value="">Please choose</option>${data.catalog.packages.map(p => `<option value="${esc(p.name)}" ${(x.package_selected || data.record.package_name) === p.name ? "selected" : ""}>${esc(p.name)} - ${money(p.price)}</option>`).join("")}</select></label>`}
-    <fieldset class="full form-options"><legend>Payment option</legend>${paymentOptions.map(option => `<label><input type="checkbox" name="payment_options" value="${esc(option)}" ${selectedPayments.includes(option) ? "checked" : ""}><span>${esc(option)}</span></label>`).join("")}</fieldset>
+    <fieldset class="full form-options payment-schedule"><legend>Payment schedule</legend><strong>Simple bank-transfer payments</strong><span>Your booking fee is due within one day of accepting your quote. The remaining balance is due 45 days before your wedding.</span></fieldset>
     ${field("How many people will be in your wedding party?", "wedding_party_size", x.wedding_party_size || "", false, "number", true)}
     <label class="full">Are there any unique events happening at the wedding that I need to know about?<textarea name="unique_events" rows="4" required placeholder="For example, the bride will arrive on a horse">${esc(x.unique_events || "")}</textarea></label>
     <label class="full">Wedding guest photo uploads - Package 2 and upwards<select name="guest_uploads"><option value="">Please choose</option><option value="yes" ${x.guest_uploads === "yes" ? "selected" : ""}>Yes please</option><option value="no" ${x.guest_uploads === "no" ? "selected" : ""}>No thank you</option></select></label>
@@ -180,8 +177,7 @@ async function submitForm(event, type) {
   const form = new FormData(event.currentTarget), values = {};
   for (const [key, value] of form.entries()) values[key] = String(value).trim();
   if (type === "booking_form" && data.record.kind === "wedding") {
-    values.payment_options = form.getAll("payment_options").map(value => String(value));
-    if (!values.payment_options.length) return toast("Please choose a payment option");
+    values.payment_options = ["Booking fee due within one day of accepting the quote; remaining balance due 45 days before the wedding"];
   }
   try {
     await api(`/api/client/${token}/forms`, {method: "POST", body: JSON.stringify({form_type: type, data: values})});

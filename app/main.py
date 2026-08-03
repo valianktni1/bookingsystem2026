@@ -71,6 +71,27 @@ def confirm_when_paid(booking: Booking) -> bool:
     return False
 
 
+def refresh_wedding_payment_dates(db: Session, booking: Booking) -> None:
+    """Keep the accepted quote invoice aligned if the wedding date changes."""
+    if booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING or not booking.event_date:
+        return
+    quote = db.scalar(select(Quote).where(Quote.booking_id == booking.id,
+                                          Quote.status == "accepted")
+                      .order_by(Quote.accepted_at.desc()).limit(1))
+    if not quote:
+        return
+    accepted_on = quote.accepted_at.date() if quote.accepted_at else date.today()
+    deposit_due = accepted_on + timedelta(days=1)
+    balance_due = max(booking.event_date - timedelta(days=45), deposit_due)
+    booking.balance_due_date = balance_due
+    if quote.invoice_id:
+        invoice = db.get(Invoice, quote.invoice_id)
+        if invoice:
+            invoice.deposit_due_date = invoice.deposit_due_date or deposit_due
+            invoice.supply_date = booking.event_date
+            invoice.due_date = balance_due
+
+
 def client_json(client: Client) -> dict:
     return {"id": client.id, "first_name": client.first_name, "last_name": client.last_name,
             "partner_name": client.partner_name, "company_name": client.company_name,
@@ -93,9 +114,11 @@ def payment_json(item: Payment) -> dict:
 def invoice_json(item: Invoice) -> dict:
     return {"id": item.id, "booking_id": item.booking_id, "brand": item.brand.value,
             "sequence": item.sequence, "number": item.number, "issue_date": item.issue_date.isoformat(),
+            "deposit_due_date": item.deposit_due_date.isoformat() if item.deposit_due_date else None,
             "supply_date": item.supply_date.isoformat() if item.supply_date else None,
             "due_date": item.due_date.isoformat() if item.due_date else None,
             "description": item.description, "notes": item.notes, "total": money(item.total),
+            "deposit_amount": money(item.booking.deposit_amount if item.booking else 0),
             "line_items": item.line_items or [],
             "paid": money(item.paid), "balance": money(item.total - item.paid), "status": item.status,
             "client": item.booking.title if item.booking else None,
@@ -171,7 +194,7 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
-            "build": "2026.08.03-branded-email-invoices-v5"}
+            "build": "2026.08.03-enquiry-notifications-v7"}
 
 
 @app.get("/api/public/catalog")
@@ -217,19 +240,47 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
           {"title": title, "event_date": payload.event_date.isoformat(),
            "heard_about_us": payload.heard_about_us})
 
-    template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
-                                                     EmailTemplate.template_key == "enquiry_received",
-                                                     EmailTemplate.is_active.is_(True)))
+    acknowledgement = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
+                                                            EmailTemplate.template_key == "enquiry_received",
+                                                            EmailTemplate.is_active.is_(True)))
+    admin_notification = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == Brand.WBM,
+        EmailTemplate.template_key == "new_enquiry_admin",
+        EmailTemplate.is_active.is_(True)))
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == Brand.WBM))
-    if template and profile and smtp_ready(Brand.WBM):
-        try:
-            subject, _ = send_template_email(booking, profile, template)
-            db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
-                            recipient=client.email, subject=subject, status="sent"))
-        except Exception as exc:
-            db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
-                            recipient=client.email, subject=template.subject,
-                            status="failed", error=str(exc)[:2000]))
+    if profile and smtp_ready(Brand.WBM):
+        if acknowledgement:
+            try:
+                subject, _ = send_template_email(booking, profile, acknowledgement)
+                db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
+                                recipient=client.email, subject=subject, status="sent"))
+            except Exception as exc:
+                db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
+                                recipient=client.email, subject=acknowledgement.subject,
+                                status="failed", error=str(exc)[:2000]))
+        if admin_notification:
+            notification_recipient = "mark@perfectweddingsbymark.uk"
+            try:
+                subject, _ = send_template_email(
+                    booking, profile, admin_notification,
+                    extra_values={
+                        "package_interest": payload.package_interest or "Not selected",
+                        "selfie_booth_interest": payload.selfie_booth_interest or "Not answered",
+                        "promo_code": payload.promo_code or "None entered",
+                        "heard_about_us": payload.heard_about_us,
+                        "enquiry_message": payload.message or "No additional message",
+                        "fun_answer": payload.fun_answer or "Not answered",
+                        "admin_url": settings.app_url.rstrip("/"),
+                    },
+                    recipient=notification_recipient,
+                    reply_to=client.email,
+                )
+                db.add(EmailLog(booking_id=booking.id, template_key=admin_notification.template_key,
+                                recipient=notification_recipient, subject=subject, status="sent"))
+            except Exception as exc:
+                db.add(EmailLog(booking_id=booking.id, template_key=admin_notification.template_key,
+                                recipient=notification_recipient, subject=admin_notification.subject,
+                                status="failed", error=str(exc)[:2000]))
     db.commit()
     return {"ok": True, "message": "Thank you - your enquiry has been received."}
 
@@ -408,6 +459,8 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
         client = db.get(Client, item.client_id)
         for key, value in client_values.items():
             setattr(client, key, value)
+    if "event_date" in values and "balance_due_date" not in values:
+        refresh_wedding_payment_dates(db, item)
     auto_confirmed = confirm_when_paid(item)
     audit(db, "update", "booking", item.id,
           {"fields": list(payload.model_fields_set), "auto_confirmed": auto_confirmed})
@@ -564,8 +617,8 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
     invoice.status = invoice_status(invoice.total, invoice.paid)
     if invoice.booking and not invoice.booking.deposit_paid_date:
         invoice.booking.deposit_paid_date = payload.paid_date
-    if invoice.booking:
-        invoice.booking.deposit_amount = max(invoice.booking.deposit_amount or Decimal("0"), payload.amount)
+    if invoice.booking and money(invoice.booking.deposit_amount) <= 0:
+        invoice.booking.deposit_amount = payload.amount
         auto_confirmed = confirm_when_paid(invoice.booking)
     else:
         auto_confirmed = False
@@ -691,7 +744,7 @@ def resolve_portal(db: Session, token: str) -> ClientPortalToken:
                            ClientPortalToken.revoked_at.is_(None),
                            ClientPortalToken.expires_at > datetime.now(timezone.utc)))
     if not row:
-        raise HTTPException(404, "This private link is invalid or has expired")
+        raise HTTPException(404, "This booking link is invalid or has expired")
     return row
 
 
@@ -889,7 +942,7 @@ def public_invoice_for_portal(db: Session, token: str, invoice_id: str) -> Invoi
                                                 selectinload(Invoice.payments))
                         .where(Invoice.id == invoice_id, Invoice.booking_id == portal.booking_id))
     if not invoice:
-        raise HTTPException(404, "Invoice not found for this private booking")
+        raise HTTPException(404, "Invoice not found for this booking")
     return invoice
 
 
@@ -948,6 +1001,11 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
                            "description": addon.description, "quantity": 1,
                            "unit_price": money(addon.price), "total": money(addon.price)})
     total = package.price + sum((x.price for x in addons), Decimal("0"))
+    accepted_on = date.today()
+    deposit_due_date = accepted_on + timedelta(days=1)
+    normal_balance_due = booking.event_date - timedelta(days=45) if booking.event_date else None
+    balance_due_date = (max(normal_balance_due, deposit_due_date)
+                        if normal_balance_due else None)
     quote = Quote(booking_id=booking.id, status="accepted", package_id=package.id,
                   selected_addon_ids=requested_ids, line_items=line_items, total=total,
                   deposit_amount=package.deposit_amount, accepted_at=datetime.now(timezone.utc))
@@ -955,16 +1013,21 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
     db.flush()
     sequence, number = next_invoice_number(db, booking.brand)
     invoice = Invoice(booking_id=booking.id, brand=booking.brand, sequence=sequence, number=number,
-                      issue_date=date.today(), supply_date=booking.event_date,
-                      due_date=booking.balance_due_date, description=package.name, total=total,
+                      issue_date=accepted_on, deposit_due_date=deposit_due_date,
+                      supply_date=booking.event_date, due_date=balance_due_date,
+                      description=package.name, total=total,
                       paid=Decimal("0"), status="unpaid", line_items=line_items,
-                      notes=f"Booking fee of £{money(package.deposit_amount):,.2f} is due by bank transfer.")
+                      notes=(f"Booking fee of £{money(package.deposit_amount):,.2f} is due by "
+                             f"{deposit_due_date.strftime('%d %B %Y')}. "
+                             + (f"The remaining balance is due by {balance_due_date.strftime('%d %B %Y')}."
+                                if balance_due_date else "The final balance date will be confirmed once the wedding date is set.")))
     db.add(invoice)
     db.flush()
     quote.invoice_id = invoice.id
     booking.package_name = package.name
     booking.quoted_total = total
     booking.deposit_amount = package.deposit_amount
+    booking.balance_due_date = balance_due_date
     if booking.status == RecordStatus.ENQUIRY:
         booking.status = RecordStatus.QUOTED
     for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
@@ -978,7 +1041,14 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
     if acceptance_template and profile and smtp_ready(booking.brand):
         try:
             invoice_portal_url = f"{settings.app_url.rstrip('/')}/client/{token}?tab=invoices"
-            subject, _ = send_template_email(booking, profile, acceptance_template, invoice_portal_url)
+            subject, _ = send_template_email(
+                booking, profile, acceptance_template, invoice_portal_url,
+                extra_values={
+                    "deposit_due_date": deposit_due_date.strftime("%d %B %Y"),
+                    "balance_due_date": (balance_due_date.strftime("%d %B %Y")
+                                         if balance_due_date else "to be confirmed"),
+                },
+            )
             db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
                             recipient=booking.client.email, subject=subject, status="sent"))
             acceptance_email_sent = True
@@ -1020,6 +1090,7 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
         if payload.data.get("wedding_date"):
             try:
                 booking.event_date = date.fromisoformat(str(payload.data["wedding_date"]))
+                refresh_wedding_payment_dates(db, booking)
             except ValueError:
                 pass
         if payload.data.get("ceremony_details") and not booking.venue_or_project:
@@ -1075,16 +1146,21 @@ def accept_contract(token: str, payload: ContractAcceptIn, request: Request, db:
 def run_due_reminders(db: Session) -> dict:
     today = date.today()
     sent, skipped, failed = 0, 0, 0
-    bookings = db.scalars(select(Booking).options(selectinload(Booking.client))
+    bookings = db.scalars(select(Booking).options(selectinload(Booking.client),
+                                                  selectinload(Booking.invoices))
                           .where(Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED)).all()
     for booking in bookings:
         keys: list[str] = []
-        if booking.balance_due_date:
+        has_balance = any(invoice.paid < invoice.total for invoice in booking.invoices)
+        if (booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
+                and booking.balance_due_date and has_balance):
             days = (booking.balance_due_date - today).days
-            if days == 14:
-                keys.append("balance_due_14")
-            if days == 7:
-                keys.append("balance_due_7")
+            if days == 10:
+                keys.append("balance_due_10")
+            if days == 1:
+                keys.append("balance_due_1")
+            if days == -2:
+                keys.append("balance_overdue_2")
         if booking.kind == RecordKind.WEDDING and booking.event_date and (booking.event_date - today).days == 30:
             keys.append("final_questionnaire")
         for key in keys:
@@ -1103,7 +1179,10 @@ def run_due_reminders(db: Session) -> dict:
                 portal_url = None
                 if key == "final_questionnaire":
                     raw, _ = issue_portal_token(db, booking.id, 60)
-                    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}"
+                    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=final-details"
+                elif key in {"balance_due_10", "balance_due_1", "balance_overdue_2"}:
+                    raw, _ = issue_portal_token(db, booking.id, 365)
+                    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=invoices"
                 if not template:
                     raise RuntimeError("Reminder template is inactive or missing")
                 subject, _ = send_template_email(booking, profile, template, portal_url)

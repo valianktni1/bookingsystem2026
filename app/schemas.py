@@ -78,6 +78,7 @@ class TaskPatch(BaseModel):
 class InvoiceIn(BaseModel):
     total: Decimal = Field(gt=0)
     issue_date: date = Field(default_factory=date.today)
+    deposit_due_date: date | None = None
     supply_date: date | None = None
     due_date: date | None = None
     description: str | None = Field(default=None, max_length=2000)

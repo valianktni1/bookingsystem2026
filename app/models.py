@@ -179,6 +179,7 @@ class Invoice(Base):
     sequence: Mapped[int] = mapped_column(index=True)
     number: Mapped[str] = mapped_column(String(30), unique=True, index=True)
     issue_date: Mapped[date] = mapped_column(Date, default=date.today)
+    deposit_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     supply_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

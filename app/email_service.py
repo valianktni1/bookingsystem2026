@@ -28,11 +28,14 @@ BRAND_ASSETS = {
 }
 
 
-def template_values(booking: Booking, profile: BusinessProfile, portal_url: str | None = None) -> dict[str, str]:
+def template_values(booking: Booking, profile: BusinessProfile, portal_url: str | None = None,
+                    extra_values: dict[str, str] | None = None) -> dict[str, str]:
     client = booking.client
-    return {
+    values = {
         "client_first_name": client.first_name or "there",
         "client_name": " ".join(x for x in [client.first_name, client.last_name] if x),
+        "client_email": client.email or "",
+        "client_phone": client.phone or "Not provided",
         "couple_or_company": booking.title,
         "business_name": profile.display_name,
         "event_date": booking.event_date.strftime("%d %B %Y") if booking.event_date else "to be confirmed",
@@ -40,11 +43,14 @@ def template_values(booking: Booking, profile: BusinessProfile, portal_url: str 
         "package_name": booking.package_name or "your chosen service",
         "quoted_total": f"£{float(booking.quoted_total or 0):,.2f}",
         "deposit_amount": f"£{float(booking.deposit_amount or 0):,.2f}",
+        "deposit_due_date": "within one day of accepting your quote",
         "balance_due_date": booking.balance_due_date.strftime("%d %B %Y") if booking.balance_due_date else "as shown on your invoice",
         "portal_url": portal_url or "",
         "business_email": profile.email or "",
         "business_phone": profile.phone or "",
     }
+    values.update(extra_values or {})
+    return values
 
 
 def render_template(text: str, values: dict[str, str]) -> str:
@@ -94,8 +100,8 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile) -> str:
               <div style="font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.4px;color:#7c6a49;font-weight:bold;margin-bottom:12px">
                 PROUDLY AWARD-WINNING WEDDING PHOTOGRAPHY
               </div>
-              <img src="cid:{assets['awards_cid']}" width="430" alt="Weddings By Mark awards"
-                   style="display:block;width:100%;max-width:430px;height:auto;margin:0 auto;border:0">
+              <img src="cid:{assets['awards_cid']}" width="340" alt="Weddings By Mark awards"
+                   style="display:block;width:100%;max-width:340px;height:auto;margin:0 auto;border:0">
             </td>
           </tr>"""
     return f"""<!doctype html>
@@ -134,13 +140,14 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile) -> str:
 
 
 def build_email_message(booking: Booking, profile: BusinessProfile, subject: str, body: str,
-                        username: str) -> EmailMessage:
+                        username: str, recipient: str | None = None,
+                        reply_to: str | None = None) -> EmailMessage:
     """Create a branded multipart email with embedded, client-safe PNG artwork."""
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = f"{profile.display_name} <{username}>"
-    message["To"] = booking.client.email
-    message["Reply-To"] = profile.email or username
+    message["To"] = recipient or booking.client.email
+    message["Reply-To"] = reply_to or profile.email or username
     message.set_content(body)
     message.add_alternative(_email_html(body, booking, profile), subtype="html")
     html_part = message.get_payload()[-1]
@@ -155,7 +162,10 @@ def build_email_message(booking: Booking, profile: BusinessProfile, subject: str
 
 
 def send_template_email(booking: Booking, profile: BusinessProfile, template: EmailTemplate,
-                        portal_url: str | None = None) -> tuple[str, str]:
+                        portal_url: str | None = None,
+                        extra_values: dict[str, str] | None = None,
+                        recipient: str | None = None,
+                        reply_to: str | None = None) -> tuple[str, str]:
     settings = get_settings()
     username, password = smtp_credentials(booking.brand)
     if not smtp_ready(booking.brand):
@@ -163,10 +173,11 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
             f"SMTP is not configured for {profile.display_name}. "
             "Add that brand's SMTP username and mailbox password to the Dockge YAML."
         )
-    values = template_values(booking, profile, portal_url)
+    values = template_values(booking, profile, portal_url, extra_values)
     subject = render_template(template.subject, values)
     body = render_template(template.body, values)
-    message = build_email_message(booking, profile, subject, body, username)
+    message = build_email_message(booking, profile, subject, body, username,
+                                  recipient=recipient, reply_to=reply_to)
     context = ssl.create_default_context()
     if settings.smtp_use_ssl:
         with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context, timeout=30) as server:

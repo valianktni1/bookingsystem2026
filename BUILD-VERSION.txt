@@ -1,13 +1,18 @@
 BookingSystem2026 - Quote and Client Portal Complete
-Build: 2026.08.03-branded-email-invoices-v5
+Build: 2026.08.03-enquiry-notifications-v7
 
 This build includes:
 - One-click create and send quote
 - Quote link opens directly on package selection
-- Client invoice area in the same private portal
+- Client invoice area in the same wedding booking
 - Secure invoice and receipt PDF downloads
 - Automatic package-accepted and invoice-ready email
 - Booking form, questionnaire and contract in the same portal
 - Separate Hostinger SMTP identities for Weddings By Mark and Ivory Digital
 - Matching brand logos embedded in HTML emails and invoice/receipt PDFs
 - Photography awards shown only on Weddings By Mark emails and invoices
+- Booking fee due one day after quote acceptance and final balance due 45 days before the wedding
+- Linked final-balance reminders 10 days before, one day before and two days after the due date
+- Full accepted package and add-on wording shown on client invoices and invoice PDFs
+- Smaller Weddings By Mark awards panel reserved in the invoice footer
+- Immediate new-enquiry notification to mark@perfectweddingsbymark.uk with direct reply-to-client

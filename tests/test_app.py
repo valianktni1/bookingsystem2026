@@ -1,4 +1,6 @@
 import os
+import importlib
+from datetime import date, timedelta
 from pathlib import Path
 
 TEST_ROOT = Path(__file__).parent
@@ -11,10 +13,12 @@ os.environ["SESSION_SECRET"] = "test-session-secret-at-least-32-characters-long"
 os.environ["INVOICE_START"] = "2000"
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+from app.database import SessionLocal
 from app.email_service import build_email_message
 from app.main import app
-from app.models import Booking, Brand, BusinessProfile, Client
+from app.models import Booking, Brand, BusinessProfile, Client, ReminderLog
 
 
 def booking_payload(brand="wbm", title="Sophie & James"):
@@ -55,6 +59,13 @@ def test_branded_email_artwork_is_brand_specific():
     assert "cid:weddings-by-mark-logo" in wbm_html
     assert "cid:weddings-by-mark-awards" in wbm_html
     assert wbm_images == {"weddings-by-mark-logo.png", "weddings-by-mark-awards.png"}
+    notification = build_email_message(
+        wedding, wbm_profile, "New enquiry", "A new enquiry has arrived",
+        "mark@perfectweddingsbymark.uk", recipient="mark@perfectweddingsbymark.uk",
+        reply_to="sophie@example.com",
+    )
+    assert notification["To"] == "mark@perfectweddingsbymark.uk"
+    assert notification["Reply-To"] == "sophie@example.com"
 
     project = Booking(brand=Brand.IVORY, title="Broadfield Motors")
     project.client = Client(first_name="Chris", last_name="Taylor", email="chris@example.com")
@@ -72,7 +83,7 @@ def test_branded_email_artwork_is_brand_specific():
     assert ivory_images == {"ivory-digital-logo.png"}
 
 
-def test_phase_two_b_flow():
+def test_phase_two_b_flow(monkeypatch):
     db_file = TEST_ROOT / "test.db"
     db_file.unlink(missing_ok=True)
     with TestClient(app) as client:
@@ -80,7 +91,7 @@ def test_phase_two_b_flow():
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False,
-                                 "build": "2026.08.03-branded-email-invoices-v5"}
+                                 "build": "2026.08.03-enquiry-notifications-v7"}
 
         homepage = client.get("/")
         assert homepage.status_code == 200
@@ -112,6 +123,14 @@ def test_phase_two_b_flow():
         quote_template = next(row for row in templates.json()["templates"]
                               if row["brand"] == "wbm" and row["template_key"] == "quote")
         assert "compare the available packages" in quote_template["body"]
+        reminder_keys = {row["template_key"] for row in templates.json()["templates"]
+                         if row["brand"] == "wbm" and row["is_active"]}
+        assert {"balance_due_10", "balance_due_1", "balance_overdue_2"} <= reminder_keys
+        assert not {"balance_due_14", "balance_due_7"} & reminder_keys
+        admin_enquiry_template = next(row for row in templates.json()["templates"]
+                                      if row["brand"] == "wbm"
+                                      and row["template_key"] == "new_enquiry_admin")
+        assert "New wedding enquiry" in admin_enquiry_template["subject"]
 
         portal = client.post(f"/api/bookings/{wedding_data['id']}/portal", json={"expires_days": 90})
         assert portal.status_code == 201
@@ -133,7 +152,7 @@ def test_phase_two_b_flow():
                 "town": "Knutsford", "county": "Cheshire", "postcode": "WA16 0AA",
                 "wedding_date": "2026-10-04", "ceremony_time": "13:00",
                 "package_selected": "Platinum Package 4 2026/27/28",
-                "payment_options": ["£100 deposit + balance 45 days before the wedding"],
+                "payment_options": ["Booking fee due within one day of accepting the quote; remaining balance due 45 days before the wedding"],
             }
         })
         assert form.status_code == 200
@@ -215,13 +234,20 @@ def test_phase_two_b_flow():
         assert quote.json()["quote"]["total"] == 1019
         assert quote.json()["invoice"]["number"] == "WBM02003"
         assert quote.json()["acceptance_email_sent"] is False
+        expected_deposit_due = date.today() + timedelta(days=1)
+        expected_balance_due = max(date(2026, 10, 4) - timedelta(days=45), expected_deposit_due)
+        assert quote.json()["invoice"]["deposit_due_date"] == expected_deposit_due.isoformat()
+        assert quote.json()["invoice"]["due_date"] == expected_balance_due.isoformat()
         assert [line["name"] for line in quote.json()["invoice"]["line_items"]] == [
             "Gold Package 3 2026/27/28", "Wedding album offer"
         ]
+        assert "Highlight Video" in quote.json()["invoice"]["line_items"][0]["description"]
         refreshed_public = client.get(f"/api/client/{token}").json()
         assert refreshed_public["quote"]["invoice_number"] == "WBM02003"
         assert refreshed_public["record"]["quoted_total"] == 1019
         assert refreshed_public["invoices"][0]["number"] == "WBM02003"
+        assert refreshed_public["invoices"][0]["deposit_due_date"] == expected_deposit_due.isoformat()
+        assert client.get(f"/api/bookings/{wedding_data['id']}").json()["balance_due_date"] == expected_balance_due.isoformat()
         public_invoice_pdf = client.get(
             f"/api/client/{token}/invoices/{quote.json()['invoice']['id']}/invoice.pdf"
         )
@@ -242,6 +268,46 @@ def test_phase_two_b_flow():
         assert client.post(f"/api/client/{token}/quote", json={
             "package_id": gold["id"], "addon_ids": [], "confirmed": True
         }).status_code == 409
+
+        main_module = importlib.import_module("app.main")
+        with monkeypatch.context() as reminder_patch:
+            class FrozenDate(date):
+                current = expected_balance_due
+
+                @classmethod
+                def today(cls):
+                    return cls.current
+
+            reminder_patch.setattr(main_module, "date", FrozenDate)
+            reminder_patch.setattr(
+                main_module, "send_template_email",
+                lambda booking, profile, template, portal_url=None: (template.subject, template.body),
+            )
+            schedule = [
+                (expected_balance_due - timedelta(days=10), "balance_due_10"),
+                (expected_balance_due - timedelta(days=1), "balance_due_1"),
+                (expected_balance_due + timedelta(days=2), "balance_overdue_2"),
+            ]
+            for reminder_day, reminder_key in schedule:
+                FrozenDate.current = reminder_day
+                with SessionLocal() as db:
+                    result = main_module.run_due_reminders(db)
+                    assert result == {"sent": 1, "skipped": 0, "failed": 0}
+                    saved_reminder = db.scalar(select(ReminderLog).where(
+                        ReminderLog.booking_id == wedding_data["id"],
+                        ReminderLog.reminder_key == reminder_key,
+                    ))
+                    assert saved_reminder and saved_reminder.status == "sent"
+            with SessionLocal() as db:
+                paid_invoice = db.get(main_module.Invoice, quote.json()["invoice"]["id"])
+                paid_invoice.paid = paid_invoice.total
+                paid_invoice.status = "paid"
+                db.commit()
+                FrozenDate.current = expected_balance_due - timedelta(days=10)
+                assert main_module.run_due_reminders(db) == {"sent": 0, "skipped": 0, "failed": 0}
+                paid_invoice.paid = 0
+                paid_invoice.status = "unpaid"
+                db.commit()
 
         dashboard = client.get("/api/dashboard")
         assert dashboard.status_code == 200
@@ -290,9 +356,32 @@ def test_phase_two_b_flow():
             "promo_code": None, "heard_about_us": "Google search",
             "fun_answer": "Beans on toast", "privacy_agreed": True, "website": None,
         }
-        enquiry = client.post("/api/public/enquiries", json=enquiry_payload)
+        sent_enquiry_emails = []
+
+        def fake_enquiry_email(booking, profile, template, portal_url=None, extra_values=None,
+                               recipient=None, reply_to=None):
+            sent_enquiry_emails.append({
+                "key": template.template_key,
+                "recipient": recipient or booking.client.email,
+                "reply_to": reply_to,
+                "values": extra_values or {},
+            })
+            return template.subject, template.body
+
+        main_module = importlib.import_module("app.main")
+        with monkeypatch.context() as enquiry_patch:
+            enquiry_patch.setattr(main_module, "smtp_ready", lambda brand=None: True)
+            enquiry_patch.setattr(main_module, "send_template_email", fake_enquiry_email)
+            enquiry = client.post("/api/public/enquiries", json=enquiry_payload)
         assert enquiry.status_code == 201
         assert enquiry.json()["ok"] is True
+        assert [mail["key"] for mail in sent_enquiry_emails] == [
+            "enquiry_received", "new_enquiry_admin"
+        ]
+        assert sent_enquiry_emails[0]["recipient"] == "rachel@example.com"
+        assert sent_enquiry_emails[1]["recipient"] == "mark@perfectweddingsbymark.uk"
+        assert sent_enquiry_emails[1]["reply_to"] == "rachel@example.com"
+        assert sent_enquiry_emails[1]["values"]["heard_about_us"] == "Google search"
         assert client.post("/api/auth/login", json={
             "email": "mark@example.com", "password": "SecureTestPassword!123"
         }).status_code == 200

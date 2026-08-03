@@ -15,6 +15,7 @@ def apply_safe_migrations() -> None:
             "website": "VARCHAR(200) NULL",
         },
         "invoices": {
+            "deposit_due_date": "DATE NULL",
             "due_date": "DATE NULL",
             "description": "TEXT NULL",
             "line_items": "JSON NULL" if engine.dialect.name == "postgresql" else "JSON NULL",

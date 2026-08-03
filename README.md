@@ -32,7 +32,7 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - Editable brand-specific email and agreement templates
 - Electronic agreement acceptance with versioned wording, timestamp and audit details
 - SMTP sending from individual records
-- Optional automatic 14-day/7-day balance and 30-day final-details reminders
+- Automatic final-balance reminders 10 days before, one day before and two days after the due date
 - Submitted forms automatically complete their matching workflow tasks
 - Editable Weddings By Mark package and add-on catalogue
 - Client pick-and-choose quotes with live mobile totals and eligibility rules
@@ -44,13 +44,15 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - Responsive WordPress/Elementor enquiry iframe at `/enquiry`
 - Website enquiries automatically create booking records and workflow tasks
 - Copyable auto-resizing iframe embed code in Packages & pricing
-- One-click initial quote email with a private link that opens directly on package selection
+- One-click initial quote email with a wedding booking link that opens directly on package selection
 - Secure client invoice and receipt downloads inside the same booking portal
 - Automatic package-accepted and invoice-ready email when SMTP is configured
 - Separate Weddings By Mark and Ivory Digital Hostinger SMTP identities and readiness indicators
 - Responsive HTML email stationery with the correct embedded logo for each business
 - Matching logo and gold-accent branding on invoice and receipt PDFs
 - Weddings By Mark award badges on photography emails and invoices only
+- Immediate branded website-enquiry notification to `mark@perfectweddingsbymark.uk`
+- New-enquiry notifications include all submitted details and reply directly to the couple
 
 Studio Ninja import and gallery automation remain planned for later phases without restructuring the core data.
 
@@ -120,6 +122,10 @@ The unauthenticated container health endpoint is:
 
 It returns Phase `2B` plus SMTP/reminder configuration status when the application is running.
 
+After both SMTP mailboxes have been tested successfully, enable automatic reminder scanning in
+Dockge with `REMINDERS_ENABLED: "true"`. The scanner runs every six hours by default and records
+each scheduled message so it cannot send the same reminder twice.
+
 ## Development and tests
 
 Use Python 3.12:
@@ -131,14 +137,12 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-Tests cover authentication, record editing, notes/activity, workflows, shared cross-brand numbering, payments, PDF invoices/receipts, document upload, archiving, business settings, dashboard totals and logout.
+Tests cover authentication, record editing, notes/activity, workflows, shared cross-brand numbering,
+fixed wedding payment dates, all three balance-reminder timings, payments, branded PDF invoices and
+receipts, document upload, archiving, business settings, dashboard totals and logout.
 
-## Phase 2 candidates
+## Later-phase candidates
 
-- Editable email templates and scheduled reminders
-- Booking forms and questionnaires with client-facing links
-- Contract templates and electronic signatures
-- Proper PDF invoices and receipts
 - Studio Ninja export preview, matching and complete migration
 - Calendar and availability controls
 - Gallery creation and status automation
