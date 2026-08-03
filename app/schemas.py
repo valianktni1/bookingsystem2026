@@ -21,6 +21,16 @@ class ClientIn(BaseModel):
     address: str | None = None
 
 
+class ClientPatch(BaseModel):
+    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    last_name: str | None = Field(default=None, max_length=100)
+    partner_name: str | None = Field(default=None, max_length=160)
+    company_name: str | None = Field(default=None, max_length=160)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=50)
+    address: str | None = None
+
+
 class BookingIn(BaseModel):
     brand: Brand
     kind: RecordKind
@@ -38,6 +48,7 @@ class BookingIn(BaseModel):
 
 
 class BookingPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
     status: RecordStatus | None = None
     event_date: date | None = None
     venue_or_project: str | None = None
@@ -49,6 +60,7 @@ class BookingPatch(BaseModel):
     notes: str | None = None
     form_data: dict | None = None
     workflow_state: dict | None = None
+    client: ClientPatch | None = None
 
 
 class TaskIn(BaseModel):
@@ -67,10 +79,33 @@ class InvoiceIn(BaseModel):
     total: Decimal = Field(gt=0)
     issue_date: date = Field(default_factory=date.today)
     supply_date: date | None = None
+    due_date: date | None = None
+    description: str | None = Field(default=None, max_length=2000)
     paid: Decimal = Field(default=Decimal("0"), ge=0)
     notes: str | None = None
 
 
+class PaymentIn(BaseModel):
+    amount: Decimal = Field(gt=0)
+    paid_date: date = Field(default_factory=date.today)
+    payment_type: str = Field(default="bank_transfer", max_length=40)
+    reference: str | None = Field(default=None, max_length=120)
+    notes: str | None = None
+
+
+class NoteIn(BaseModel):
+    body: str = Field(min_length=1, max_length=5000)
+
+
+class BusinessPatch(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    legal_name: str | None = Field(default=None, min_length=1, max_length=160)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=50)
+    website: str | None = Field(default=None, max_length=200)
+    address: str | None = None
+    bank_details: dict | None = None
+
+
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-

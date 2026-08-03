@@ -1,8 +1,8 @@
-# Mark's Business Studio — Phase 1
+# Mark's Business Studio — Phase 2A
 
-Phase 1 of Mark's private, self-hosted booking and business management system. It is designed to replace the core Studio Ninja workflow gradually, while keeping Weddings By Mark and Ivory Digital inside one secure workspace.
+Phase 2A of Mark's private, self-hosted booking and business management system. It replaces the day-to-day record, workflow, document and bank-transfer invoice functions gradually, while keeping Weddings By Mark and Ivory Digital inside one secure workspace.
 
-## Included in Phase 1
+## Included in Phase 2A
 
 - Secure single-administrator login with an HTTP-only session cookie
 - Responsive Teal Operations interface for desktop, tablet and mobile
@@ -17,8 +17,17 @@ Phase 1 of Mark's private, self-hosted booking and business management system. I
 - Audit trail foundation for logins, records, tasks, invoices and uploads
 - Studio Ninja migration fields ready for a later preview/import tool
 - Data model ready for forms, contracts, email automation and gallery integration
+- Fully editable records and contact details
+- Functional status filters and reversible record archiving
+- Add, edit, complete and delete workflow tasks
+- Timestamped private notes and activity history
+- Upload, download and delete record documents
+- Branded PDF invoices and downloadable receipts
+- Bank-transfer payment history for deposits, part-payments and balances
+- Editable Weddings By Mark and Ivory Digital invoice identities and bank details
+- Safe additive startup migrations that preserve existing Phase 1 PostgreSQL data
 
-This phase does not yet send emails, generate signed contracts, render invoice PDFs, import Studio Ninja exports or create galleries. Those capabilities can be added without restructuring the core data.
+This phase does not yet send emails, generate/e-sign contracts, import Studio Ninja exports or create galleries. Those are planned for later phases without restructuring the core data.
 
 ## TrueNAS deployment
 
@@ -27,7 +36,7 @@ The supplied `compose.yaml` is already configured for:
 - Public application port: `30049`
 - App/database data: `/mnt/apps/bookingapp2026/data/postgres`
 - Booking documents: `/mnt/temp-tntermediate/bookingapp2026data/data`
-- Intended domain: `booking.perfectweddingsbymark.uk`
+- Intended domain: `booking.weddingsbymark.uk`
 
 ### 1. Prepare the project
 
@@ -43,9 +52,9 @@ Add the repository or upload this project to the Dockge stack directory, then st
 
 Create a Proxy Host:
 
-- Domain: `booking.perfectweddingsbymark.uk`
+- Domain: `booking.weddingsbymark.uk`
 - Scheme: `http`
-- Forward host/IP: `192.168.24.10`
+- Forward host/IP: your TrueNAS server's internal IP address
 - Forward port: `30049`
 - Websockets: enabled
 - Block common exploits: enabled
@@ -53,7 +62,7 @@ Create a Proxy Host:
 
 ### 4. First sign-in
 
-Open `https://booking.perfectweddingsbymark.uk` and sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env`.
+Open `https://booking.weddingsbymark.uk` and sign in with `ADMIN_EMAIL` and `ADMIN_PASSWORD` from `.env`.
 
 The first startup creates:
 
@@ -84,7 +93,7 @@ The unauthenticated container health endpoint is:
 /api/health
 ```
 
-It returns `{"status":"ok","phase":1}` when the application is running.
+It returns `{"status":"ok","phase":"2A"}` when the application is running.
 
 ## Development and tests
 
@@ -97,7 +106,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-Tests cover authentication, record creation, automatic workflows, shared cross-brand invoice numbering, document upload, dashboard totals and logout.
+Tests cover authentication, record editing, notes/activity, workflows, shared cross-brand numbering, payments, PDF invoices/receipts, document upload, archiving, business settings, dashboard totals and logout.
 
 ## Phase 2 candidates
 
@@ -109,4 +118,3 @@ Tests cover authentication, record creation, automatic workflows, shared cross-b
 - Calendar and availability controls
 - Gallery creation and status automation
 - Two-factor authentication and configurable backup/export tools
-

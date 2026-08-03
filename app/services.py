@@ -43,8 +43,8 @@ def invoice_status(total: Decimal, paid: Decimal) -> str:
 
 
 def dashboard_counts(db: Session) -> dict:
-    confirmed = db.scalar(select(func.count()).select_from(Booking).where(Booking.status == RecordStatus.CONFIRMED)) or 0
-    open_enquiries = db.scalar(select(func.count()).select_from(Booking).where(Booking.status.in_([RecordStatus.ENQUIRY, RecordStatus.QUOTED]))) or 0
+    confirmed = db.scalar(select(func.count()).select_from(Booking).where(Booking.archived_at.is_(None), Booking.status == RecordStatus.CONFIRMED)) or 0
+    open_enquiries = db.scalar(select(func.count()).select_from(Booking).where(Booking.archived_at.is_(None), Booking.status.in_([RecordStatus.ENQUIRY, RecordStatus.QUOTED]))) or 0
     outstanding = db.scalar(select(func.coalesce(func.sum(Invoice.total - Invoice.paid), 0)).where(Invoice.status != "paid")) or 0
-    due_tasks = db.scalar(select(func.count()).select_from(Task).where(Task.completed.is_(False))) or 0
+    due_tasks = db.scalar(select(func.count()).select_from(Task).join(Booking).where(Booking.archived_at.is_(None), Task.completed.is_(False))) or 0
     return {"confirmed": confirmed, "open_enquiries": open_enquiries, "outstanding": float(outstanding), "open_tasks": due_tasks, "generated_at": datetime.now(timezone.utc).isoformat()}

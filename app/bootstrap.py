@@ -16,12 +16,19 @@ def bootstrap(db: Session) -> None:
         db.add(Admin(email=settings.admin_email.lower(), password_hash=hash_password(settings.admin_password)))
 
     profiles = {
-        Brand.WBM: ("Weddings By Mark", "WBM", "mark@perfectweddingsbymark.uk"),
-        Brand.IVORY: ("Ivory Digital", "ID", "sales@ivorydigital.uk"),
+        Brand.WBM: ("Weddings By Mark", "WBM", "mark@perfectweddingsbymark.uk", "perfectweddingsbymark.uk"),
+        Brand.IVORY: ("Ivory Digital", "ID", "sales@ivorydigital.uk", "ivorydigital.uk"),
     }
-    for brand, (name, prefix, email) in profiles.items():
-        if not db.scalar(select(BusinessProfile).where(BusinessProfile.brand == brand)):
-            db.add(BusinessProfile(brand=brand, display_name=name, invoice_prefix=prefix, email=email))
+    for brand, (name, prefix, email, website) in profiles.items():
+        profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == brand))
+        if not profile:
+            db.add(BusinessProfile(brand=brand, display_name=name, invoice_prefix=prefix, email=email,
+                                   phone="07712 117357", website=website,
+                                   address="220 Ashurst Road, Manchester M22 5AX"))
+        else:
+            profile.phone = profile.phone or "07712 117357"
+            profile.website = profile.website or website
+            profile.address = profile.address or "220 Ashurst Road, Manchester M22 5AX"
 
     if not db.get(InvoiceCounter, "global"):
         db.add(InvoiceCounter(key="global", value=settings.invoice_start))
@@ -43,4 +50,3 @@ def bootstrap(db: Session) -> None:
             db.flush()
             create_default_tasks(db, booking.id, kind)
         db.commit()
-

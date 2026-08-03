@@ -53,6 +53,8 @@ class BusinessProfile(Base):
     legal_name: Mapped[str] = mapped_column(String(160), default="Mark Adam Powell")
     invoice_prefix: Mapped[str] = mapped_column(String(10))
     email: Mapped[str | None] = mapped_column(String(254), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(200), nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     bank_details: Mapped[dict] = mapped_column(JSON, default=dict)
 
@@ -92,11 +94,13 @@ class Booking(Base):
     legacy_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     client: Mapped[Client] = relationship()
     tasks: Mapped[list["Task"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
     documents: Mapped[list["Document"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
+    booking_notes: Mapped[list["BookingNote"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
 
 
 class Task(Base):
@@ -127,12 +131,37 @@ class Invoice(Base):
     number: Mapped[str] = mapped_column(String(30), unique=True, index=True)
     issue_date: Mapped[date] = mapped_column(Date, default=date.today)
     supply_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     total: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
     paid: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
     status: Mapped[str] = mapped_column(String(30), default="unpaid")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     booking: Mapped[Booking] = relationship(back_populates="invoices")
+    payments: Mapped[list["Payment"]] = relationship(back_populates="invoice", cascade="all, delete-orphan")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"), index=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    paid_date: Mapped[date] = mapped_column(Date, default=date.today, index=True)
+    payment_type: Mapped[str] = mapped_column(String(40), default="bank_transfer")
+    reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    invoice: Mapped[Invoice] = relationship(back_populates="payments")
+
+
+class BookingNote(Base):
+    __tablename__ = "booking_notes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id"), index=True)
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    booking: Mapped[Booking] = relationship(back_populates="booking_notes")
 
 
 class Document(Base):
@@ -156,4 +185,3 @@ class AuditLog(Base):
     entity_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
-
