@@ -17,6 +17,7 @@ Phase 2A uses additive startup migrations. Existing Phase 1 PostgreSQL records, 
 
 - Create brand-aware invoices using the shared chronological counter
 - Record deposits, part-payments and balances received by bank transfer
+- Automatically move an enquiry or quote to Confirmed when a dated deposit/payment is recorded
 - Download a clean branded invoice PDF
 - Download a receipt after any payment is recorded
 - Configure legal/trading name, contact information and bank details separately for Weddings By Mark and Ivory Digital

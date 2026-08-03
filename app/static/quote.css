@@ -1,0 +1,66 @@
+.package-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+.package-card {
+  position: relative;
+  display: block;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+.package-card > input { position: absolute; opacity: 0; pointer-events: none; }
+.package-card:has(input:checked) { border-color: var(--teal); box-shadow: 0 0 0 3px #0f6b6312; background: #f8fcfb; }
+.package-check {
+  width: 23px; height: 23px; position: absolute; top: 13px; right: 13px;
+  display: grid; place-items: center; border: 1px solid #b8c7ca; border-radius: 50%;
+  color: transparent; background: #fff; font-size: 10px;
+}
+.package-card:has(input:checked) .package-check { border-color: var(--teal); color: #fff; background: var(--teal); }
+.package-name { display: flex; justify-content: space-between; gap: 30px; padding-right: 28px; }
+.package-name strong { font-size: 12px; }
+.package-name b { color: var(--teal); font-size: 12px; white-space: nowrap; }
+.package-card > small { display: block; margin: 13px 0; color: #566c72; font-size: 9px; line-height: 1.65; white-space: pre-line; }
+.package-card > em { display: block; color: #8b672d; font-size: 8px; font-style: normal; font-weight: 700; }
+.addon-section { margin-top: 25px; }
+.addon-section h3 { margin: 0; font-size: 13px; }
+.addon-section > p { margin: 5px 0 12px; color: var(--muted); font-size: 9px; }
+.addon-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; }
+.addon-card + .addon-card { margin-top: 8px; }
+.addon-card:has(input:checked) { border-color: #87bbb6; background: #f2faf8; }
+.addon-card input { width: 18px; height: 18px; accent-color: var(--teal); }
+.addon-card strong, .addon-card small { display: block; }
+.addon-card strong { font-size: 10px; }
+.addon-card small { margin-top: 4px; color: var(--muted); font-size: 8px; line-height: 1.5; }
+.addon-card > b { color: var(--teal); font-size: 10px; white-space: nowrap; }
+.no-addons { padding: 17px; border-radius: 9px; color: var(--muted); background: #f5f8f8; font-size: 9px; }
+.quote-footer { display: grid; grid-template-columns: 1fr 1.7fr auto; align-items: center; gap: 15px; margin: 24px -23px -23px; padding: 17px 23px; border-top: 1px solid var(--line); border-radius: 0 0 13px 13px; background: #f8fafa; }
+.quote-footer > div small, .quote-footer > div strong, .quote-footer > div span { display: block; }
+.quote-footer > div small { color: var(--muted); font-size: 7px; font-weight: 700; }
+.quote-footer > div strong { margin: 2px 0; color: var(--teal); font-size: 18px; }
+.quote-footer > div span { color: var(--muted); font-size: 8px; }
+.quote-confirm { display: flex; grid-template-columns: auto 1fr; align-items: flex-start; gap: 8px; font-size: 8px; line-height: 1.5; }
+.quote-confirm input { width: 17px; height: 17px; accent-color: var(--teal); }
+.quote-lines { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.quote-lines > div { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 14px; border-bottom: 1px solid var(--line); }
+.quote-lines > div:last-child { border-bottom: 0; }
+.quote-lines strong, .quote-lines small { display: block; }
+.quote-lines strong { font-size: 10px; }
+.quote-lines small { margin-top: 3px; color: var(--muted); font-size: 8px; }
+.quote-lines b { font-size: 10px; }
+.quote-total { display: flex; justify-content: flex-end; gap: 35px; padding: 17px; }
+.quote-total small, .quote-total strong { display: block; text-align: right; }
+.quote-total small { color: var(--muted); font-size: 8px; }
+.quote-total strong { margin-top: 3px; font-size: 14px; }
+.form-options { margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 9px; }
+.form-options legend { padding: 0 6px; color: #40555b; font-size: 9px; font-weight: 700; }
+.form-options label { display: flex; grid-template-columns: auto 1fr; align-items: flex-start; gap: 9px; padding: 7px 0; font-size: 9px; font-weight: 500; line-height: 1.45; }
+.form-options input { width: 17px; height: 17px; flex: 0 0 auto; accent-color: var(--teal); }
+@media (max-width: 700px) {
+  .package-grid { grid-template-columns: 1fr; }
+  .quote-footer { grid-template-columns: 1fr; margin: 20px -17px -17px; padding: 17px; }
+  .quote-footer .primary { width: 100%; }
+}

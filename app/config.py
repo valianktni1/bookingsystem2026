@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     max_upload_mb: int = 25
     invoice_start: int = 2000
     seed_demo_data: bool = False
+    smtp_host: str = "smtp.hostinger.com"
+    smtp_port: int = 465
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_wbm_username: str | None = None
+    smtp_wbm_password: str | None = None
+    smtp_ivory_username: str | None = None
+    smtp_ivory_password: str | None = None
+    smtp_use_ssl: bool = True
+    reminder_scan_hours: int = 6
+    reminders_enabled: bool = False
 
     @model_validator(mode="after")
     def reject_placeholder_production_secrets(self):

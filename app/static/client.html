@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="theme-color" content="#102b34">
+  <title>Private booking portal</title>
+  <link rel="stylesheet" href="/static/client.css?v=2b">
+  <link rel="stylesheet" href="/static/quote.css?v=all-in-one-1">
+</head>
+<body>
+  <header><div class="brand-mark">MP</div><div><strong id="business-name">Private booking portal</strong><small>Secure client area</small></div></header>
+  <main id="portal" class="hidden">
+    <section class="hero"><small>PRIVATE BOOKING</small><h1 id="record-title"></h1><p id="record-summary"></p></section>
+    <nav id="tabs"></nav>
+    <section id="panel" class="panel"></section>
+  </main>
+  <main id="loading" class="state"><div class="spinner"></div><p>Loading your booking…</p></main>
+  <main id="error" class="state hidden"><h1>We couldn't open this link</h1><p id="error-message"></p></main>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/static/client.js?v=all-in-one-1" defer></script>
+</body>
+</html>

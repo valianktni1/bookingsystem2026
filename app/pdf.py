@@ -59,10 +59,15 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     story += [details, Spacer(1, 9 * mm)]
 
     description = invoice.description or invoice.booking.package_name or invoice.booking.venue_or_project or "Professional services"
-    lines = Table([
-        [Paragraph("<b>DESCRIPTION</b>", small), Paragraph("<b>AMOUNT</b>", ParagraphStyle("AmountHead", parent=small, alignment=TA_RIGHT))],
-        [Paragraph(escape(description), normal), Paragraph(f"<b>{pounds(invoice.total)}</b>", right)]
-    ], colWidths=[125 * mm, 31 * mm])
+    rows = [[Paragraph("<b>DESCRIPTION</b>", small),
+             Paragraph("<b>AMOUNT</b>", ParagraphStyle("AmountHead", parent=small, alignment=TA_RIGHT))]]
+    if invoice.line_items:
+        for item in invoice.line_items:
+            name = escape(str(item.get("name") or item.get("description") or "Service"))
+            rows.append([Paragraph(name, normal), Paragraph(f"<b>{pounds(item.get('total'))}</b>", right)])
+    else:
+        rows.append([Paragraph(escape(description), normal), Paragraph(f"<b>{pounds(invoice.total)}</b>", right)])
+    lines = Table(rows, colWidths=[125 * mm, 31 * mm])
     lines.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), PALE), ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#cfdbde")),
                                ("INNERGRID", (0, 0), (-1, -1), .5, colors.HexColor("#cfdbde")),
                                ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 9),

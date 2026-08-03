@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#102b34">
   <title>Mark's Business Studio</title>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v=2b">
+  <link rel="stylesheet" href="/static/catalog.css?v=all-in-one-1">
 </head>
 <body>
   <section id="login" class="login-screen hidden">
@@ -44,6 +45,8 @@
         <button data-view="workflows"><span class="nav-icon">⌘</span>Workflows</button>
         <button data-view="invoices"><span class="nav-icon">≣</span>Invoices</button>
         <button data-view="documents"><span class="nav-icon">▤</span>Documents</button>
+        <button data-view="packages"><span class="nav-icon">£</span>Packages & pricing</button>
+        <button data-view="communications"><span class="nav-icon">✉</span>Templates & email</button>
         <button data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
       </nav>
       <div class="profile"><span>MP</span><div><strong>Mark Powell</strong><small>Administrator</small></div><button id="logout" title="Sign out">↗</button></div>
@@ -54,7 +57,7 @@
       <header class="topbar">
         <button id="open-menu" class="icon-button menu-button" aria-label="Open menu">☰</button>
         <div class="search"><span>⌕</span><input id="search" placeholder="Search weddings, clients, invoices…"><kbd>⌘ K</kbd></div>
-        <div class="phase-badge">PHASE 2A</div>
+        <div class="phase-badge">PHASE 2B</div>
       </header>
       <div class="page">
         <div class="page-heading">
@@ -75,6 +78,6 @@
   <section id="modal" class="modal hidden" role="dialog" aria-modal="true"><div id="modal-content"></div></section>
 
   <div id="toast" class="toast hidden" role="status"></div>
-  <script src="/static/app.js" defer></script>
+  <script src="/static/app.js?v=all-in-one-1" defer></script>
 </body>
 </html>

@@ -17,6 +17,7 @@ def apply_safe_migrations() -> None:
         "invoices": {
             "due_date": "DATE NULL",
             "description": "TEXT NULL",
+            "line_items": "JSON NULL" if engine.dialect.name == "postgresql" else "JSON NULL",
         },
     }
     with engine.begin() as connection:

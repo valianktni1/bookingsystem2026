@@ -101,6 +101,55 @@ class Booking(Base):
     invoices: Mapped[list["Invoice"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
     documents: Mapped[list["Document"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
     booking_notes: Mapped[list["BookingNote"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
+    quotes: Mapped[list["Quote"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
+
+
+class PackageOption(Base):
+    __tablename__ = "package_options"
+    __table_args__ = (UniqueConstraint("brand", "code", name="uq_package_option_brand_code"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    brand: Mapped[Brand] = mapped_column(Enum(Brand), index=True)
+    code: Mapped[str] = mapped_column(String(80), index=True)
+    name: Mapped[str] = mapped_column(String(180))
+    description: Mapped[str] = mapped_column(Text)
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    deposit_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
+    display_order: Mapped[int] = mapped_column(default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class AddOnOption(Base):
+    __tablename__ = "addon_options"
+    __table_args__ = (UniqueConstraint("brand", "code", name="uq_addon_option_brand_code"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    brand: Mapped[Brand] = mapped_column(Enum(Brand), index=True)
+    code: Mapped[str] = mapped_column(String(80), index=True)
+    name: Mapped[str] = mapped_column(String(180))
+    description: Mapped[str] = mapped_column(Text)
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    eligible_package_codes: Mapped[list] = mapped_column(JSON, default=list)
+    display_order: Mapped[int] = mapped_column(default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class Quote(Base):
+    __tablename__ = "quotes"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id"), index=True)
+    status: Mapped[str] = mapped_column(String(30), default="accepted", index=True)
+    package_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    selected_addon_ids: Mapped[list] = mapped_column(JSON, default=list)
+    line_items: Mapped[list] = mapped_column(JSON, default=list)
+    total: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
+    deposit_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
+    invoice_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    booking: Mapped[Booking] = relationship(back_populates="quotes")
 
 
 class Task(Base):
@@ -137,6 +186,7 @@ class Invoice(Base):
     paid: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
     status: Mapped[str] = mapped_column(String(30), default="unpaid")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    line_items: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     booking: Mapped[Booking] = relationship(back_populates="invoices")
     payments: Mapped[list["Payment"]] = relationship(back_populates="invoice", cascade="all, delete-orphan")
@@ -185,3 +235,91 @@ class AuditLog(Base):
     entity_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+
+
+class EmailTemplate(Base):
+    __tablename__ = "email_templates"
+    __table_args__ = (UniqueConstraint("brand", "template_key", name="uq_email_template_brand_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    brand: Mapped[Brand] = mapped_column(Enum(Brand), index=True)
+    template_key: Mapped[str] = mapped_column(String(80), index=True)
+    display_name: Mapped[str] = mapped_column(String(140))
+    subject: Mapped[str] = mapped_column(String(240))
+    body: Mapped[str] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class ContractTemplate(Base):
+    __tablename__ = "contract_templates"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    brand: Mapped[Brand] = mapped_column(Enum(Brand), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    version: Mapped[str] = mapped_column(String(60))
+    body: Mapped[str] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class ClientPortalToken(Base):
+    __tablename__ = "client_portal_tokens"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    booking: Mapped[Booking] = relationship()
+
+
+class FormSubmission(Base):
+    __tablename__ = "form_submissions"
+    __table_args__ = (UniqueConstraint("booking_id", "form_type", name="uq_booking_form_type"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id"), index=True)
+    form_type: Mapped[str] = mapped_column(String(80), index=True)
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    booking: Mapped[Booking] = relationship()
+
+
+class ContractAcceptance(Base):
+    __tablename__ = "contract_acceptances"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id"), unique=True, index=True)
+    contract_title: Mapped[str] = mapped_column(String(180))
+    contract_version: Mapped[str] = mapped_column(String(60))
+    contract_body: Mapped[str] = mapped_column(Text)
+    accepted_name: Mapped[str] = mapped_column(String(180))
+    accepted_email: Mapped[str] = mapped_column(String(254))
+    ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    booking: Mapped[Booking] = relationship()
+
+
+class EmailLog(Base):
+    __tablename__ = "email_logs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id"), index=True)
+    template_key: Mapped[str] = mapped_column(String(80), index=True)
+    recipient: Mapped[str] = mapped_column(String(254))
+    subject: Mapped[str] = mapped_column(String(240))
+    status: Mapped[str] = mapped_column(String(30), default="sent", index=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    booking: Mapped[Booking] = relationship()
+
+
+class ReminderLog(Base):
+    __tablename__ = "reminder_logs"
+    __table_args__ = (UniqueConstraint("booking_id", "reminder_key", "scheduled_for", name="uq_booking_reminder_day"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id"), index=True)
+    reminder_key: Mapped[str] = mapped_column(String(80), index=True)
+    scheduled_for: Mapped[date] = mapped_column(Date, index=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="robots" content="noindex,follow">
+  <meta name="theme-color" content="#f8f5ef">
+  <title>Wedding enquiry - Weddings By Mark</title>
+  <link rel="stylesheet" href="/static/enquiry.css?v=1">
+</head>
+<body>
+  <main>
+    <section id="enquiry-card" class="card">
+      <header>
+        <small>WEDDINGS BY MARK</small>
+        <h1>Please fill in your details and let the countdown to your best day ever begin!</h1>
+        <p>I’ll check your date and come back to you as soon as possible.</p>
+      </header>
+      <aside class="payment-note">
+        <strong>Flexible bank-transfer payment options</strong>
+        <span>Pay the package booking fee and the balance 45 days before your wedding.</span>
+        <span>Or ask about staged and split-payment arrangements.</span>
+      </aside>
+      <form id="enquiry-form">
+        <div class="form-grid">
+          <label>Bride's/Groom's first name *<input name="primary_first_name" required maxlength="100" placeholder="Your first name" autocomplete="given-name"></label>
+          <label>Email address *<input name="email" type="email" required maxlength="254" placeholder="Enter your email" autocomplete="email"></label>
+          <label>Groom's/Bride's first name *<input name="partner_first_name" required maxlength="100" placeholder="Partner's first name"></label>
+          <label>Phone number<input name="phone" type="tel" maxlength="50" placeholder="Optional - sometimes replies go into spam" autocomplete="tel"></label>
+          <label>Wedding or event date *<input name="event_date" type="date" required></label>
+          <label>Wedding/event location *<input name="location" required maxlength="240" placeholder="Enter your venue or location"></label>
+          <label>Package<select name="package_interest" id="package-interest"><option value="">Any particular package caught your eye?</option></select></label>
+          <label>Interested in the Selfie Booth?<select name="selfie_booth_interest"><option value="">Please choose</option><option value="yes">Yes please</option><option value="maybe">Maybe - tell me more</option><option value="no">No thank you</option></select></label>
+          <label class="full">Tell me a little about your enquiry<textarea name="message" rows="5" maxlength="5000" placeholder="Enter your message"></textarea><small class="counter">Maximum 5,000 characters</small></label>
+          <label>Special offer code<input name="promo_code" maxlength="80" placeholder="Enter your code, if applicable"></label>
+          <label>How did you hear about Weddings By Mark? *<select name="heard_about_us" required><option value="">Choose an option</option><option>Google search</option><option>Facebook</option><option>Instagram</option><option>TikTok</option><option>Wedding venue</option><option>Recommendation</option><option>Previous wedding guest</option><option>Other</option></select></label>
+          <label class="full">Quick fun question: spaghetti hoops on toast or beans on toast?<input name="fun_answer" maxlength="200" placeholder="Answer here :) "></label>
+          <label class="honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+          <label class="privacy full"><input name="privacy_agreed" type="checkbox" required><span>I agree that Weddings By Mark can use these details to respond to and manage my enquiry. *</span></label>
+        </div>
+        <p id="form-error" class="error" role="alert"></p>
+        <button id="submit-button" type="submit">Submit enquiry</button>
+      </form>
+    </section>
+    <section id="success" class="card success hidden">
+      <span>✓</span>
+      <h1>Thank you!</h1>
+      <p>Your enquiry has landed safely. I’ll check your date and get back to you as soon as I can.</p>
+      <strong>Mark - Weddings By Mark</strong>
+    </section>
+  </main>
+  <script src="/static/enquiry.js?v=1" defer></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
-# Mark's Business Studio — Phase 2A
+# Mark's Business Studio — Phase 2B
 
-Phase 2A of Mark's private, self-hosted booking and business management system. It replaces the day-to-day record, workflow, document and bank-transfer invoice functions gradually, while keeping Weddings By Mark and Ivory Digital inside one secure workspace.
+Phase 2B of Mark's private, self-hosted booking and business management system. It adds secure client forms, electronic agreement acceptance, editable email templates, SMTP sending and reminders to the Phase 2A record, workflow, document and invoice tools.
 
 ## Included in Phase 2A
 
@@ -26,8 +26,26 @@ Phase 2A of Mark's private, self-hosted booking and business management system. 
 - Bank-transfer payment history for deposits, part-payments and balances
 - Editable Weddings By Mark and Ivory Digital invoice identities and bank details
 - Safe additive startup migrations that preserve existing Phase 1 PostgreSQL data
+- Expiring secure client portal links
+- Wedding booking form and final-details questionnaire
+- Ivory Digital project information form
+- Editable brand-specific email and agreement templates
+- Electronic agreement acceptance with versioned wording, timestamp and audit details
+- SMTP sending from individual records
+- Optional automatic 14-day/7-day balance and 30-day final-details reminders
+- Submitted forms automatically complete their matching workflow tasks
+- Editable Weddings By Mark package and add-on catalogue
+- Client pick-and-choose quotes with live mobile totals and eligibility rules
+- Accepted quote snapshots that preserve the original wording and price
+- Automatic numbered invoice creation when a client accepts a package
+- Package and add-on line items on invoice PDFs
+- Supplied Weddings By Mark contract wording without the example client's personal details
+- Supplied Wedding Booking Form fields in the secure client portal
+- Responsive WordPress/Elementor enquiry iframe at `/enquiry`
+- Website enquiries automatically create booking records and workflow tasks
+- Copyable auto-resizing iframe embed code in Packages & pricing
 
-This phase does not yet send emails, generate/e-sign contracts, import Studio Ninja exports or create galleries. Those are planned for later phases without restructuring the core data.
+Studio Ninja import and gallery automation remain planned for later phases without restructuring the core data.
 
 ## TrueNAS deployment
 
@@ -93,7 +111,7 @@ The unauthenticated container health endpoint is:
 /api/health
 ```
 
-It returns `{"status":"ok","phase":"2A"}` when the application is running.
+It returns Phase `2B` plus SMTP/reminder configuration status when the application is running.
 
 ## Development and tests
 

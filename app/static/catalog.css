@@ -1,0 +1,21 @@
+.catalog-columns { display: grid; grid-template-columns: 1.35fr .9fr; gap: 18px; }
+.catalog-list { display: grid; gap: 11px; padding: 16px; }
+.catalog-card { padding: 15px; border: 1px solid var(--line); border-radius: 11px; background: #fff; }
+.catalog-card.inactive { opacity: .62; background: #f5f7f7; }
+.catalog-card header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.catalog-card header > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.catalog-card header strong { font-size: 11px; }
+.catalog-card .catalog-price { color: var(--teal); font-size: 13px; }
+.catalog-card p { margin: 11px 0; color: var(--muted); font-size: 9px; line-height: 1.55; white-space: pre-line; }
+.catalog-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 8px; }
+.catalog-eligibility { display: flex; flex-wrap: wrap; gap: 5px; }
+.catalog-eligibility i { padding: 4px 6px; border-radius: 6px; color: #68532f; background: #f8f1e5; font-style: normal; }
+.check-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.check-option { display: flex !important; grid-template-columns: auto 1fr; align-items: center; gap: 7px !important; min-height: 35px; padding: 7px; border: 1px solid var(--line); border-radius: 7px; }
+.check-option input { width: 16px !important; height: 16px !important; accent-color: var(--teal); }
+.invoice-lines-admin { margin: 9px 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.invoice-lines-admin div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid var(--line); font-size: 8px; }
+.invoice-lines-admin div:last-child { border-bottom: 0; }
+.embed-preview { display:grid; place-items:center; padding:0 15px; text-decoration:none; }
+@media (max-width: 950px) { .catalog-columns { grid-template-columns: 1fr; } }
+@media (max-width: 580px) { .catalog-list { padding: 10px; } .check-grid { grid-template-columns: 1fr; } }

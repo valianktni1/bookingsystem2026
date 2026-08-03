@@ -1,13 +1,17 @@
+import asyncio
+import hashlib
 import mimetypes
 import re
+import secrets
 import shutil
 import uuid
+from contextlib import suppress
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import or_, select
@@ -16,12 +20,17 @@ from sqlalchemy.orm import Session, selectinload
 from .bootstrap import bootstrap
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
+from .email_service import send_template_email, smtp_ready
 from .migrations import apply_safe_migrations
-from .models import (Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile, Client, Document,
-                     Invoice, Payment, RecordKind, RecordStatus, Task)
+from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
+                     Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
+                     EmailLog, EmailTemplate, FormSubmission, Invoice, PackageOption, Payment,
+                     Quote, RecordKind, RecordStatus, ReminderLog, Task)
 from .pdf import invoice_pdf
-from .schemas import (BookingIn, BookingPatch, BusinessPatch, InvoiceIn, LoginIn, NoteIn, PaymentIn,
-                      TaskIn, TaskPatch)
+from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
+                      ContractAcceptIn, ContractTemplatePatch, EmailTemplatePatch, EnquiryIn, InvoiceIn,
+                      LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
+                      PublicFormIn, QuoteAcceptIn, SendEmailIn, TaskIn, TaskPatch)
 from .security import create_token, current_admin, verify_password
 from .services import audit, create_default_tasks, dashboard_counts, invoice_status, next_invoice_number
 
@@ -29,6 +38,7 @@ settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
 ALLOWED_UPLOADS = {"application/pdf", "image/jpeg", "image/png",
                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+ENQUIRY_HITS: dict[str, list[datetime]] = {}
 
 
 @asynccontextmanager
@@ -38,10 +48,14 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         bootstrap(db)
+    reminder_task = asyncio.create_task(reminder_loop())
     yield
+    reminder_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.0.1-phase2a", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.1.0-phase2b", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -82,9 +96,34 @@ def invoice_json(item: Invoice) -> dict:
             "supply_date": item.supply_date.isoformat() if item.supply_date else None,
             "due_date": item.due_date.isoformat() if item.due_date else None,
             "description": item.description, "notes": item.notes, "total": money(item.total),
+            "line_items": item.line_items or [],
             "paid": money(item.paid), "balance": money(item.total - item.paid), "status": item.status,
             "client": item.booking.title if item.booking else None,
             "payments": [payment_json(p) for p in sorted(item.payments, key=lambda x: x.paid_date, reverse=True)]}
+
+
+def package_json(item: PackageOption) -> dict:
+    return {"id": item.id, "brand": item.brand.value, "code": item.code, "name": item.name,
+            "description": item.description, "price": money(item.price),
+            "deposit_amount": money(item.deposit_amount), "display_order": item.display_order,
+            "is_active": item.is_active}
+
+
+def addon_json(item: AddOnOption) -> dict:
+    return {"id": item.id, "brand": item.brand.value, "code": item.code, "name": item.name,
+            "description": item.description, "price": money(item.price),
+            "eligible_package_codes": item.eligible_package_codes or [],
+            "display_order": item.display_order, "is_active": item.is_active}
+
+
+def quote_json(item: Quote | None) -> dict | None:
+    if not item:
+        return None
+    return {"id": item.id, "status": item.status, "package_id": item.package_id,
+            "selected_addon_ids": item.selected_addon_ids or [], "line_items": item.line_items or [],
+            "total": money(item.total), "deposit_amount": money(item.deposit_amount),
+            "invoice_id": item.invoice_id,
+            "accepted_at": item.accepted_at.isoformat() if item.accepted_at else None}
 
 
 def document_json(item: Document) -> dict:
@@ -130,7 +169,68 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "phase": "2A.1"}
+    return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
+            "reminders_enabled": settings.reminders_enabled}
+
+
+@app.get("/api/public/catalog")
+def public_catalog(db: Session = Depends(get_db)):
+    packages = db.scalars(select(PackageOption).where(PackageOption.brand == Brand.WBM,
+                                                       PackageOption.is_active.is_(True))
+                          .order_by(PackageOption.display_order, PackageOption.price)).all()
+    return {"packages": [package_json(x) for x in packages]}
+
+
+@app.post("/api/public/enquiries", status_code=201)
+def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = Depends(get_db)):
+    if payload.website:
+        return {"ok": True}
+    if not payload.privacy_agreed:
+        raise HTTPException(422, "Please agree to the privacy notice before submitting")
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    client_ip = forwarded or (request.client.host if request.client else "unknown")
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+    recent = [stamp for stamp in ENQUIRY_HITS.get(client_ip, []) if stamp > cutoff]
+    if len(recent) >= 5:
+        raise HTTPException(429, "Too many enquiries have been submitted. Please try again later.")
+    recent.append(datetime.now(timezone.utc))
+    ENQUIRY_HITS[client_ip] = recent
+
+    client = Client(first_name=payload.primary_first_name.strip(), last_name="",
+                    partner_name=payload.partner_first_name.strip(), email=str(payload.email).lower(),
+                    phone=payload.phone.strip() if payload.phone else None)
+    db.add(client)
+    db.flush()
+    form_data = payload.model_dump(exclude={"website", "privacy_agreed"}, mode="json")
+    title = f"{payload.primary_first_name.strip()} & {payload.partner_first_name.strip()}"
+    booking = Booking(brand=Brand.WBM, kind=RecordKind.WEDDING, status=RecordStatus.ENQUIRY,
+                      title=title, client_id=client.id, event_date=payload.event_date,
+                      venue_or_project=payload.location.strip(), package_name=payload.package_interest,
+                      notes=payload.message.strip() if payload.message else None,
+                      form_data={"website_enquiry": form_data},
+                      workflow_state={"source": "website_enquiry", "received_at": datetime.now(timezone.utc).isoformat()})
+    db.add(booking)
+    db.flush()
+    create_default_tasks(db, booking.id, booking.kind)
+    audit(db, "website_enquiry", "booking", booking.id,
+          {"title": title, "event_date": payload.event_date.isoformat(),
+           "heard_about_us": payload.heard_about_us})
+
+    template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
+                                                     EmailTemplate.template_key == "enquiry_received",
+                                                     EmailTemplate.is_active.is_(True)))
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == Brand.WBM))
+    if template and profile and smtp_ready(Brand.WBM):
+        try:
+            subject, _ = send_template_email(booking, profile, template)
+            db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
+                            recipient=client.email, subject=subject, status="sent"))
+        except Exception as exc:
+            db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
+                            recipient=client.email, subject=template.subject,
+                            status="failed", error=str(exc)[:2000]))
+    db.commit()
+    return {"ok": True, "message": "Thank you - your enquiry has been received."}
 
 
 @app.post("/api/auth/login")
@@ -174,6 +274,72 @@ def patch_business(brand: Brand, payload: BusinessPatch, _: Admin = Depends(curr
     audit(db, "update", "business", profile.id, {"brand": brand.value, "fields": list(payload.model_fields_set)})
     db.commit()
     return businesses(_, db)
+
+
+@app.get("/api/catalog")
+def catalog(brand: Brand = Brand.WBM, include_inactive: bool = False,
+            _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    package_stmt = select(PackageOption).where(PackageOption.brand == brand)
+    addon_stmt = select(AddOnOption).where(AddOnOption.brand == brand)
+    if not include_inactive:
+        package_stmt = package_stmt.where(PackageOption.is_active.is_(True))
+        addon_stmt = addon_stmt.where(AddOnOption.is_active.is_(True))
+    packages = db.scalars(package_stmt.order_by(PackageOption.display_order, PackageOption.price)).all()
+    addons = db.scalars(addon_stmt.order_by(AddOnOption.display_order, AddOnOption.price)).all()
+    return {"packages": [package_json(x) for x in packages], "addons": [addon_json(x) for x in addons]}
+
+
+@app.post("/api/catalog/packages", status_code=201)
+def create_package(payload: PackageOptionIn, brand: Brand = Brand.WBM,
+                   _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    if db.scalar(select(PackageOption).where(PackageOption.brand == brand,
+                                             PackageOption.code == payload.code)):
+        raise HTTPException(409, "That package code already exists")
+    row = PackageOption(brand=brand, **payload.model_dump())
+    db.add(row)
+    db.flush()
+    audit(db, "create_package", "package_option", row.id, {"name": row.name})
+    db.commit()
+    return package_json(row)
+
+
+@app.patch("/api/catalog/packages/{package_id}")
+def patch_package(package_id: str, payload: PackageOptionPatch,
+                  _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    row = db.get(PackageOption, package_id)
+    if not row:
+        raise HTTPException(404, "Package not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, key, value)
+    audit(db, "update_package", "package_option", row.id, {"name": row.name})
+    db.commit()
+    return package_json(row)
+
+
+@app.post("/api/catalog/addons", status_code=201)
+def create_addon(payload: AddOnOptionIn, brand: Brand = Brand.WBM,
+                 _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    if db.scalar(select(AddOnOption).where(AddOnOption.brand == brand, AddOnOption.code == payload.code)):
+        raise HTTPException(409, "That add-on code already exists")
+    row = AddOnOption(brand=brand, **payload.model_dump())
+    db.add(row)
+    db.flush()
+    audit(db, "create_addon", "addon_option", row.id, {"name": row.name})
+    db.commit()
+    return addon_json(row)
+
+
+@app.patch("/api/catalog/addons/{addon_id}")
+def patch_addon(addon_id: str, payload: AddOnOptionPatch,
+                _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    row = db.get(AddOnOption, addon_id)
+    if not row:
+        raise HTTPException(404, "Add-on not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, key, value)
+    audit(db, "update_addon", "addon_option", row.id, {"name": row.name})
+    db.commit()
+    return addon_json(row)
 
 
 @app.get("/api/dashboard")
@@ -505,9 +671,384 @@ def delete_document(document_id: str, _: Admin = Depends(current_admin), db: Ses
         shutil.rmtree(parent)
 
 
+def token_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def issue_portal_token(db: Session, booking_id: str, expires_days: int = 90) -> tuple[str, ClientPortalToken]:
+    raw = secrets.token_urlsafe(32)
+    row = ClientPortalToken(booking_id=booking_id, token_hash=token_digest(raw),
+                            expires_at=datetime.now(timezone.utc) + timedelta(days=expires_days))
+    db.add(row)
+    db.flush()
+    return raw, row
+
+
+def resolve_portal(db: Session, token: str) -> ClientPortalToken:
+    row = db.scalar(select(ClientPortalToken).options(selectinload(ClientPortalToken.booking).selectinload(Booking.client))
+                    .where(ClientPortalToken.token_hash == token_digest(token),
+                           ClientPortalToken.revoked_at.is_(None),
+                           ClientPortalToken.expires_at > datetime.now(timezone.utc)))
+    if not row:
+        raise HTTPException(404, "This private link is invalid or has expired")
+    return row
+
+
+def portal_status_json(db: Session, booking: Booking) -> dict:
+    submissions = db.scalars(select(FormSubmission).where(FormSubmission.booking_id == booking.id)).all()
+    acceptance = db.scalar(select(ContractAcceptance).where(ContractAcceptance.booking_id == booking.id))
+    logs = db.scalars(select(EmailLog).where(EmailLog.booking_id == booking.id)
+                      .order_by(EmailLog.sent_at.desc()).limit(20)).all()
+    quote = db.scalar(select(Quote).where(Quote.booking_id == booking.id)
+                      .order_by(Quote.created_at.desc()).limit(1))
+    quote_data = quote_json(quote)
+    if quote_data and quote.invoice_id:
+        invoice = db.get(Invoice, quote.invoice_id)
+        quote_data["invoice_number"] = invoice.number if invoice else None
+    return {
+        "submissions": [{"id": x.id, "form_type": x.form_type, "data": x.data,
+                         "submitted_at": x.submitted_at.isoformat()} for x in submissions],
+        "contract": ({"accepted_name": acceptance.accepted_name, "accepted_email": acceptance.accepted_email,
+                      "accepted_at": acceptance.accepted_at.isoformat(), "version": acceptance.contract_version}
+                     if acceptance else None),
+        "emails": [{"template_key": x.template_key, "recipient": x.recipient, "subject": x.subject,
+                    "status": x.status, "sent_at": x.sent_at.isoformat()} for x in logs],
+        "quote": quote_data,
+    }
+
+
+@app.get("/api/communications/templates")
+def list_templates(brand: Brand | None = None, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    stmt = select(EmailTemplate).order_by(EmailTemplate.brand, EmailTemplate.display_name)
+    if brand:
+        stmt = stmt.where(EmailTemplate.brand == brand)
+    rows = db.scalars(stmt).all()
+    contracts = db.scalars(select(ContractTemplate).order_by(ContractTemplate.brand)).all()
+    return {"smtp_configured": smtp_ready(), "reminders_enabled": settings.reminders_enabled,
+            "templates": [{"id": x.id, "brand": x.brand.value, "template_key": x.template_key,
+                           "display_name": x.display_name, "subject": x.subject, "body": x.body,
+                           "is_active": x.is_active} for x in rows],
+            "contracts": [{"id": x.id, "brand": x.brand.value, "title": x.title, "version": x.version,
+                           "body": x.body, "is_active": x.is_active} for x in contracts]}
+
+
+@app.patch("/api/communications/templates/{template_id}")
+def patch_template(template_id: str, payload: EmailTemplatePatch, _: Admin = Depends(current_admin),
+                   db: Session = Depends(get_db)):
+    row = db.get(EmailTemplate, template_id)
+    if not row:
+        raise HTTPException(404, "Email template not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, key, value)
+    audit(db, "update_email_template", "email_template", row.id, {"key": row.template_key})
+    db.commit()
+    return {"ok": True}
+
+
+@app.patch("/api/communications/contracts/{contract_id}")
+def patch_contract(contract_id: str, payload: ContractTemplatePatch, _: Admin = Depends(current_admin),
+                   db: Session = Depends(get_db)):
+    row = db.get(ContractTemplate, contract_id)
+    if not row:
+        raise HTTPException(404, "Contract template not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(row, key, value)
+    audit(db, "update_contract_template", "contract_template", row.id, {"version": row.version})
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/bookings/{booking_id}/portal")
+def booking_portal_status(booking_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    return portal_status_json(db, booking)
+
+
+@app.post("/api/bookings/{booking_id}/portal", status_code=201)
+def create_portal_link(booking_id: str, payload: PortalCreateIn, _: Admin = Depends(current_admin),
+                       db: Session = Depends(get_db)):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    raw, row = issue_portal_token(db, booking_id, payload.expires_days)
+    audit(db, "create_client_link", "booking", booking_id, {"expires_at": row.expires_at.isoformat()})
+    db.commit()
+    return {"url": f"{settings.app_url.rstrip('/')}/client/{raw}", "expires_at": row.expires_at.isoformat()}
+
+
+@app.post("/api/bookings/{booking_id}/emails/send")
+def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends(current_admin),
+                       db: Session = Depends(get_db)):
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(Booking.id == booking_id))
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == booking.brand,
+                                                     EmailTemplate.template_key == payload.template_key,
+                                                     EmailTemplate.is_active.is_(True)))
+    if not template:
+        raise HTTPException(404, "Active email template not found")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    try:
+        subject, _ = send_template_email(booking, profile, template, payload.portal_url)
+        log = EmailLog(booking_id=booking.id, template_key=template.template_key,
+                       recipient=booking.client.email, subject=subject, status="sent")
+        db.add(log)
+        audit(db, "send_email", "booking", booking.id, {"template": template.template_key})
+        db.commit()
+        return {"ok": True, "subject": subject}
+    except Exception as exc:
+        db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
+                        recipient=booking.client.email, subject=template.subject,
+                        status="failed", error=str(exc)[:2000]))
+        db.commit()
+        raise HTTPException(503, str(exc))
+
+
+@app.get("/api/client/{token}")
+def public_portal_data(token: str, db: Session = Depends(get_db)):
+    portal = resolve_portal(db, token)
+    booking = portal.booking
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    contract = db.scalar(select(ContractTemplate).where(ContractTemplate.brand == booking.brand,
+                                                        ContractTemplate.is_active.is_(True)))
+    status_data = portal_status_json(db, booking)
+    packages = db.scalars(select(PackageOption).where(PackageOption.brand == booking.brand,
+                                                       PackageOption.is_active.is_(True))
+                          .order_by(PackageOption.display_order, PackageOption.price)).all()
+    addons = db.scalars(select(AddOnOption).where(AddOnOption.brand == booking.brand,
+                                                  AddOnOption.is_active.is_(True))
+                        .order_by(AddOnOption.display_order, AddOnOption.price)).all()
+    return {"business": {"name": profile.display_name, "email": profile.email, "phone": profile.phone},
+            "record": {"title": booking.title, "kind": booking.kind.value,
+                       "event_date": booking.event_date.isoformat() if booking.event_date else None,
+                       "venue_or_project": booking.venue_or_project, "package_name": booking.package_name,
+                       "quoted_total": money(booking.quoted_total), "deposit_amount": money(booking.deposit_amount),
+                       "client": client_json(booking.client)},
+            "contract_template": ({"title": contract.title, "version": contract.version, "body": contract.body}
+                                  if contract else None),
+            "catalog": {"packages": [package_json(x) for x in packages],
+                        "addons": [addon_json(x) for x in addons]}, **status_data}
+
+
+@app.post("/api/client/{token}/quote", status_code=201)
+def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_db)):
+    if not payload.confirmed:
+        raise HTTPException(422, "Please confirm the package and price before accepting")
+    portal = resolve_portal(db, token)
+    booking = portal.booking
+    if booking.kind != RecordKind.WEDDING or booking.brand != Brand.WBM:
+        raise HTTPException(422, "Package selection is only available for wedding bookings")
+    existing = db.scalar(select(Quote).where(Quote.booking_id == booking.id,
+                                             Quote.status == "accepted"))
+    if existing:
+        raise HTTPException(409, "This quote has already been accepted")
+    package = db.scalar(select(PackageOption).where(PackageOption.id == payload.package_id,
+                                                    PackageOption.brand == booking.brand,
+                                                    PackageOption.is_active.is_(True)))
+    if not package:
+        raise HTTPException(404, "The selected package is no longer available")
+    requested_ids = list(dict.fromkeys(payload.addon_ids))
+    addons = db.scalars(select(AddOnOption).where(AddOnOption.id.in_(requested_ids),
+                                                  AddOnOption.brand == booking.brand,
+                                                  AddOnOption.is_active.is_(True))).all() if requested_ids else []
+    if len(addons) != len(requested_ids):
+        raise HTTPException(422, "One or more selected add-ons are unavailable")
+    by_id = {x.id: x for x in addons}
+    addons = [by_id[x] for x in requested_ids]
+    for addon in addons:
+        eligible = addon.eligible_package_codes or []
+        if eligible and package.code not in eligible:
+            raise HTTPException(422, f"{addon.name} is not available with {package.name}")
+    line_items = [{"type": "package", "code": package.code, "name": package.name,
+                   "description": package.description, "quantity": 1, "unit_price": money(package.price),
+                   "total": money(package.price)}]
+    for addon in addons:
+        line_items.append({"type": "addon", "code": addon.code, "name": addon.name,
+                           "description": addon.description, "quantity": 1,
+                           "unit_price": money(addon.price), "total": money(addon.price)})
+    total = package.price + sum((x.price for x in addons), Decimal("0"))
+    quote = Quote(booking_id=booking.id, status="accepted", package_id=package.id,
+                  selected_addon_ids=requested_ids, line_items=line_items, total=total,
+                  deposit_amount=package.deposit_amount, accepted_at=datetime.now(timezone.utc))
+    db.add(quote)
+    db.flush()
+    sequence, number = next_invoice_number(db, booking.brand)
+    invoice = Invoice(booking_id=booking.id, brand=booking.brand, sequence=sequence, number=number,
+                      issue_date=date.today(), supply_date=booking.event_date,
+                      due_date=booking.balance_due_date, description=package.name, total=total,
+                      paid=Decimal("0"), status="unpaid", line_items=line_items,
+                      notes=f"Booking fee of £{money(package.deposit_amount):,.2f} is due by bank transfer.")
+    db.add(invoice)
+    db.flush()
+    quote.invoice_id = invoice.id
+    booking.package_name = package.name
+    booking.quoted_total = total
+    booking.deposit_amount = package.deposit_amount
+    if booking.status == RecordStatus.ENQUIRY:
+        booking.status = RecordStatus.QUOTED
+    for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
+                                              Task.title.ilike("%quote%"))).all():
+        task.completed = True
+    audit(db, "accept_quote", "booking", booking.id,
+          {"package": package.name, "addons": [x.name for x in addons],
+           "total": money(total), "invoice": number})
+    db.commit()
+    return {"ok": True, "quote": quote_json(quote), "invoice": invoice_json(invoice)}
+
+
+@app.post("/api/client/{token}/forms")
+def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(get_db)):
+    portal = resolve_portal(db, token)
+    booking = portal.booking
+    row = db.scalar(select(FormSubmission).where(FormSubmission.booking_id == booking.id,
+                                                 FormSubmission.form_type == payload.form_type))
+    if row:
+        row.data = payload.data
+        row.updated_at = datetime.now(timezone.utc)
+    else:
+        row = FormSubmission(booking_id=booking.id, form_type=payload.form_type, data=payload.data)
+        db.add(row)
+    if payload.form_type == "booking_form":
+        booking.form_data = payload.data
+        if payload.data.get("primary_phone"):
+            booking.client.phone = str(payload.data["primary_phone"]).strip()
+        if payload.data.get("partner_full_name"):
+            booking.client.partner_name = str(payload.data["partner_full_name"]).strip()
+        address_parts = [payload.data.get(key) for key in ("street_address", "town", "county", "postcode")]
+        address = ", ".join(str(value).strip() for value in address_parts if value)
+        if address:
+            booking.client.address = address
+        if payload.data.get("wedding_date"):
+            try:
+                booking.event_date = date.fromisoformat(str(payload.data["wedding_date"]))
+            except ValueError:
+                pass
+        if payload.data.get("ceremony_details") and not booking.venue_or_project:
+            booking.venue_or_project = str(payload.data["ceremony_details"]).strip()[:240]
+        accepted_quote = db.scalar(select(Quote).where(Quote.booking_id == booking.id,
+                                                        Quote.status == "accepted"))
+        if payload.data.get("package_selected") and not accepted_quote:
+            booking.package_name = str(payload.data["package_selected"]).strip()[:160]
+        for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
+                                                  Task.title.ilike("%booking form%"))).all():
+            task.completed = True
+    else:
+        booking.workflow_state = {**(booking.workflow_state or {}), "final_questionnaire": payload.data}
+        for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
+                                                  Task.title.ilike("%questionnaire%"))).all():
+            task.completed = True
+    audit(db, "submit_form", "booking", booking.id, {"form_type": payload.form_type})
+    db.commit()
+    return {"ok": True, "submitted_at": row.submitted_at.isoformat()}
+
+
+@app.post("/api/client/{token}/contract")
+def accept_contract(token: str, payload: ContractAcceptIn, request: Request, db: Session = Depends(get_db)):
+    if not payload.agreed:
+        raise HTTPException(422, "You must agree before accepting the contract")
+    portal = resolve_portal(db, token)
+    booking = portal.booking
+    if payload.accepted_email.lower() != booking.client.email.lower():
+        raise HTTPException(422, "Please use the email address shown on your booking")
+    if db.scalar(select(ContractAcceptance).where(ContractAcceptance.booking_id == booking.id)):
+        raise HTTPException(409, "This agreement has already been accepted")
+    contract = db.scalar(select(ContractTemplate).where(ContractTemplate.brand == booking.brand,
+                                                        ContractTemplate.is_active.is_(True)))
+    if not contract:
+        raise HTTPException(404, "No active agreement is available")
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    row = ContractAcceptance(booking_id=booking.id, contract_title=contract.title,
+                             contract_version=contract.version, contract_body=contract.body,
+                             accepted_name=payload.accepted_name.strip(),
+                             accepted_email=str(payload.accepted_email).lower(),
+                             ip_address=forwarded or (request.client.host if request.client else None),
+                             user_agent=request.headers.get("user-agent", "")[:500])
+    db.add(row)
+    for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
+                                              Task.title.ilike("%contract%"))).all():
+        task.completed = True
+    audit(db, "accept_contract", "booking", booking.id,
+          {"version": contract.version, "accepted_name": row.accepted_name})
+    db.commit()
+    return {"ok": True, "accepted_at": row.accepted_at.isoformat()}
+
+
+def run_due_reminders(db: Session) -> dict:
+    today = date.today()
+    sent, skipped, failed = 0, 0, 0
+    bookings = db.scalars(select(Booking).options(selectinload(Booking.client))
+                          .where(Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED)).all()
+    for booking in bookings:
+        keys: list[str] = []
+        if booking.balance_due_date:
+            days = (booking.balance_due_date - today).days
+            if days == 14:
+                keys.append("balance_due_14")
+            if days == 7:
+                keys.append("balance_due_7")
+        if booking.kind == RecordKind.WEDDING and booking.event_date and (booking.event_date - today).days == 30:
+            keys.append("final_questionnaire")
+        for key in keys:
+            if db.scalar(select(ReminderLog).where(ReminderLog.booking_id == booking.id,
+                                                   ReminderLog.reminder_key == key,
+                                                   ReminderLog.scheduled_for == today)):
+                skipped += 1
+                continue
+            reminder = ReminderLog(booking_id=booking.id, reminder_key=key, scheduled_for=today)
+            db.add(reminder)
+            template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == booking.brand,
+                                                             EmailTemplate.template_key == key,
+                                                             EmailTemplate.is_active.is_(True)))
+            profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+            try:
+                portal_url = None
+                if key == "final_questionnaire":
+                    raw, _ = issue_portal_token(db, booking.id, 60)
+                    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}"
+                if not template:
+                    raise RuntimeError("Reminder template is inactive or missing")
+                subject, _ = send_template_email(booking, profile, template, portal_url)
+                reminder.status, reminder.sent_at = "sent", datetime.now(timezone.utc)
+                db.add(EmailLog(booking_id=booking.id, template_key=key, recipient=booking.client.email,
+                                subject=subject, status="sent"))
+                sent += 1
+            except Exception as exc:
+                reminder.status, reminder.error = "failed", str(exc)[:2000]
+                failed += 1
+            db.commit()
+    return {"sent": sent, "skipped": skipped, "failed": failed}
+
+
+@app.post("/api/communications/reminders/run")
+def run_reminders_now(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    if not smtp_ready():
+        raise HTTPException(503, "SMTP is not configured")
+    return run_due_reminders(db)
+
+
+async def reminder_loop():
+    while True:
+        await asyncio.sleep(max(1, settings.reminder_scan_hours) * 3600)
+        if settings.reminders_enabled and smtp_ready():
+            with SessionLocal() as db:
+                await asyncio.to_thread(run_due_reminders, db)
+
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/client/{token}", include_in_schema=False)
+def client_portal_page(token: str):
+    return FileResponse(STATIC_DIR / "client.html")
+
+
+@app.get("/enquiry", include_in_schema=False)
+def public_enquiry_page():
+    return FileResponse(STATIC_DIR / "enquiry.html")
