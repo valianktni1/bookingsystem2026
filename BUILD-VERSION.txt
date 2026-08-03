@@ -1,5 +1,5 @@
 BookingSystem2026 - Quote and Client Portal Complete
-Build: 2026.08.03-portal-invoices-v3
+Build: 2026.08.03-dual-smtp-v4
 
 This build includes:
 - One-click create and send quote
@@ -8,3 +8,4 @@ This build includes:
 - Secure invoice and receipt PDF downloads
 - Automatic package-accepted and invoice-ready email
 - Booking form, questionnaire and contract in the same portal
+- Separate Hostinger SMTP identities for Weddings By Mark and Ivory Digital

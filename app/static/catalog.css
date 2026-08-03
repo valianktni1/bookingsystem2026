@@ -26,6 +26,8 @@
 .quote-help { margin-bottom:14px; padding:15px; border:1px dashed #c5d1d3; border-radius:9px; color:var(--muted); background:#fff; text-align:center; font-size:9px; }
 .portal-preview { display:grid; place-items:center; padding:0 11px; text-decoration:none; }
 .section-actions.compact { min-height:48px; margin-top:16px; }
+.comm-status.email-status { grid-template-columns:1fr 1fr 1fr auto; }
+@media(max-width:1200px){.comm-status.email-status{grid-template-columns:1fr 1fr}.comm-status.email-status>button{min-height:48px}}
 @media(max-width:580px){.quote-send-card{align-items:stretch;flex-direction:column}.quote-send-card .primary{width:100%}.portal-link{grid-template-columns:1fr auto}.portal-link input{grid-column:1/-1}}
 @media (max-width: 950px) { .catalog-columns { grid-template-columns: 1fr; } }
 @media (max-width: 580px) { .catalog-list { padding: 10px; } .check-grid { grid-template-columns: 1fr; } }

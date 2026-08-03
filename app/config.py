@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     smtp_port: int = 465
     smtp_username: str | None = None
     smtp_password: str | None = None
-    smtp_wbm_username: str | None = None
+    smtp_wbm_username: str | None = "mark@perfectweddingsbymark.uk"
     smtp_wbm_password: str | None = None
-    smtp_ivory_username: str | None = None
+    smtp_ivory_username: str | None = "admin@ivorydigital.uk"
     smtp_ivory_password: str | None = None
     smtp_use_ssl: bool = True
     reminder_scan_hours: int = 6

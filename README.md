@@ -47,6 +47,7 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - One-click initial quote email with a private link that opens directly on package selection
 - Secure client invoice and receipt downloads inside the same booking portal
 - Automatic package-accepted and invoice-ready email when SMTP is configured
+- Separate Weddings By Mark and Ivory Digital Hostinger SMTP identities and readiness indicators
 
 Studio Ninja import and gallery automation remain planned for later phases without restructuring the core data.
 

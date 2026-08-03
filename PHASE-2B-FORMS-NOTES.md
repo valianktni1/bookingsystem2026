@@ -26,5 +26,7 @@
 - The same private portal includes an Invoices tab with payment status and line items
 - Invoice PDFs and paid receipts can be downloaded securely by the correct client only
 - Package acceptance can send an automatic invoice-ready confirmation email
+- Separate Hostinger SMTP credentials for `mark@perfectweddingsbymark.uk` and `admin@ivorydigital.uk`
+- Independent connection status for each sender on the Templates & email screen
 
 The source contract wording should still be reviewed by the business owner or a qualified legal professional before production use. The software does not provide legal advice.

@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session, selectinload
 from .bootstrap import bootstrap
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
-from .email_service import send_template_email, smtp_ready
+from .email_service import send_template_email, smtp_credentials, smtp_ready
 from .migrations import apply_safe_migrations
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
@@ -171,7 +171,7 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
-            "build": "2026.08.03-portal-invoices-v3"}
+            "build": "2026.08.03-dual-smtp-v4"}
 
 
 @app.get("/api/public/catalog")
@@ -725,7 +725,13 @@ def list_templates(brand: Brand | None = None, _: Admin = Depends(current_admin)
         stmt = stmt.where(EmailTemplate.brand == brand)
     rows = db.scalars(stmt).all()
     contracts = db.scalars(select(ContractTemplate).order_by(ContractTemplate.brand)).all()
-    return {"smtp_configured": smtp_ready(), "reminders_enabled": settings.reminders_enabled,
+    wbm_username, _ = smtp_credentials(Brand.WBM)
+    ivory_username, _ = smtp_credentials(Brand.IVORY)
+    return {"smtp_configured": smtp_ready(),
+            "smtp_by_brand": {
+                "wbm": {"configured": smtp_ready(Brand.WBM), "username": wbm_username},
+                "ivory": {"configured": smtp_ready(Brand.IVORY), "username": ivory_username},
+            }, "reminders_enabled": settings.reminders_enabled,
             "templates": [{"id": x.id, "brand": x.brand.value, "template_key": x.template_key,
                            "display_name": x.display_name, "subject": x.subject, "body": x.body,
                            "is_active": x.is_active} for x in rows],

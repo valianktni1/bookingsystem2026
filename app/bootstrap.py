@@ -19,7 +19,7 @@ def bootstrap(db: Session) -> None:
 
     profiles = {
         Brand.WBM: ("Weddings By Mark", "WBM", "mark@perfectweddingsbymark.uk", "perfectweddingsbymark.uk"),
-        Brand.IVORY: ("Ivory Digital", "ID", "sales@ivorydigital.uk", "ivorydigital.uk"),
+        Brand.IVORY: ("Ivory Digital", "ID", "admin@ivorydigital.uk", "ivorydigital.uk"),
     }
     for brand, (name, prefix, email, website) in profiles.items():
         profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == brand))
@@ -28,6 +28,8 @@ def bootstrap(db: Session) -> None:
                                    phone="07712 117357", website=website,
                                    address="220 Ashurst Road, Manchester M22 5AX"))
         else:
+            if not profile.email or (brand == Brand.IVORY and profile.email == "sales@ivorydigital.uk"):
+                profile.email = email
             profile.phone = profile.phone or "07712 117357"
             profile.website = profile.website or website
             profile.address = profile.address or "220 Ashurst Road, Manchester M22 5AX"

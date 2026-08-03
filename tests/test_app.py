@@ -45,7 +45,7 @@ def test_phase_two_b_flow():
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False,
-                                 "build": "2026.08.03-portal-invoices-v3"}
+                                 "build": "2026.08.03-dual-smtp-v4"}
 
         homepage = client.get("/")
         assert homepage.status_code == 200
@@ -66,6 +66,10 @@ def test_phase_two_b_flow():
         assert templates.status_code == 200
         assert len(templates.json()["templates"]) >= 10
         assert len(templates.json()["contracts"]) == 2
+        assert templates.json()["smtp_by_brand"] == {
+            "wbm": {"configured": False, "username": "mark@perfectweddingsbymark.uk"},
+            "ivory": {"configured": False, "username": "admin@ivorydigital.uk"},
+        }
         wedding_contract = next(row for row in templates.json()["contracts"] if row["brand"] == "wbm")
         assert wedding_contract["title"] == "Weddings By Mark Contract"
         assert wedding_contract["version"] == "Rev 1.3 - August 2022"
@@ -229,6 +233,7 @@ def test_phase_two_b_flow():
 
         businesses = client.get("/api/businesses").json()
         assert len(businesses) == 2
+        assert next(row for row in businesses if row["brand"] == "ivory")["email"] == "admin@ivorydigital.uk"
         saved = client.patch("/api/businesses/wbm", json={"bank_details": {
             "account_name": "Mark Adam Powell", "sort_code": "04-06-05", "account_number": "12345678"
         }})
