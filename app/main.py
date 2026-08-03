@@ -18,7 +18,7 @@ from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .migrations import apply_safe_migrations
 from .models import (Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile, Client, Document,
-                     Invoice, Payment, RecordKind, Task)
+                     Invoice, Payment, RecordKind, RecordStatus, Task)
 from .pdf import invoice_pdf
 from .schemas import (BookingIn, BookingPatch, BusinessPatch, InvoiceIn, LoginIn, NoteIn, PaymentIn,
                       TaskIn, TaskPatch)
@@ -41,11 +41,20 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="2.0.0-phase2a", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.0.1-phase2a", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
     return float(value or 0)
+
+
+def confirm_when_paid(booking: Booking) -> bool:
+    """Confirm an enquiry or quote after a dated payment has been recorded."""
+    if (booking.status in (RecordStatus.ENQUIRY, RecordStatus.QUOTED)
+            and money(booking.deposit_amount) > 0 and booking.deposit_paid_date):
+        booking.status = RecordStatus.CONFIRMED
+        return True
+    return False
 
 
 def client_json(client: Client) -> dict:
@@ -121,7 +130,7 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "phase": "2A"}
+    return {"status": "ok", "phase": "2A.1"}
 
 
 @app.post("/api/auth/login")
@@ -232,7 +241,9 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
         client = db.get(Client, item.client_id)
         for key, value in client_values.items():
             setattr(client, key, value)
-    audit(db, "update", "booking", item.id, {"fields": list(payload.model_fields_set)})
+    auto_confirmed = confirm_when_paid(item)
+    audit(db, "update", "booking", item.id,
+          {"fields": list(payload.model_fields_set), "auto_confirmed": auto_confirmed})
     db.commit()
     return get_booking(item.id, _, db)
 
@@ -353,10 +364,16 @@ def create_invoice(booking_id: str, payload: InvoiceIn, _: Admin = Depends(curre
     db.add(invoice)
     db.flush()
     if payload.paid > 0:
+        booking.deposit_amount = max(booking.deposit_amount or Decimal("0"), payload.paid)
+        booking.deposit_paid_date = booking.deposit_paid_date or payload.issue_date
+        auto_confirmed = confirm_when_paid(booking)
         db.add(Payment(invoice_id=invoice.id, amount=payload.paid,
                        paid_date=booking.deposit_paid_date or payload.issue_date,
                        payment_type="bank_transfer", reference=number, notes="Opening payment"))
-    audit(db, "create_invoice", "booking", booking.id, {"number": number})
+    else:
+        auto_confirmed = False
+    audit(db, "create_invoice", "booking", booking.id,
+          {"number": number, "auto_confirmed": auto_confirmed})
     db.commit()
     return invoice_json(full_invoice(db, invoice.id))
 
@@ -380,8 +397,13 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
     invoice.status = invoice_status(invoice.total, invoice.paid)
     if invoice.booking and not invoice.booking.deposit_paid_date:
         invoice.booking.deposit_paid_date = payload.paid_date
+    if invoice.booking:
+        invoice.booking.deposit_amount = max(invoice.booking.deposit_amount or Decimal("0"), payload.amount)
+        auto_confirmed = confirm_when_paid(invoice.booking)
+    else:
+        auto_confirmed = False
     audit(db, "record_payment", "booking", invoice.booking_id,
-          {"invoice": invoice.number, "amount": money(payload.amount)})
+          {"invoice": invoice.number, "amount": money(payload.amount), "auto_confirmed": auto_confirmed})
     db.commit()
     return invoice_json(full_invoice(db, invoice.id))
 
