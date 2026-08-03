@@ -1,0 +1,41 @@
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: bookingapp2026-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bookingapp}
+      POSTGRES_USER: ${POSTGRES_USER:-bookingapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - /mnt/apps/bookingapp2026/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bookingapp} -d ${POSTGRES_DB:-bookingapp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [bookingapp]
+
+  app:
+    build:
+      context: .
+    container_name: bookingapp2026
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "30049:8000"
+    volumes:
+      - /mnt/temp-tntermediate/bookingapp2026data/data:/app/storage
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks: [bookingapp]
+
+networks:
+  bookingapp:
+    name: bookingapp2026
+

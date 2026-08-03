@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#102b34">
+  <title>Mark's Business Studio</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <section id="login" class="login-screen hidden">
+    <div class="login-card">
+      <div class="login-brand"><span>MP</span><div><strong>Mark's Business Studio</strong><small>Weddings + digital</small></div></div>
+      <p class="overline">PRIVATE WORKSPACE</p>
+      <h1>Welcome back, Mark</h1>
+      <p class="muted">Sign in to manage bookings, projects and invoices.</p>
+      <form id="login-form">
+        <label>Email address<input id="login-email" type="email" autocomplete="username" required></label>
+        <label>Password<input id="login-password" type="password" autocomplete="current-password" required></label>
+        <p id="login-error" class="error" role="alert"></p>
+        <button class="primary full" type="submit">Sign in</button>
+      </form>
+    </div>
+  </section>
+
+  <div id="app" class="app-shell hidden">
+    <aside id="sidebar" class="sidebar">
+      <button id="close-menu" class="close-menu" aria-label="Close menu">×</button>
+      <div class="logo"><span>MP</span><div><strong>Mark's Business Studio</strong><small>Weddings + digital</small></div></div>
+      <div class="business-picker">
+        <button id="brand-toggle"><i id="brand-dot" class="dot all"></i><span><small>Viewing</small><strong id="brand-label">All businesses</strong></span><b>⌄</b></button>
+        <div id="brand-menu" class="brand-menu hidden">
+          <button data-brand="all"><i class="dot all"></i>All businesses</button>
+          <button data-brand="wbm"><i class="dot wbm"></i>Weddings By Mark</button>
+          <button data-brand="ivory"><i class="dot ivory"></i>Ivory Digital</button>
+        </div>
+      </div>
+      <nav>
+        <p>WORKSPACE</p>
+        <button class="active" data-view="dashboard"><span class="nav-icon">▦</span>Dashboard</button>
+        <button data-view="weddings"><span class="nav-icon">♡</span>Wedding bookings</button>
+        <button data-view="projects"><span class="nav-icon">▣</span>Digital projects</button>
+        <button data-view="calendar"><span class="nav-icon">□</span>Calendar</button>
+        <button data-view="workflows"><span class="nav-icon">⌘</span>Workflows</button>
+        <button data-view="invoices"><span class="nav-icon">≣</span>Invoices</button>
+        <button data-view="documents"><span class="nav-icon">▤</span>Documents</button>
+        <button data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
+      </nav>
+      <div class="profile"><span>MP</span><div><strong>Mark Powell</strong><small>Administrator</small></div><button id="logout" title="Sign out">↗</button></div>
+    </aside>
+    <button id="scrim" class="scrim hidden" aria-label="Close menu"></button>
+
+    <main>
+      <header class="topbar"><button id="open-menu" class="icon-button menu-button">☰</button><div class="search"><span>⌕</span><input id="search" placeholder="Search weddings, clients, invoices…"><kbd>⌘ K</kbd></div><div class="top-actions"><button class="icon-button">♢<b>2</b></button><button class="icon-button">?</button></div></header>
+      <div class="page">
+        <div class="page-heading"><div><small id="page-eyebrow">ALL BUSINESSES</small><h1 id="page-title">Good morning, Mark</h1><p id="page-subtitle">Here's what needs your attention today.</p></div><button id="add-record" class="primary"><span>＋</span> Add booking</button></div>
+        <div id="content" aria-live="polite"></div>
+      </div>
+    </main>
+
+    <nav class="mobile-nav"><button data-view="dashboard" class="active"><span>▦</span>Home</button><button data-view="weddings"><span>♡</span>Weddings</button><button id="mobile-add" class="mobile-add"><span>＋</span>Add</button><button data-view="invoices"><span>≣</span>Invoices</button><button id="mobile-more"><span>☰</span>More</button></nav>
+  </div>
+
+  <div id="drawer-overlay" class="overlay hidden"></div>
+  <aside id="drawer" class="drawer hidden" aria-label="Record details"></aside>
+
+  <div id="modal-overlay" class="overlay hidden"></div>
+  <section id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head"><div><small>NEW RECORD</small><h2 id="modal-title">Add a new booking</h2><p>Start with the essentials. Everything else can be added afterwards.</p></div><button id="close-modal">×</button></div>
+    <form id="booking-form">
+      <div class="form-grid">
+        <label class="full">Business<select id="form-brand"><option value="wbm">Weddings By Mark</option><option value="ivory">Ivory Digital</option></select></label>
+        <label>Record title<input id="form-title" required placeholder="Sophie & James"></label>
+        <label>Email address<input id="form-email" required type="email" placeholder="client@example.co.uk"></label>
+        <label>First name / contact<input id="form-first" required></label>
+        <label>Partner / company<input id="form-partner"></label>
+        <label>Wedding / target date<input id="form-date" type="date"></label>
+        <label>Venue / project<input id="form-detail"></label>
+        <label>Package / service<input id="form-package"></label>
+        <label>Quoted total<input id="form-total" type="number" min="0" step="0.01" value="0"></label>
+        <label class="full">Notes<textarea id="form-notes" rows="3"></textarea></label>
+      </div>
+      <p id="form-error" class="error"></p>
+      <footer><button id="cancel-modal" class="secondary" type="button">Cancel</button><button class="primary" type="submit">Create record</button></footer>
+    </form>
+  </section>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
+
