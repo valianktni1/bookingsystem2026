@@ -48,6 +48,9 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - Secure client invoice and receipt downloads inside the same booking portal
 - Automatic package-accepted and invoice-ready email when SMTP is configured
 - Separate Weddings By Mark and Ivory Digital Hostinger SMTP identities and readiness indicators
+- Responsive HTML email stationery with the correct embedded logo for each business
+- Matching logo and gold-accent branding on invoice and receipt PDFs
+- Weddings By Mark award badges on photography emails and invoices only
 
 Studio Ninja import and gallery automation remain planned for later phases without restructuring the core data.
 

@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
@@ -6,9 +7,28 @@ from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import HRFlowable, Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from .models import BusinessProfile, Invoice
+from .models import Brand, BusinessProfile, Invoice
+
+
+BRANDING_DIR = Path(__file__).parent / "static" / "branding"
+BRAND_ASSETS = {
+    Brand.WBM: {
+        "logo": BRANDING_DIR / "weddings-by-mark-logo.png",
+        "awards": BRANDING_DIR / "weddings-by-mark-awards.png",
+        "accent": colors.HexColor("#b6924f"),
+        "ink": colors.HexColor("#24211c"),
+        "pale": colors.HexColor("#f7f3eb"),
+    },
+    Brand.IVORY: {
+        "logo": BRANDING_DIR / "ivory-digital-logo.png",
+        "accent": colors.HexColor("#b8862f"),
+        "ink": colors.HexColor("#2b271f"),
+        "pale": colors.HexColor("#faf4e7"),
+    },
+}
 
 
 TEAL = colors.HexColor("#0f6b63")
@@ -21,26 +41,61 @@ def pounds(value) -> str:
     return f"£{float(value or 0):,.2f}"
 
 
+def fitted_image(path, max_width, max_height) -> Image | None:
+    if not path or not path.exists():
+        return None
+    width, height = ImageReader(str(path)).getSize()
+    scale = min(max_width / width, max_height / height)
+    return Image(str(path), width=width * scale, height=height * scale)
+
+
 def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = False) -> bytes:
+    branding = BRAND_ASSETS.get(invoice.brand, BRAND_ASSETS[Brand.WBM])
+    accent = branding["accent"]
+    ink = branding["ink"]
+    pale = branding["pale"]
     output = BytesIO()
     doc = SimpleDocTemplate(output, pagesize=A4, rightMargin=18 * mm, leftMargin=18 * mm,
                             topMargin=17 * mm, bottomMargin=17 * mm, title=invoice.number)
     styles = getSampleStyleSheet()
     normal = ParagraphStyle("NormalClean", parent=styles["Normal"], fontName="Helvetica",
-                            fontSize=9, leading=13, textColor=INK)
+                            fontSize=9, leading=13, textColor=ink)
     small = ParagraphStyle("Small", parent=normal, fontSize=8, leading=11, textColor=MUTED)
     right = ParagraphStyle("Right", parent=normal, alignment=TA_RIGHT)
     heading = ParagraphStyle("Heading", parent=styles["Title"], fontName="Helvetica-Bold",
-                             fontSize=27, leading=31, textColor=INK, alignment=TA_RIGHT)
+                             fontSize=27, leading=31, textColor=ink, alignment=TA_RIGHT)
     story = []
     contact = "<br/>".join(escape(str(x)) for x in [profile.legal_name, profile.address, profile.phone, profile.email, profile.website] if x)
+    if invoice.brand == Brand.WBM:
+        logo = fitted_image(branding.get("logo"), 43 * mm, 29 * mm)
+        awards = fitted_image(branding.get("awards"), 57 * mm, 44 * mm)
+        if logo and awards:
+            brand_marks = Table([[logo, awards]], colWidths=[46 * mm, 59 * mm])
+            brand_marks.setStyle(TableStyle([
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]))
+            identity = [brand_marks, Spacer(1, 2.5 * mm)]
+        else:
+            identity = [item for item in (logo, awards) if item]
+    else:
+        logo = fitted_image(branding.get("logo"), 70 * mm, 25 * mm)
+        identity = [logo, Spacer(1, 2.5 * mm)] if logo else []
+    if not identity:
+        identity = [Paragraph(f"<b>{profile.display_name}</b>", normal)]
+    identity.append(Paragraph(f"<font color='#65767c'>{contact}</font>", small))
     header = Table([
-        [Paragraph(f"<b>{profile.display_name}</b><br/><font color='#65767c'>{contact}</font>", normal),
+        [identity,
          Paragraph("RECEIPT" if receipt else "INVOICE", heading)]
     ], colWidths=[105 * mm, 51 * mm])
     header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                 ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
-    story += [header, Spacer(1, 8 * mm), HRFlowable(color=TEAL, thickness=2), Spacer(1, 7 * mm)]
+    story += [header, Spacer(1, 6 * mm), HRFlowable(color=accent, thickness=2), Spacer(1, 7 * mm)]
 
     client = invoice.booking.client
     client_name = client.company_name or invoice.booking.title
@@ -68,7 +123,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     else:
         rows.append([Paragraph(escape(description), normal), Paragraph(f"<b>{pounds(invoice.total)}</b>", right)])
     lines = Table(rows, colWidths=[125 * mm, 31 * mm])
-    lines.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), PALE), ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#cfdbde")),
+    lines.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), pale), ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#d9d2c6")),
                                ("INNERGRID", (0, 0), (-1, -1), .5, colors.HexColor("#cfdbde")),
                                ("VALIGN", (0, 0), (-1, -1), "TOP"), ("TOPPADDING", (0, 0), (-1, -1), 9),
                                ("BOTTOMPADDING", (0, 0), (-1, -1), 9)]))
@@ -78,7 +133,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
         [Paragraph("<b>BALANCE DUE</b>", normal), Paragraph(f"<b>{pounds(invoice.total - invoice.paid)}</b>", right)]
     ], colWidths=[37 * mm, 31 * mm], hAlign="RIGHT")
     totals.setStyle(TableStyle([("ALIGN", (1, 0), (1, -1), "RIGHT"), ("TEXTCOLOR", (0, 0), (-1, 2), MUTED),
-                                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"), ("LINEABOVE", (0, -1), (-1, -1), 1, TEAL),
+                                ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"), ("LINEABOVE", (0, -1), (-1, -1), 1, accent),
                                 ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
     story += [totals, Spacer(1, 8 * mm)]
 

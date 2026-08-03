@@ -171,7 +171,7 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
-            "build": "2026.08.03-dual-smtp-v4"}
+            "build": "2026.08.03-branded-email-invoices-v5"}
 
 
 @app.get("/api/public/catalog")

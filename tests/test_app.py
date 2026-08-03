@@ -12,7 +12,9 @@ os.environ["INVOICE_START"] = "2000"
 
 from fastapi.testclient import TestClient
 
+from app.email_service import build_email_message
 from app.main import app
+from app.models import Booking, Brand, BusinessProfile, Client
 
 
 def booking_payload(brand="wbm", title="Sophie & James"):
@@ -37,6 +39,39 @@ def booking_payload(brand="wbm", title="Sophie & James"):
     }
 
 
+def test_branded_email_artwork_is_brand_specific():
+    wedding = Booking(brand=Brand.WBM, title="Sophie & James")
+    wedding.client = Client(first_name="Sophie", last_name="Taylor", email="sophie@example.com")
+    wbm_profile = BusinessProfile(brand=Brand.WBM, display_name="Weddings By Mark",
+                                  invoice_prefix="WBM", email="mark@perfectweddingsbymark.uk",
+                                  phone="07712 117357", website="perfectweddingsbymark.uk")
+    wbm_message = build_email_message(wedding, wbm_profile, "Your quote",
+                                      "Hi Sophie\n\nOpen https://booking.weddingsbymark.uk/client/example",
+                                      "mark@perfectweddingsbymark.uk")
+    wbm_html = next(part.get_content() for part in wbm_message.walk()
+                    if part.get_content_type() == "text/html")
+    wbm_images = {part.get_filename() for part in wbm_message.walk()
+                  if part.get_content_maintype() == "image"}
+    assert "cid:weddings-by-mark-logo" in wbm_html
+    assert "cid:weddings-by-mark-awards" in wbm_html
+    assert wbm_images == {"weddings-by-mark-logo.png", "weddings-by-mark-awards.png"}
+
+    project = Booking(brand=Brand.IVORY, title="Broadfield Motors")
+    project.client = Client(first_name="Chris", last_name="Taylor", email="chris@example.com")
+    ivory_profile = BusinessProfile(brand=Brand.IVORY, display_name="Ivory Digital",
+                                    invoice_prefix="ID", email="admin@ivorydigital.uk",
+                                    phone="07712 117357", website="ivorydigital.uk")
+    ivory_message = build_email_message(project, ivory_profile, "Your project", "Hi Chris",
+                                        "admin@ivorydigital.uk")
+    ivory_html = next(part.get_content() for part in ivory_message.walk()
+                      if part.get_content_type() == "text/html")
+    ivory_images = {part.get_filename() for part in ivory_message.walk()
+                    if part.get_content_maintype() == "image"}
+    assert "cid:ivory-digital-logo" in ivory_html
+    assert "weddings-by-mark-awards" not in ivory_html
+    assert ivory_images == {"ivory-digital-logo.png"}
+
+
 def test_phase_two_b_flow():
     db_file = TEST_ROOT / "test.db"
     db_file.unlink(missing_ok=True)
@@ -45,7 +80,7 @@ def test_phase_two_b_flow():
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False,
-                                 "build": "2026.08.03-dual-smtp-v4"}
+                                 "build": "2026.08.03-branded-email-invoices-v5"}
 
         homepage = client.get("/")
         assert homepage.status_code == 200

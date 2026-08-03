@@ -1,9 +1,31 @@
+import html
+import re
 import smtplib
 import ssl
 from email.message import EmailMessage
+from pathlib import Path
 
 from .config import get_settings
 from .models import Booking, Brand, BusinessProfile, EmailTemplate
+
+
+BRANDING_DIR = Path(__file__).parent / "static" / "branding"
+BRAND_ASSETS = {
+    Brand.WBM: {
+        "logo": BRANDING_DIR / "weddings-by-mark-logo.png",
+        "logo_cid": "weddings-by-mark-logo",
+        "awards": BRANDING_DIR / "weddings-by-mark-awards.png",
+        "awards_cid": "weddings-by-mark-awards",
+        "accent": "#b6924f",
+        "soft": "#f8f5ef",
+    },
+    Brand.IVORY: {
+        "logo": BRANDING_DIR / "ivory-digital-logo.png",
+        "logo_cid": "ivory-digital-logo",
+        "accent": "#bb8c36",
+        "soft": "#fbf6eb",
+    },
+}
 
 
 def template_values(booking: Booking, profile: BusinessProfile, portal_url: str | None = None) -> dict[str, str]:
@@ -51,21 +73,100 @@ def smtp_ready(brand: Brand | None = None) -> bool:
     return bool(settings.smtp_host and username and password)
 
 
-def send_template_email(booking: Booking, profile: BusinessProfile, template: EmailTemplate,
-                        portal_url: str | None = None) -> tuple[str, str]:
-    settings = get_settings()
-    username, password = smtp_credentials(booking.brand)
-    if not smtp_ready(booking.brand):
-        raise RuntimeError("SMTP is not configured. Add SMTP_USERNAME and SMTP_PASSWORD to the Dockge YAML.")
-    values = template_values(booking, profile, portal_url)
-    subject = render_template(template.subject, values)
-    body = render_template(template.body, values)
+def _body_html(body: str) -> str:
+    """Safely turn the editable plain-text template into email-friendly HTML."""
+    rendered = html.escape(body)
+    rendered = re.sub(
+        r"(https?://[^\s<]+)",
+        r'<a href="\1" style="color:#76591f;text-decoration:underline;word-break:break-all">\1</a>',
+        rendered,
+    )
+    return rendered.replace("\n", "<br>")
+
+
+def _email_html(body: str, booking: Booking, profile: BusinessProfile) -> str:
+    assets = BRAND_ASSETS[booking.brand]
+    awards = ""
+    if booking.brand == Brand.WBM:
+        awards = f"""
+          <tr>
+            <td style="padding:22px 28px 26px;border-top:1px solid #ece6da;text-align:center;background:#ffffff">
+              <div style="font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.4px;color:#7c6a49;font-weight:bold;margin-bottom:12px">
+                PROUDLY AWARD-WINNING WEDDING PHOTOGRAPHY
+              </div>
+              <img src="cid:{assets['awards_cid']}" width="430" alt="Weddings By Mark awards"
+                   style="display:block;width:100%;max-width:430px;height:auto;margin:0 auto;border:0">
+            </td>
+          </tr>"""
+    return f"""<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f3f1ed;color:#262626">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f3f1ed">
+      <tr>
+        <td align="center" style="padding:24px 10px">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
+                 style="width:100%;max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e2d8">
+            <tr>
+              <td align="center" style="padding:24px 28px;background:{assets['soft']};border-bottom:3px solid {assets['accent']}">
+                <img src="cid:{assets['logo_cid']}" alt="{html.escape(profile.display_name)}"
+                     style="display:block;max-width:{'280px' if booking.brand == Brand.IVORY else '245px'};max-height:{'94px' if booking.brand == Brand.IVORY else '150px'};width:auto;height:auto;margin:0 auto;border:0">
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px 32px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#2d2b28">
+                {_body_html(body)}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px;background:#242321;color:#ffffff;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px">
+                <strong>{html.escape(profile.display_name)}</strong><br>
+                {html.escape(profile.email or '')}{' &nbsp;·&nbsp; ' if profile.email and profile.phone else ''}{html.escape(profile.phone or '')}<br>
+                {html.escape(profile.website or '')}
+              </td>
+            </tr>
+            {awards}
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+
+
+def build_email_message(booking: Booking, profile: BusinessProfile, subject: str, body: str,
+                        username: str) -> EmailMessage:
+    """Create a branded multipart email with embedded, client-safe PNG artwork."""
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = f"{profile.display_name} <{username}>"
     message["To"] = booking.client.email
     message["Reply-To"] = profile.email or username
     message.set_content(body)
+    message.add_alternative(_email_html(body, booking, profile), subtype="html")
+    html_part = message.get_payload()[-1]
+    assets = BRAND_ASSETS[booking.brand]
+    for path_key, cid_key in (("logo", "logo_cid"), ("awards", "awards_cid")):
+        path = assets.get(path_key)
+        if path and path.exists():
+            html_part.add_related(path.read_bytes(), maintype="image", subtype="png",
+                                  cid=f"<{assets[cid_key]}>", filename=path.name,
+                                  disposition="inline")
+    return message
+
+
+def send_template_email(booking: Booking, profile: BusinessProfile, template: EmailTemplate,
+                        portal_url: str | None = None) -> tuple[str, str]:
+    settings = get_settings()
+    username, password = smtp_credentials(booking.brand)
+    if not smtp_ready(booking.brand):
+        raise RuntimeError(
+            f"SMTP is not configured for {profile.display_name}. "
+            "Add that brand's SMTP username and mailbox password to the Dockge YAML."
+        )
+    values = template_values(booking, profile, portal_url)
+    subject = render_template(template.subject, values)
+    body = render_template(template.body, values)
+    message = build_email_message(booking, profile, subject, body, username)
     context = ssl.create_default_context()
     if settings.smtp_use_ssl:
         with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context, timeout=30) as server:

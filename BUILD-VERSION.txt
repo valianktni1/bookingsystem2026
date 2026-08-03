@@ -1,5 +1,5 @@
 BookingSystem2026 - Quote and Client Portal Complete
-Build: 2026.08.03-dual-smtp-v4
+Build: 2026.08.03-branded-email-invoices-v5
 
 This build includes:
 - One-click create and send quote
@@ -9,3 +9,5 @@ This build includes:
 - Automatic package-accepted and invoice-ready email
 - Booking form, questionnaire and contract in the same portal
 - Separate Hostinger SMTP identities for Weddings By Mark and Ivory Digital
+- Matching brand logos embedded in HTML emails and invoice/receipt PDFs
+- Photography awards shown only on Weddings By Mark emails and invoices
