@@ -114,29 +114,45 @@
       const picker = new PlaceAutocompleteElement();
       picker.placeholder = options.placeholder || "Start typing the wedding venue";
       picker.includedRegionCodes = ["gb"];
-      picker.includedPrimaryTypes = ["establishment"];
       picker.setAttribute("aria-label", options.placeholder || "Search for a wedding venue");
       host.replaceChildren(picker);
+
+      picker.addEventListener("gmp-error", () => {
+        console.error("Google Places autocomplete returned an error");
+        showManual(options, "Google venue search returned an error - please enter the venue manually.");
+      });
+
       picker.addEventListener("gmp-select", async ({placePrediction}) => {
-        const place = placePrediction.toPlace();
-        await place.fetchFields({fields: ["id", "displayName", "formattedAddress", "location"]});
-        const name = place.displayName || place.formattedAddress || "";
-        const address = place.formattedAddress || name;
-        setValue(options.name, name);
-        setValue(options.address, address);
-        setValue(options.placeId, place.id || "");
-        setValue(options.lat, place.location?.lat?.() ?? "");
-        setValue(options.lng, place.location?.lng?.() ?? "");
-        if (manual) {
-          manual.value = name;
-          manual.hidden = true;
-          manual.required = false;
+        try {
+          const place = placePrediction.toPlace();
+          await place.fetchFields({fields: ["id", "displayName", "formattedAddress", "location"]});
+          const name = place.displayName || place.formattedAddress || "";
+          const address = place.formattedAddress || name;
+          setValue(options.name, name);
+          setValue(options.address, address);
+          setValue(options.placeId, place.id || "");
+          setValue(options.lat, place.location?.lat?.() ?? "");
+          setValue(options.lng, place.location?.lng?.() ?? "");
+          if (manual) {
+            manual.value = name;
+            manual.hidden = true;
+            manual.required = false;
+          }
+          updateSummary(options);
+          options.onSelect?.({
+            name,
+            address,
+            placeId: place.id || "",
+            lat: place.location?.lat?.() ?? null,
+            lng: place.location?.lng?.() ?? null
+          });
+        } catch (error) {
+          console.error("Unable to load selected Google venue", error);
+          showManual(options, "The selected venue could not be loaded - please enter it manually.");
         }
-        updateSummary(options);
-        options.onSelect?.({name, address, placeId: place.id || "",
-          lat: place.location?.lat?.() ?? null, lng: place.location?.lng?.() ?? null});
       });
     } catch (error) {
+      console.error("Unable to start Google venue search", error);
       showManual(options, "Venue search is unavailable at the moment - please enter it manually.");
     }
   }
