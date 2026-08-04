@@ -36,6 +36,10 @@ def booking_payload(brand="wbm", title="Sophie & James"):
         },
         "event_date": "2026-10-04",
         "venue_or_project": "Peckforton Castle" if brand == "wbm" else "Website rebuild",
+        "venue_address": "Peckforton Castle, Tarporley CW6 9TN" if brand == "wbm" else None,
+        "venue_place_id": "test-place-peckforton" if brand == "wbm" else None,
+        "venue_lat": 53.117 if brand == "wbm" else None,
+        "venue_lng": -2.698 if brand == "wbm" else None,
         "package_name": "Platinum" if brand == "wbm" else "Website + CMS",
         "quoted_total": 1299 if brand == "wbm" else 399,
         "deposit_amount": 300 if brand == "wbm" else 0,
@@ -90,8 +94,11 @@ def test_phase_two_b_flow(monkeypatch):
         health = client.get("/api/health")
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
-                                 "reminders_enabled": False,
-                                 "build": "2026.08.03-enquiry-notifications-v7"}
+                                 "reminders_enabled": False, "maps_configured": False,
+                                 "build": "2026.08.03-client-experience-v8"}
+        assert client.get("/api/public/config").json() == {
+            "google_maps_api_key": None, "google_maps_enabled": False,
+        }
 
         homepage = client.get("/")
         assert homepage.status_code == 200
@@ -106,6 +113,8 @@ def test_phase_two_b_flow(monkeypatch):
         assert wedding.status_code == 201
         wedding_data = wedding.json()
         assert wedding_data["brand"] == "wbm"
+        assert wedding_data["venue_place_id"] == "test-place-peckforton"
+        assert wedding_data["venue_address"].startswith("Peckforton Castle")
         assert len(wedding_data["tasks"]) == 7
 
         templates = client.get("/api/communications/templates")
@@ -131,6 +140,10 @@ def test_phase_two_b_flow(monkeypatch):
                                       if row["brand"] == "wbm"
                                       and row["template_key"] == "new_enquiry_admin")
         assert "New wedding enquiry" in admin_enquiry_template["subject"]
+        preview = client.get(f"/api/communications/templates/{quote_template['id']}/preview")
+        assert preview.status_code == 200
+        assert "/static/branding/weddings-by-mark-logo.png" in preview.json()["html"]
+        assert preview.json()["test_recipient"] == "mark@perfectweddingsbymark.uk"
 
         portal = client.post(f"/api/bookings/{wedding_data['id']}/portal", json={"expires_days": 90})
         assert portal.status_code == 201
@@ -351,6 +364,9 @@ def test_phase_two_b_flow(monkeypatch):
             "primary_first_name": "Rachel", "partner_first_name": "Thomas",
             "email": "rachel@example.com", "phone": "07700 900456",
             "event_date": "2027-06-12", "location": "Lytham Hall",
+            "venue_address": "Lytham Hall, Ballam Road, Lytham St Annes FY8 4JX",
+            "venue_place_id": "test-place-lytham-hall",
+            "venue_lat": 53.749, "venue_lng": -2.978,
             "package_interest": "Gold Package 3 2026/27/28",
             "selfie_booth_interest": "maybe", "message": "Relaxed summer wedding",
             "promo_code": None, "heard_about_us": "Google search",
@@ -389,6 +405,8 @@ def test_phase_two_b_flow(monkeypatch):
         assert len(imported_enquiry) == 1
         assert imported_enquiry[0]["status"] == "enquiry"
         assert imported_enquiry[0]["venue_or_project"] == "Lytham Hall"
+        assert imported_enquiry[0]["venue_place_id"] == "test-place-lytham-hall"
+        assert imported_enquiry[0]["venue_address"].startswith("Lytham Hall")
 
 
 def teardown_module():

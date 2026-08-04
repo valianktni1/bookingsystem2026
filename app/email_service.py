@@ -189,3 +189,12 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
             server.login(username, password)
             server.send_message(message)
     return subject, body
+
+
+def preview_template_email(booking: Booking, profile: BusinessProfile, template: EmailTemplate,
+                           portal_url: str | None = None) -> tuple[str, str, str]:
+    """Render the exact subject, text and branded HTML without sending anything."""
+    values = template_values(booking, profile, portal_url)
+    subject = render_template(template.subject, values)
+    body = render_template(template.body, values)
+    return subject, body, _email_html(body, booking, profile)

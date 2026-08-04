@@ -4,6 +4,7 @@ html { background:transparent; font-family:Inter,-apple-system,BlinkMacSystemFon
 body { margin:0; background:#fbfaf8; }
 main { width:min(1040px,100%); margin:auto; padding:34px 28px; }
 .card { padding:38px; border:1px solid #e9e4dc; border-radius:14px; background:#fff; box-shadow:0 14px 44px #2936380b; }
+.enquiry-logo { width:auto; max-width:155px; max-height:88px; display:block; margin:0 0 15px; object-fit:contain; }
 header small { color:#9b8065; font-size:11px; font-weight:800; letter-spacing:.13em; }
 header h1 { max-width:850px; margin:8px 0 9px; color:#5a696b; font-size:28px; line-height:1.22; letter-spacing:-.025em; }
 header p { margin:0; color:#798789; font-size:14px; }
@@ -24,6 +25,17 @@ input:focus,select:focus,textarea:focus { border-color:#8a7866; box-shadow:0 0 0
 button { min-width:160px; min-height:48px; display:block; margin:22px auto 0; padding:0 22px; border:0; border-radius:7px; color:#fff; background:#514a50; font-weight:750; cursor:pointer; }
 button:hover { background:#343035; }
 button:disabled { opacity:.6; cursor:wait; }
+.venue-label { padding:16px; border:1px solid #e6ded1; border-radius:10px; background:#fdfcf9; }
+.venue-picker { min-height:48px; }
+.venue-picker gmp-place-autocomplete { width:100%; min-height:47px; color-scheme:light; }
+.venue-help { display:block; padding:11px; border-radius:7px; color:#775e36; background:#fff4de; font-weight:500; }
+.venue-summary { min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:15px; padding:10px 12px; border:1px dashed #d7cdbd; border-radius:8px; color:#7b8889; background:#fff; font-weight:500; }
+.venue-summary span,.venue-summary strong,.venue-summary small { display:block; }
+.venue-summary strong { color:var(--deep); font-size:13px; }
+.venue-summary small { margin-top:3px; color:#7a8788; font-size:11px; font-weight:400; }
+.venue-summary a { color:#76591f; white-space:nowrap; }
+.venue-manual-toggle { min-width:0; min-height:0; display:inline; margin:0; padding:0; border:0; color:#76591f; background:transparent; text-align:left; font-size:11px; font-weight:650; }
+.venue-manual-toggle:hover { color:#3e321d; background:transparent; }
 .error { min-height:18px; margin:13px 0 0; color:var(--error); text-align:center; font-size:12px; }
 .hidden { display:none!important; }
 .success { min-height:380px; display:grid; place-items:center; align-content:center; text-align:center; }

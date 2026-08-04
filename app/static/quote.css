@@ -95,3 +95,6 @@
   .client-invoice-actions { flex-direction:column; }
   .client-invoice-actions a { width:100%; }
 }
+
+/* V8 brand-aligned client invoice cards */
+.client-invoice{overflow:hidden;border:1px solid var(--line);border-radius:15px;background:#fff;box-shadow:0 8px 24px #3f34250b}.client-invoice header{height:auto;padding:18px 20px;color:#fff;background:var(--nav)}.client-invoice header>b{color:#fff;font-size:18px}.invoice-status{border:0;color:#2f2a22;background:#e9cf98}.invoice-status.paid{color:#fff;background:var(--success)}.client-invoice-lines{padding:5px 20px;border:0}.client-invoice-lines>div{display:grid;grid-template-columns:1fr auto;padding:13px 0}.client-invoice dl{padding:17px 20px;background:var(--soft)}.client-invoice-actions{padding:16px 20px;border-top:0;background:#fff}.package-card:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px #aa824014;background:var(--soft)}.package-card:has(input:checked) .package-check{border-color:var(--accent-strong);background:var(--accent-strong)}.addon-card:has(input:checked){border-color:#c9ad74;background:var(--soft)}

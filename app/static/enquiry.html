@@ -6,20 +6,21 @@
   <meta name="robots" content="noindex,follow">
   <meta name="theme-color" content="#f8f5ef">
   <title>Wedding enquiry - Weddings By Mark</title>
-  <link rel="stylesheet" href="/static/enquiry.css?v=1">
+  <link rel="stylesheet" href="/static/enquiry.css?v=client-experience-v8">
 </head>
 <body>
   <main>
     <section id="enquiry-card" class="card">
       <header>
+        <img class="enquiry-logo" src="/static/branding/weddings-by-mark-logo.png" alt="Weddings By Mark">
         <small>WEDDINGS BY MARK</small>
         <h1>Please fill in your details and let the countdown to your best day ever begin!</h1>
         <p>I’ll check your date and come back to you as soon as possible.</p>
       </header>
       <aside class="payment-note">
-        <strong>Flexible bank-transfer payment options</strong>
-        <span>Pay the package booking fee and the balance 45 days before your wedding.</span>
-        <span>Or ask about staged and split-payment arrangements.</span>
+        <strong>Simple bank-transfer payments</strong>
+        <span>Your package booking fee is due within one day of accepting your quote.</span>
+        <span>The remaining balance is due 45 days before your wedding.</span>
       </aside>
       <form id="enquiry-form">
         <div class="form-grid">
@@ -28,7 +29,17 @@
           <label>Groom's/Bride's first name *<input name="partner_first_name" required maxlength="100" placeholder="Partner's first name"></label>
           <label>Phone number<input name="phone" type="tel" maxlength="50" placeholder="Optional - sometimes replies go into spam" autocomplete="tel"></label>
           <label>Wedding or event date *<input name="event_date" type="date" required></label>
-          <label>Wedding/event location *<input name="location" required maxlength="240" placeholder="Enter your venue or location"></label>
+          <label class="full venue-label">Wedding/event venue *
+            <input id="enquiry-venue-name" name="location" type="hidden">
+            <input id="enquiry-venue-address" name="venue_address" type="hidden">
+            <input id="enquiry-venue-place-id" name="venue_place_id" type="hidden">
+            <input id="enquiry-venue-lat" name="venue_lat" type="hidden">
+            <input id="enquiry-venue-lng" name="venue_lng" type="hidden">
+            <div id="enquiry-venue-picker" class="venue-picker"></div>
+            <input id="enquiry-venue-manual" class="venue-manual" maxlength="240" placeholder="Enter your venue or location manually" hidden>
+            <div id="enquiry-venue-summary" class="venue-summary"><span>No venue selected yet</span></div>
+            <button id="enquiry-venue-manual-toggle" class="venue-manual-toggle" type="button">Can't find it? Enter the venue manually</button>
+          </label>
           <label>Package<select name="package_interest" id="package-interest"><option value="">Any particular package caught your eye?</option></select></label>
           <label>Interested in the Selfie Booth?<select name="selfie_booth_interest"><option value="">Please choose</option><option value="yes">Yes please</option><option value="maybe">Maybe - tell me more</option><option value="no">No thank you</option></select></label>
           <label class="full">Tell me a little about your enquiry<textarea name="message" rows="5" maxlength="5000" placeholder="Enter your message"></textarea><small class="counter">Maximum 5,000 characters</small></label>
@@ -49,6 +60,7 @@
       <strong>Mark - Weddings By Mark</strong>
     </section>
   </main>
-  <script src="/static/enquiry.js?v=1" defer></script>
+  <script src="/static/venue-autocomplete.js?v=client-experience-v8" defer></script>
+  <script src="/static/enquiry.js?v=client-experience-v8" defer></script>
 </body>
 </html>

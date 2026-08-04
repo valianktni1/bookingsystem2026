@@ -1,4 +1,4 @@
-# Mark's Business Studio — Phase 2B
+# Mark's Business Studio — Version 8
 
 Phase 2B of Mark's private, self-hosted booking and business management system. It adds secure client forms, electronic agreement acceptance, editable email templates, SMTP sending and reminders to the Phase 2A record, workflow, document and invoice tools.
 
@@ -55,6 +55,21 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - New-enquiry notifications include all submitted details and reply directly to the couple
 
 Studio Ninja import and gallery automation remain planned for later phases without restructuring the core data.
+
+## Version 8 client experience
+
+- Weddings By Mark uses a black, ivory and gold client theme; Ivory Digital uses its own gold and ivory identity
+- Real logos replace the temporary initials in the admin sign-in and secure client area
+- Couples see a wedding countdown, clear next action, completion ticks and a guided booking journey
+- The long Wedding Booking Form is split into three mobile-friendly steps
+- Invoice cards, empty states and responsive navigation have been redesigned
+- The enquiry form and admin booking editor use Google Places venue autocomplete when configured
+- Venue name, full address, Google Place ID and coordinates are saved for one-click directions
+- The dashboard highlights enquiries needing attention and shows a notification badge
+- Email templates can be previewed with realistic example data and explicitly test-sent
+
+Set `GOOGLE_MAPS_API_KEY` to the website- and API-restricted key created for
+`booking.weddingsbymark.uk`. The form remains usable with manual venue entry if the key is absent.
 
 ## TrueNAS deployment
 

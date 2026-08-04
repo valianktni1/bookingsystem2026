@@ -1,0 +1,69 @@
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: bookingsystem2026-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bookingapp
+      POSTGRES_USER: bookingapp
+      POSTGRES_PASSWORD: REPLACE_WITH_YOUR_EXISTING_DATABASE_PASSWORD
+    volumes:
+      - /mnt/apps/bookingapp2026/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U bookingapp -d bookingapp
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - bookingsystem2026-network
+
+  app:
+    build:
+      context: https://github.com/valianktni1/bookingsystem2026.git#main
+    container_name: bookingsystem2026-app
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_NAME: Mark's Business Studio
+      APP_ENV: production
+      APP_URL: https://booking.weddingsbymark.uk
+      SESSION_SECRET: REPLACE_WITH_YOUR_EXISTING_SESSION_SECRET
+      ADMIN_EMAIL: mark@perfectweddingsbymark.uk
+      ADMIN_PASSWORD: REPLACE_WITH_YOUR_EXISTING_ADMIN_PASSWORD
+      DATABASE_URL: postgresql+psycopg://bookingapp:REPLACE_WITH_YOUR_EXISTING_DATABASE_PASSWORD@database:5432/bookingapp
+      STORAGE_ROOT: /app/storage
+      COOKIE_SECURE: "true"
+      SESSION_HOURS: "12"
+      MAX_UPLOAD_MB: "25"
+      INVOICE_START: "2000"
+      SEED_DEMO_DATA: "false"
+      SMTP_HOST: smtp.hostinger.com
+      SMTP_PORT: "465"
+      SMTP_WBM_USERNAME: mark@perfectweddingsbymark.uk
+      SMTP_WBM_PASSWORD: REPLACE_WITH_WBM_MAILBOX_PASSWORD
+      SMTP_IVORY_USERNAME: admin@ivorydigital.uk
+      SMTP_IVORY_PASSWORD: REPLACE_WITH_IVORY_MAILBOX_PASSWORD
+      SMTP_USE_SSL: "true"
+      REMINDERS_ENABLED: "false"
+      REMINDER_SCAN_HOURS: "6"
+      GOOGLE_MAPS_API_KEY: REPLACE_WITH_YOUR_RESTRICTED_GOOGLE_MAPS_KEY
+    ports:
+      - 30049:8000
+    volumes:
+      - /mnt/temp-tntermediate/bookingapp2026data/data:/app/storage
+    depends_on:
+      database:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - bookingsystem2026-network
+
+networks:
+  bookingsystem2026-network:
+    name: bookingsystem2026-network

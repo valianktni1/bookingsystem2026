@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     smtp_use_ssl: bool = True
     reminder_scan_hours: int = 6
     reminders_enabled: bool = False
+    google_maps_api_key: str | None = None
 
     @model_validator(mode="after")
     def reject_placeholder_production_secrets(self):

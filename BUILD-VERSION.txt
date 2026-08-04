@@ -1,5 +1,5 @@
-BookingSystem2026 - Quote and Client Portal Complete
-Build: 2026.08.03-enquiry-notifications-v7
+BookingSystem2026 - Client Experience and Venue Search
+Build: 2026.08.03-client-experience-v8
 
 This build includes:
 - One-click create and send quote
@@ -16,3 +16,11 @@ This build includes:
 - Full accepted package and add-on wording shown on client invoices and invoice PDFs
 - Smaller Weddings By Mark awards panel reserved in the invoice footer
 - Immediate new-enquiry notification to mark@perfectweddingsbymark.uk with direct reply-to-client
+- Fully redesigned Weddings By Mark and Ivory Digital client areas
+- Real brand logos, wedding countdown, guided progress and completion ticks
+- Three-step mobile-friendly Wedding Booking Form
+- Improved invoice cards, empty states and responsive client navigation
+- Google Places venue search on the website enquiry and admin record editor
+- Saved venue address, Place ID and coordinates with one-click Google Maps directions
+- Improved admin dashboard focus cards and new-enquiry notification badge
+- Branded email preview and explicit send-test controls

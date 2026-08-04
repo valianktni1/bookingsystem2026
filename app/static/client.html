@@ -6,19 +6,20 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="theme-color" content="#102b34">
   <title>Your wedding booking</title>
-  <link rel="stylesheet" href="/static/client.css?v=payment-schedule-v6">
-  <link rel="stylesheet" href="/static/quote.css?v=payment-schedule-v6">
+  <link rel="stylesheet" href="/static/client.css?v=client-experience-v8">
+  <link rel="stylesheet" href="/static/quote.css?v=client-experience-v8">
 </head>
 <body>
-  <header><div class="brand-mark">MP</div><div><strong id="business-name">Weddings By Mark</strong><small>Your booking area</small></div></header>
+  <header class="portal-header"><div class="header-inner"><span class="brand-mark"><img id="business-logo" src="/static/branding/weddings-by-mark-logo.png" alt=""></span><div><strong id="business-name">Weddings By Mark</strong><small>Secure client area</small></div><span class="secure-chip">● Secure</span></div></header>
   <main id="portal" class="hidden">
-    <section class="hero"><small id="booking-label">YOUR WEDDING BOOKING</small><h1 id="record-title"></h1><p id="record-summary"></p></section>
-    <nav id="tabs"></nav>
+    <section class="hero"><div><small id="booking-label">YOUR WEDDING BOOKING</small><h1 id="record-title"></h1><p id="record-summary"></p></div><strong id="countdown" class="countdown"></strong></section>
+    <nav id="tabs" class="portal-tabs" aria-label="Your booking sections"></nav>
     <section id="panel" class="panel"></section>
+    <footer class="portal-footer"><span>Need a hand?</span><a id="business-email" href="#">Contact Mark</a></footer>
   </main>
   <main id="loading" class="state"><div class="spinner"></div><p>Loading your booking…</p></main>
   <main id="error" class="state hidden"><h1>We couldn't open this link</h1><p id="error-message"></p></main>
   <div id="toast" class="toast hidden"></div>
-  <script src="/static/client.js?v=payment-schedule-v6" defer></script>
+  <script src="/static/client.js?v=client-experience-v8" defer></script>
 </body>
 </html>

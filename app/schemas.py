@@ -39,6 +39,10 @@ class BookingIn(BaseModel):
     client: ClientIn
     event_date: date | None = None
     venue_or_project: str | None = Field(default=None, max_length=240)
+    venue_address: str | None = Field(default=None, max_length=1000)
+    venue_place_id: str | None = Field(default=None, max_length=255)
+    venue_lat: float | None = Field(default=None, ge=-90, le=90)
+    venue_lng: float | None = Field(default=None, ge=-180, le=180)
     package_name: str | None = Field(default=None, max_length=160)
     quoted_total: Decimal = Field(default=Decimal("0"), ge=0)
     deposit_amount: Decimal = Field(default=Decimal("0"), ge=0)
@@ -52,6 +56,10 @@ class BookingPatch(BaseModel):
     status: RecordStatus | None = None
     event_date: date | None = None
     venue_or_project: str | None = None
+    venue_address: str | None = Field(default=None, max_length=1000)
+    venue_place_id: str | None = Field(default=None, max_length=255)
+    venue_lat: float | None = Field(default=None, ge=-90, le=90)
+    venue_lng: float | None = Field(default=None, ge=-180, le=180)
     package_name: str | None = None
     quoted_total: Decimal | None = Field(default=None, ge=0)
     deposit_amount: Decimal | None = Field(default=None, ge=0)
@@ -142,6 +150,10 @@ class SendEmailIn(BaseModel):
     portal_url: str | None = Field(default=None, max_length=1000)
 
 
+class TemplateTestIn(BaseModel):
+    recipient: EmailStr
+
+
 class PackageOptionIn(BaseModel):
     code: str = Field(pattern="^[a-z0-9_-]{2,80}$")
     name: str = Field(min_length=2, max_length=180)
@@ -193,6 +205,10 @@ class EnquiryIn(BaseModel):
     phone: str | None = Field(default=None, max_length=50)
     event_date: date
     location: str = Field(min_length=2, max_length=240)
+    venue_address: str | None = Field(default=None, max_length=1000)
+    venue_place_id: str | None = Field(default=None, max_length=255)
+    venue_lat: float | None = Field(default=None, ge=-90, le=90)
+    venue_lng: float | None = Field(default=None, ge=-180, le=180)
     package_interest: str | None = Field(default=None, max_length=180)
     selfie_booth_interest: str | None = Field(default=None, max_length=30)
     message: str | None = Field(default=None, max_length=5000)

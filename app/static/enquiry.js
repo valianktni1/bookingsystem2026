@@ -28,7 +28,14 @@ form.addEventListener("submit", async event => {
   submitButton.disabled = true;
   submitButton.textContent = "Sending…";
   const values = Object.fromEntries(new FormData(form).entries());
+  if (!String(values.location || "").trim()) {
+    errorBox.textContent = "Please choose your wedding venue or enter it manually.";
+    submitButton.disabled = false;
+    submitButton.textContent = "Submit enquiry";
+    return;
+  }
   values.privacy_agreed = values.privacy_agreed === "on";
+  for (const key of ["venue_lat", "venue_lng"]) if (values[key] !== "") values[key] = Number(values[key]);
   for (const key of Object.keys(values)) if (values[key] === "") values[key] = null;
   try {
     const response = await fetch("/api/public/enquiries", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(values)});
@@ -47,3 +54,16 @@ form.addEventListener("submit", async event => {
 });
 
 loadPackages();
+window.addEventListener("load", () => window.WBMVenues?.attach({
+  host: "#enquiry-venue-picker",
+  manual: "#enquiry-venue-manual",
+  manualToggle: "#enquiry-venue-manual-toggle",
+  summary: "#enquiry-venue-summary",
+  name: "#enquiry-venue-name",
+  address: "#enquiry-venue-address",
+  placeId: "#enquiry-venue-place-id",
+  lat: "#enquiry-venue-lat",
+  lng: "#enquiry-venue-lng",
+  required: true,
+  placeholder: "Start typing your wedding venue",
+}));

@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session, selectinload
 from .bootstrap import bootstrap
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
-from .email_service import send_template_email, smtp_credentials, smtp_ready
+from .email_service import preview_template_email, send_template_email, smtp_credentials, smtp_ready
 from .migrations import apply_safe_migrations
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
@@ -30,7 +30,7 @@ from .pdf import invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplatePatch, EnquiryIn, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
-                      PublicFormIn, QuoteAcceptIn, SendEmailIn, TaskIn, TaskPatch)
+                      PublicFormIn, QuoteAcceptIn, SendEmailIn, TaskIn, TaskPatch, TemplateTestIn)
 from .security import create_token, current_admin, verify_password
 from .services import audit, create_default_tasks, dashboard_counts, invoice_status, next_invoice_number
 
@@ -55,7 +55,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.1.0-phase2b", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.0-client-experience", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -159,7 +159,9 @@ def document_json(item: Document) -> dict:
 def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | None = None) -> dict:
     data = {"id": item.id, "brand": item.brand.value, "kind": item.kind.value, "status": item.status.value,
             "title": item.title, "event_date": item.event_date.isoformat() if item.event_date else None,
-            "venue_or_project": item.venue_or_project, "package_name": item.package_name,
+            "venue_or_project": item.venue_or_project, "venue_address": item.venue_address,
+            "venue_place_id": item.venue_place_id, "venue_lat": item.venue_lat, "venue_lng": item.venue_lng,
+            "package_name": item.package_name,
             "quoted_total": money(item.quoted_total), "deposit_amount": money(item.deposit_amount),
             "deposit_paid_date": item.deposit_paid_date.isoformat() if item.deposit_paid_date else None,
             "balance_due_date": item.balance_due_date.isoformat() if item.balance_due_date else None,
@@ -194,7 +196,15 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
-            "build": "2026.08.03-enquiry-notifications-v7"}
+            "maps_configured": bool(settings.google_maps_api_key),
+            "build": "2026.08.03-client-experience-v8"}
+
+
+@app.get("/api/public/config")
+def public_config():
+    """Browser-safe public configuration. The Maps key must be website/API restricted in Google Cloud."""
+    return {"google_maps_api_key": settings.google_maps_api_key,
+            "google_maps_enabled": bool(settings.google_maps_api_key)}
 
 
 @app.get("/api/public/catalog")
@@ -229,7 +239,9 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
     title = f"{payload.primary_first_name.strip()} & {payload.partner_first_name.strip()}"
     booking = Booking(brand=Brand.WBM, kind=RecordKind.WEDDING, status=RecordStatus.ENQUIRY,
                       title=title, client_id=client.id, event_date=payload.event_date,
-                      venue_or_project=payload.location.strip(), package_name=payload.package_interest,
+                      venue_or_project=payload.location.strip(), venue_address=payload.venue_address,
+                      venue_place_id=payload.venue_place_id, venue_lat=payload.venue_lat,
+                      venue_lng=payload.venue_lng, package_name=payload.package_interest,
                       notes=payload.message.strip() if payload.message else None,
                       form_data={"website_enquiry": form_data},
                       workflow_state={"source": "website_enquiry", "received_at": datetime.now(timezone.utc).isoformat()})
@@ -792,6 +804,70 @@ def list_templates(brand: Brand | None = None, _: Admin = Depends(current_admin)
                            "body": x.body, "is_active": x.is_active} for x in contracts]}
 
 
+def template_preview_booking(db: Session, brand: Brand) -> Booking:
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client))
+                        .where(Booking.brand == brand)
+                        .order_by(Booking.created_at.desc()).limit(1))
+    if booking:
+        return booking
+    wedding = brand == Brand.WBM
+    example = Booking(brand=brand, kind=RecordKind.WEDDING if wedding else RecordKind.DIGITAL,
+                      status=RecordStatus.ENQUIRY,
+                      title="Sophie & James" if wedding else "Example Website Client",
+                      event_date=date.today() + timedelta(days=180) if wedding else None,
+                      venue_or_project="Peckforton Castle" if wedding else "Website design project",
+                      package_name="Gold Package" if wedding else "Website Design",
+                      quoted_total=Decimal("899") if wedding else Decimal("399"),
+                      deposit_amount=Decimal("100") if wedding else Decimal("0"))
+    example.client = Client(first_name="Sophie" if wedding else "Chris", last_name="Taylor",
+                            partner_name="James" if wedding else None,
+                            email="couple@example.com" if wedding else "client@example.com")
+    return example
+
+
+@app.get("/api/communications/templates/{template_id}/preview")
+def preview_template(template_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    template = db.get(EmailTemplate, template_id)
+    if not template:
+        raise HTTPException(404, "Email template not found")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == template.brand))
+    if not profile:
+        raise HTTPException(404, "Business profile not found")
+    booking = template_preview_booking(db, template.brand)
+    portal_url = f"{settings.app_url.rstrip('/')}/client/example-preview-link"
+    subject, body, email_html = preview_template_email(booking, profile, template, portal_url)
+    email_html = email_html.replace("cid:weddings-by-mark-logo", "/static/branding/weddings-by-mark-logo.png")
+    email_html = email_html.replace("cid:weddings-by-mark-awards", "/static/branding/weddings-by-mark-awards.png")
+    email_html = email_html.replace("cid:ivory-digital-logo", "/static/branding/ivory-digital-logo.png")
+    return {"subject": subject, "body": body, "html": email_html,
+            "test_recipient": profile.email or settings.admin_email,
+            "brand": template.brand.value}
+
+
+@app.post("/api/communications/templates/{template_id}/test")
+def test_template(template_id: str, payload: TemplateTestIn, admin: Admin = Depends(current_admin),
+                  db: Session = Depends(get_db)):
+    template = db.get(EmailTemplate, template_id)
+    if not template:
+        raise HTTPException(404, "Email template not found")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == template.brand))
+    if not profile:
+        raise HTTPException(404, "Business profile not found")
+    booking = template_preview_booking(db, template.brand)
+    try:
+        subject, _ = send_template_email(
+            booking, profile, template,
+            f"{settings.app_url.rstrip('/')}/client/example-preview-link",
+            recipient=str(payload.recipient),
+        )
+    except Exception as exc:
+        raise HTTPException(503, str(exc))
+    audit(db, "send_test_email", "email_template", template.id,
+          {"recipient": str(payload.recipient), "admin": admin.email})
+    db.commit()
+    return {"ok": True, "subject": subject, "recipient": str(payload.recipient)}
+
+
 @app.patch("/api/communications/templates/{template_id}")
 def patch_template(template_id: str, payload: EmailTemplatePatch, _: Admin = Depends(current_admin),
                    db: Session = Depends(get_db)):
@@ -923,10 +999,13 @@ def public_portal_data(token: str, db: Session = Depends(get_db)):
                                                           selectinload(Invoice.payments))
                                  .where(Invoice.booking_id == booking.id)
                                  .order_by(Invoice.sequence.desc())).all()
-    return {"business": {"name": profile.display_name, "email": profile.email, "phone": profile.phone},
+    return {"business": {"name": profile.display_name, "brand": profile.brand.value,
+                         "email": profile.email, "phone": profile.phone},
             "record": {"title": booking.title, "kind": booking.kind.value,
                        "event_date": booking.event_date.isoformat() if booking.event_date else None,
-                       "venue_or_project": booking.venue_or_project, "package_name": booking.package_name,
+                       "venue_or_project": booking.venue_or_project, "venue_address": booking.venue_address,
+                       "venue_place_id": booking.venue_place_id, "venue_lat": booking.venue_lat,
+                       "venue_lng": booking.venue_lng, "package_name": booking.package_name,
                        "quoted_total": money(booking.quoted_total), "deposit_amount": money(booking.deposit_amount),
                        "client": client_json(booking.client)},
             "contract_template": ({"title": contract.title, "version": contract.version, "body": contract.body}
@@ -1095,6 +1174,16 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
                 pass
         if payload.data.get("ceremony_details") and not booking.venue_or_project:
             booking.venue_or_project = str(payload.data["ceremony_details"]).strip()[:240]
+        if payload.data.get("venue_name"):
+            booking.venue_or_project = str(payload.data["venue_name"]).strip()[:240]
+        if payload.data.get("venue_address"):
+            booking.venue_address = str(payload.data["venue_address"]).strip()[:1000]
+        if payload.data.get("venue_place_id"):
+            booking.venue_place_id = str(payload.data["venue_place_id"]).strip()[:255]
+        if payload.data.get("venue_lat") not in (None, ""):
+            booking.venue_lat = float(payload.data["venue_lat"])
+        if payload.data.get("venue_lng") not in (None, ""):
+            booking.venue_lng = float(payload.data["venue_lng"])
         accepted_quote = db.scalar(select(Quote).where(Quote.booking_id == booking.id,
                                                         Quote.status == "accepted"))
         if payload.data.get("package_selected") and not accepted_quote:

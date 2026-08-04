@@ -3,7 +3,7 @@ import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -82,6 +82,10 @@ class Booking(Base):
     client_id: Mapped[str] = mapped_column(ForeignKey("clients.id"), index=True)
     event_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     venue_or_project: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    venue_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    venue_place_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    venue_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    venue_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     package_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     quoted_total: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
     deposit_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))

@@ -9,6 +9,10 @@ def apply_safe_migrations() -> None:
     additions = {
         "bookings": {
             "archived_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+            "venue_address": "TEXT NULL",
+            "venue_place_id": "VARCHAR(255) NULL",
+            "venue_lat": "DOUBLE PRECISION NULL" if engine.dialect.name == "postgresql" else "REAL NULL",
+            "venue_lng": "DOUBLE PRECISION NULL" if engine.dialect.name == "postgresql" else "REAL NULL",
         },
         "business_profiles": {
             "phone": "VARCHAR(50) NULL",
