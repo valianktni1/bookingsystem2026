@@ -1,10 +1,12 @@
-BookingSystem2026 - Protected Studio Ninja Migration Foundation
-Build: 2026.08.05-legacy-import-ready-v8.4
+BookingSystem2026 - Studio Ninja Manual-Only Communication
+Build: 2026.08.05-studio-ninja-manual-only-v8.5
 
 This build includes:
 - Protected, confirmation-gated Studio Ninja import endpoints
 - Client email, portal-link and reminder automation paused on every imported record
-- Deliberate per-booking activation after Mark has checked the migrated information
+- Imported weddings remain fully visible in confirmed totals, upcoming dates, calendars and workflows
+- Studio Ninja records are permanently excluded from automatic emails, payment confirmations and reminders
+- Protected one-off portal-link and manual-email controls leave automatic communication paused
 - Original Studio Ninja invoice and quote numbers retained beside new numbers
 - Separate WBM and Ivory Digital invoice sequences, both beginning from their own configured start
 - Individual historic payments and original instalment schedules retained

@@ -1,4 +1,4 @@
-# Mark's Business Studio — Version 8.4
+# Mark's Business Studio — Version 8.5
 
 Phase 2B of Mark's private, self-hosted booking and business management system. It adds secure client forms, electronic agreement acceptance, editable email templates, SMTP sending and reminders to the Phase 2A record, workflow, document and invoice tools.
 
@@ -54,13 +54,16 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - Immediate branded website-enquiry notification to `mark@perfectweddingsbymark.uk`
 - New-enquiry notifications include all submitted details and reply directly to the couple
 
-Version 8.4 includes the protected Studio Ninja import foundation. Imported
+Version 8.5 includes the protected Studio Ninja import foundation. Imported
 records retain their original references, payments, schedules, forms, contract
-provenance and documents. Client automation is always paused during import and
-must be deliberately activated per booking after checking. The actual Studio
-Ninja data is not bundled with the application and is imported separately only
-after deployment and backup. Gallery automation remains planned for a later
-phase without restructuring the core data.
+provenance and documents. Imported weddings remain fully visible in confirmed
+totals, upcoming dates, the calendar and workflows. Their automatic emails,
+payment confirmations and scheduled reminders remain permanently paused so
+Studio Ninja and BookingSystem2026 cannot contact the same couple. Mark can
+create a one-off portal link or send one manually confirmed email without
+enabling any later automation. New website enquiries retain the normal
+BookingSystem2026 email and reminder journey. Gallery automation remains
+planned for a later phase without restructuring the core data.
 
 ## Version 8 client experience
 

@@ -57,6 +57,12 @@ def register_v84_routes(app: FastAPI) -> None:
         booking = db.get(Booking, booking_id)
         if not booking:
             raise HTTPException(404, "Record not found")
+        if payload.enabled and booking.legacy_source == "studio_ninja":
+            raise HTTPException(
+                409,
+                "Studio Ninja bookings are permanently manual-communication-only. "
+                "Use a protected one-off link or email instead.",
+            )
         if payload.enabled and payload.confirmation != "ACTIVATE CLIENT EMAILS":
             raise HTTPException(422, "Type ACTIVATE CLIENT EMAILS exactly to confirm")
         booking.automation_suppressed = not payload.enabled

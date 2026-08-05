@@ -58,7 +58,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.4-legacy-ready", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.5-manual-only", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -226,7 +226,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.05-legacy-import-ready-v8.4"}
+            "build": "2026.08.05-studio-ninja-manual-only-v8.5"}
 
 
 @app.get("/api/public/config")
@@ -1070,14 +1070,35 @@ def create_portal_link(booking_id: str, payload: PortalCreateIn, _: Admin = Depe
         raise HTTPException(404, "Record not found")
     if booking.status == RecordStatus.CANCELLED:
         raise HTTPException(409, "Reopen the record before creating a new client portal link")
-    if not automations_allowed(booking):
-        raise HTTPException(409, "Activate this imported booking after checking it before creating a client link")
+    manual_only = not automations_allowed(booking)
+    if manual_only:
+        if booking.legacy_source != "studio_ninja":
+            raise HTTPException(409, "Client communication is paused for this booking")
+        if payload.manual_confirmation != "CREATE MANUAL LINK":
+            raise HTTPException(422, "Type CREATE MANUAL LINK exactly to confirm")
+        if not payload.manual_reason or len(payload.manual_reason.strip()) < 3:
+            raise HTTPException(422, "Add a short reason for creating this one-off link")
     raw, row = issue_portal_token(
         db, booking_id, max(payload.expires_days, portal_lifetime_days(booking))
     )
-    audit(db, "create_client_link", "booking", booking_id, {"expires_at": row.expires_at.isoformat()})
+    audit(
+        db,
+        "create_manual_client_link" if manual_only else "create_client_link",
+        "booking",
+        booking_id,
+        {
+            "expires_at": row.expires_at.isoformat(),
+            "manual_only": manual_only,
+            "reason": payload.manual_reason.strip() if manual_only else None,
+        },
+    )
     db.commit()
-    return {"url": f"{settings.app_url.rstrip('/')}/client/{raw}", "expires_at": row.expires_at.isoformat()}
+    return {
+        "url": f"{settings.app_url.rstrip('/')}/client/{raw}",
+        "expires_at": row.expires_at.isoformat(),
+        "manual_only": manual_only,
+        "automation_suppressed": booking.automation_suppressed,
+    }
 
 
 @app.post("/api/bookings/{booking_id}/quote/send")
@@ -1131,8 +1152,14 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
     booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(Booking.id == booking_id))
     if not booking:
         raise HTTPException(404, "Record not found")
-    if not automations_allowed(booking):
-        raise HTTPException(409, "Activate client emails for this imported booking before sending")
+    manual_only = not automations_allowed(booking)
+    if manual_only:
+        if booking.legacy_source != "studio_ninja":
+            raise HTTPException(409, "Client communication is paused for this booking")
+        if payload.manual_confirmation != "SEND ONE MANUAL EMAIL":
+            raise HTTPException(422, "Type SEND ONE MANUAL EMAIL exactly to confirm")
+        if not payload.manual_reason or len(payload.manual_reason.strip()) < 3:
+            raise HTTPException(422, "Add a short reason for this one-off email")
     template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == booking.brand,
                                                      EmailTemplate.template_key == payload.template_key,
                                                      EmailTemplate.is_active.is_(True)))
@@ -1144,9 +1171,24 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
         log = EmailLog(booking_id=booking.id, template_key=template.template_key,
                        recipient=booking.client.email, subject=subject, status="sent")
         db.add(log)
-        audit(db, "send_email", "booking", booking.id, {"template": template.template_key})
+        audit(
+            db,
+            "send_manual_email" if manual_only else "send_email",
+            "booking",
+            booking.id,
+            {
+                "template": template.template_key,
+                "manual_only": manual_only,
+                "reason": payload.manual_reason.strip() if manual_only else None,
+            },
+        )
         db.commit()
-        return {"ok": True, "subject": subject}
+        return {
+            "ok": True,
+            "subject": subject,
+            "manual_only": manual_only,
+            "automation_suppressed": booking.automation_suppressed,
+        }
     except Exception as exc:
         db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
                         recipient=booking.client.email, subject=template.subject,

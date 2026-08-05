@@ -132,6 +132,8 @@ class ContractTemplatePatch(BaseModel):
 
 class PortalCreateIn(BaseModel):
     expires_days: int = Field(default=365, ge=1, le=3650)
+    manual_confirmation: str | None = Field(default=None, max_length=100)
+    manual_reason: str | None = Field(default=None, max_length=1000)
 
 
 class PublicFormIn(BaseModel):
@@ -148,6 +150,8 @@ class ContractAcceptIn(BaseModel):
 class SendEmailIn(BaseModel):
     template_key: str = Field(min_length=2, max_length=80)
     portal_url: str | None = Field(default=None, max_length=1000)
+    manual_confirmation: str | None = Field(default=None, max_length=100)
+    manual_reason: str | None = Field(default=None, max_length=1000)
 
 
 class TemplateTestIn(BaseModel):

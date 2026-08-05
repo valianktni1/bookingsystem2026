@@ -15,8 +15,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.database import SessionLocal, engine
-from app.main import app
-from app.models import ClientPortalToken, EmailLog, FormSubmission, ReminderLog
+from app.main import app, run_due_reminders
+from app.models import Booking, ClientPortalToken, EmailLog, FormSubmission, ReminderLog
 
 
 def legacy_payload():
@@ -113,7 +113,7 @@ def legacy_payload():
     }
 
 
-def test_v84_protected_legacy_import_and_brand_counters():
+def test_v85_protected_legacy_import_manual_only_and_brand_counters(monkeypatch):
     db_file = TEST_ROOT / "test.db"
     engine.dispose()
     db_file.unlink(missing_ok=True)
@@ -154,6 +154,11 @@ def test_v84_protected_legacy_import_and_brand_counters():
         assert len(invoice["payments"]) == 2
         assert len(invoice["payment_schedule"]) == 2
 
+        dashboard = client.get("/api/dashboard")
+        assert dashboard.status_code == 200
+        assert dashboard.json()["confirmed"] == 1
+        assert [row["id"] for row in dashboard.json()["upcoming"]] == [booking_id]
+
         portal_status = client.get(f"/api/bookings/{booking_id}/portal").json()
         assert portal_status["automation_suppressed"] is True
         assert portal_status["final_details_unlocked"] is False
@@ -170,7 +175,7 @@ def test_v84_protected_legacy_import_and_brand_counters():
 
         assert client.post(f"/api/bookings/{booking_id}/portal", json={
             "expires_days": 365,
-        }).status_code == 409
+        }).status_code == 422
         assert client.post(f"/api/bookings/{booking_id}/quote/send", json={
             "expires_days": 365,
         }).status_code == 409
@@ -188,16 +193,21 @@ def test_v84_protected_legacy_import_and_brand_counters():
 
         assert client.post(f"/api/bookings/{booking_id}/automations", json={
             "enabled": True, "reason": "Migration checked", "confirmation": "ACTIVATE",
-        }).status_code == 422
-        activated = client.post(f"/api/bookings/{booking_id}/automations", json={
+        }).status_code == 409
+        permanently_manual = client.post(f"/api/bookings/{booking_id}/automations", json={
             "enabled": True, "reason": "Migration checked against source files",
             "confirmation": "ACTIVATE CLIENT EMAILS",
         })
-        assert activated.status_code == 200
-        assert activated.json()["automation_suppressed"] is False
+        assert permanently_manual.status_code == 409
 
-        portal = client.post(f"/api/bookings/{booking_id}/portal", json={"expires_days": 365})
+        portal = client.post(f"/api/bookings/{booking_id}/portal", json={
+            "expires_days": 365,
+            "manual_reason": "Mark is previewing the imported client area",
+            "manual_confirmation": "CREATE MANUAL LINK",
+        })
         assert portal.status_code == 201
+        assert portal.json()["manual_only"] is True
+        assert portal.json()["automation_suppressed"] is True
         token = portal.json()["url"].split("/client/")[1]
         public = client.get(f"/api/client/{token}").json()
         assert public["documents"][0]["original_name"] == "original-contract.pdf"
@@ -212,6 +222,36 @@ def test_v84_protected_legacy_import_and_brand_counters():
         assert client.post(f"/api/client/{token}/forms", json={
             "form_type": "final_questionnaire", "data": {"timeline": "Ceremony at 1pm"},
         }).status_code == 200
+
+        def fake_manual_email(booking, profile, template, portal_url=None, extra_values=None,
+                              recipient=None):
+            return template.subject, template.body
+
+        monkeypatch.setattr("app.main.send_template_email", fake_manual_email)
+        assert client.post(f"/api/bookings/{booking_id}/emails/send", json={
+            "template_key": "booking_link",
+            "portal_url": portal.json()["url"],
+            "manual_reason": "Wrong confirmation test",
+            "manual_confirmation": "SEND EMAIL",
+        }).status_code == 422
+        manual_email = client.post(f"/api/bookings/{booking_id}/emails/send", json={
+            "template_key": "booking_link",
+            "portal_url": portal.json()["url"],
+            "manual_reason": "Mark deliberately sent this one message",
+            "manual_confirmation": "SEND ONE MANUAL EMAIL",
+        })
+        assert manual_email.status_code == 200
+        assert manual_email.json()["manual_only"] is True
+        assert manual_email.json()["automation_suppressed"] is True
+        assert client.get(f"/api/bookings/{booking_id}").json()["automation_suppressed"] is True
+        with SessionLocal() as db:
+            imported_booking = db.get(Booking, booking_id)
+            imported_booking.balance_due_date = date.today() + timedelta(days=10)
+            db.commit()
+            assert run_due_reminders(db) == {"sent": 0, "skipped": 0, "failed": 0}
+            assert db.scalar(select(func.count()).select_from(ReminderLog)) == 0
+            assert db.scalar(select(func.count()).select_from(EmailLog)) == 1
+            assert db.scalar(select(func.count()).select_from(ClientPortalToken)) == 1
 
         assert client.post("/api/legacy-import/records", json=payload).status_code == 409
 
