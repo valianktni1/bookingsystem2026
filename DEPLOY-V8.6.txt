@@ -1,0 +1,46 @@
+BOOKINGSYSTEM2026 V8.6 - SAFE CUMULATIVE DEPLOYMENT
+==================================================
+
+This update preserves the live PostgreSQL database, all 58 imported weddings,
+WBM02001-WBM02058, payments, forms, contracts and 233 source documents.
+
+It simplifies the wedding workflow and changes reminders only for NEW
+BookingSystem2026 enquiries. Imported Studio Ninja weddings remain visible but
+manual-only. No Google Calendar connection is added or contacted.
+
+
+DEPLOY AFTER UPLOADING THIS COMPLETE VERSION TO GITHUB MAIN
+-----------------------------------------------------------
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml down
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+
+curl -fsS http://127.0.0.1:30049/api/health
+
+Expected build:
+
+  2026.08.05-simple-wedding-workflow-v8.6
+
+
+VERIFY THE IMPORTED BOOKINGS REMAIN INTACT
+------------------------------------------
+
+docker exec bookingsystem2026-db psql -U bookingapp -d bookingapp -c "SELECT COUNT(*) AS imported_bookings, COUNT(*) FILTER (WHERE status='CONFIRMED') AS confirmed, COUNT(*) FILTER (WHERE automation_suppressed=true) AS manual_only FROM bookings WHERE legacy_source='studio_ninja'; SELECT MIN(number) AS first_invoice, MAX(number) AS last_invoice, COUNT(*) AS invoices, SUM(total) AS invoiced, SUM(paid) AS paid FROM invoices WHERE legacy_source='studio_ninja';"
+
+Expected:
+
+  imported_bookings  58
+  confirmed          58
+  manual_only        58
+  first_invoice      WBM02001
+  last_invoice       WBM02058
+  invoices           58
+  invoiced           55836.00
+  paid               16419.00
+
+Do not remove or alter either mounted TrueNAS dataset during deployment.

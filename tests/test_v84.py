@@ -16,7 +16,7 @@ from sqlalchemy import func, select
 
 from app.database import SessionLocal, engine
 from app.main import app, run_due_reminders
-from app.models import Booking, ClientPortalToken, EmailLog, FormSubmission, ReminderLog
+from app.models import Booking, ClientPortalToken, EmailLog, FormSubmission, ReminderLog, Task
 
 
 def legacy_payload():
@@ -154,9 +154,22 @@ def test_v85_protected_legacy_import_manual_only_and_brand_counters(monkeypatch)
         assert len(invoice["payments"]) == 2
         assert len(invoice["payment_schedule"]) == 2
 
+        # Old importer-generated step clutter is hidden, while a task Mark adds
+        # manually to an imported wedding remains available.
+        with SessionLocal() as db:
+            db.add(Task(booking_id=booking_id, title="Old generated quote task",
+                        workflow_key="step_1"))
+            db.add(Task(booking_id=booking_id, title="Call venue manager",
+                        workflow_key=None))
+            db.commit()
+        visible_tasks = client.get(f"/api/bookings/{booking_id}").json()["tasks"]
+        assert [task["title"] for task in visible_tasks] == ["Call venue manager"]
+        assert [task["title"] for task in client.get("/api/tasks").json()] == ["Call venue manager"]
+
         dashboard = client.get("/api/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json()["confirmed"] == 1
+        assert dashboard.json()["open_tasks"] == 1
         assert [row["id"] for row in dashboard.json()["upcoming"]] == [booking_id]
 
         portal_status = client.get(f"/api/bookings/{booking_id}/portal").json()

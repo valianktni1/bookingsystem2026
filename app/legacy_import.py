@@ -33,7 +33,7 @@ from .models import (
     Task,
 )
 from .security import current_admin
-from .services import audit, create_default_tasks, invoice_status, next_invoice_number
+from .services import audit, invoice_status, next_invoice_number
 
 
 class LegacyClientIn(BaseModel):
@@ -265,7 +265,6 @@ def register_legacy_import_routes(app: FastAPI) -> None:
             )
             db.add(booking)
             db.flush()
-            create_default_tasks(db, booking.id, RecordKind.WEDDING)
 
             sequence, number = next_invoice_number(db, Brand.WBM)
             invoice = Invoice(

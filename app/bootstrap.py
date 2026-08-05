@@ -156,6 +156,11 @@ A £150 deposit secures your date."""),
         "booking_link": ("Booking link", "Your {business_name} booking link", "Hi {client_first_name},\n\nHere is your booking link:\n{portal_url}\n\nPlease complete the booking form and read and accept the agreement. Your date is secured as soon as I receive your first payment.\n\nMark\n{business_name}"),
         "contract_reminder": ("Contract reminder", "A quick reminder about your booking agreement", "Hi {client_first_name},\n\nJust a quick reminder to complete your booking form and accept the agreement using your wedding booking link:\n{portal_url}\n\nGive me a shout if you need anything.\n\nMark"),
         "final_questionnaire": ("Final details questionnaire", "Final details for {event_date}", "Hi {client_first_name},\n\nYour wedding is getting closer, so it is time to collect the final timings and details. Please complete the final questionnaire here:\n{portal_url}\n\nMark\nWeddings By Mark"),
+        "quote_followup_1": ("Quote follow-up - next day", "Just checking you received your wedding quote", "Hi {client_first_name},\n\nI just wanted to check that the wedding quote I sent yesterday reached you safely. Emails occasionally find their way into spam or junk folders, so when you have a moment would you mind checking there if you cannot see it?\n\nHere is your wedding booking link again:\n{portal_url}\n\nThere is absolutely no pressure. If you have any questions or would like to talk through the packages, just reply to this email and I will be happy to help.\n\nThanks,\nMark\nWeddings By Mark"),
+        "quote_followup_final": ("Quote follow-up - final check", "A final quick check about your wedding quote", "Hi {client_first_name},\n\nI just wanted to make one final quick check that you received your Weddings By Mark quote and were able to open it.\n\nYou can view it here whenever you are ready:\n{portal_url}\n\nIf your plans have changed, that is completely fine. If you would like any help choosing a package or have a question, simply reply and I will be happy to help.\n\nThanks,\nMark\nWeddings By Mark"),
+        "deposit_due_1": ("Booking fee reminder", "A little reminder about your wedding booking fee", "Hi {client_first_name},\n\nThank you again for choosing Weddings By Mark. I just wanted to send a friendly reminder that the booking fee shown on your invoice is now due. Your date is secured as soon as I receive your first payment, even if you are paying the booking fee in more than one transfer.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf the transfer is already on its way, please ignore this message and I will update your invoice as soon as it reaches me.\n\nThanks,\nMark\nWeddings By Mark"),
+        "check_in_120": ("Wedding check-in - 120 days before", "Checking in with you both!", "Hi {client_first_name},\n\nI hope you are both well and that the wedding plans are coming along nicely. With your wedding getting closer, I just wanted to check in and see how everything is going.\n\nThere is nothing you need to complete today. If any plans, timings or contact details have changed, or if there is anything you would like to ask me, just reply to this email.\n\nI am really looking forward to your day.\n\nThanks,\nMark\nWeddings By Mark"),
+        "balance_due_7": ("Final balance reminder - 7 days before", "A little reminder about your wedding balance", "Hi {client_first_name},\n\nI hope you are both well and the wedding plans are coming along nicely.\n\nJust a friendly reminder that the remaining balance for your wedding is due on {balance_due_date}. There is no need to do anything today; I simply like to give everyone a little notice.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf you have already made the transfer, please ignore this email and I will update your booking as soon as it reaches me.\n\nThanks,\nMark\nWeddings By Mark"),
         "balance_due_10": ("Final balance reminder - 10 days before", "A little reminder about your wedding balance", "Hi {client_first_name},\n\nI hope you are both well and the wedding plans are coming along nicely.\n\nJust a friendly reminder that the remaining balance for your wedding is due on {balance_due_date}. There is no need to do anything today; I simply like to give everyone plenty of notice.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf you have already made the transfer, please ignore this email and I will update your booking as soon as it reaches me.\n\nThanks,\nMark\nWeddings By Mark"),
         "balance_due_1": ("Final balance reminder - day before", "Your wedding balance is due tomorrow", "Hi {client_first_name},\n\nI hope you are both well. Just a quick friendly reminder that the remaining balance for your wedding is due tomorrow, {balance_due_date}.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf the transfer is already on its way, please ignore this message and I will update your booking when it arrives.\n\nThanks,\nMark\nWeddings By Mark"),
         "balance_overdue_2": ("Final balance reminder - 2 days after", "A quick reminder about your wedding balance", "Hi {client_first_name},\n\nI hope you are both well. Just a little reminder that the remaining balance for your wedding was due on {balance_due_date}. I know how busy things can become in the run-up to a wedding, so this may simply have slipped your mind.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf you have already made the transfer, please ignore this message and I will update your booking as soon as it reaches me. If you need to speak to me about anything, just reply to this email.\n\nThanks,\nMark\nWeddings By Mark"),
@@ -167,7 +172,9 @@ A £150 deposit secures your date."""),
     for brand in (Brand.WBM, Brand.IVORY):
         for key, (name, subject, body) in template_rows.items():
             if brand == Brand.IVORY and key in ("final_questionnaire", "enquiry_received", "quote_accepted",
-                                                "new_enquiry_admin", "balance_due_10", "balance_due_1",
+                                                "new_enquiry_admin", "quote_followup_1",
+                                                "quote_followup_final", "deposit_due_1", "check_in_120",
+                                                "balance_due_7", "balance_due_10", "balance_due_1",
                                                 "balance_overdue_2"):
                 continue
             if not db.scalar(select(EmailTemplate).where(EmailTemplate.brand == brand, EmailTemplate.template_key == key)):
@@ -214,11 +221,21 @@ Weddings By Mark
             "Your date is secured as soon as I receive your first payment.",
         )
 
-    # Retire the superseded 14/7-day reminders and gently upgrade untouched WBM wording.
+    # The real WBM schedule uses seven days, not the older 10/14-day reminders.
     for legacy in db.scalars(select(EmailTemplate).where(
             EmailTemplate.brand == Brand.WBM,
-            EmailTemplate.template_key.in_(("balance_due_14", "balance_due_7")))).all():
+            EmailTemplate.template_key.in_(("balance_due_14", "balance_due_10")))).all():
         legacy.is_active = False
+    due_seven = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == Brand.WBM,
+        EmailTemplate.template_key == "balance_due_7",
+    ))
+    if due_seven:
+        due_seven.is_active = True
+        if due_seven.display_name in ("Final balance reminder - 7 days before", "Balance due in 7 days"):
+            due_seven.display_name = template_rows["balance_due_7"][0]
+            due_seven.subject = template_rows["balance_due_7"][1]
+            due_seven.body = template_rows["balance_due_7"][2]
     for row in db.scalars(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM)).all():
         row.subject = row.subject.replace("Your private Weddings By Mark booking link",
                                           "Your Weddings By Mark booking link")

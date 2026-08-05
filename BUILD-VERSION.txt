@@ -1,10 +1,11 @@
-BookingSystem2026 - Studio Ninja Manual-Only Communication
-Build: 2026.08.05-studio-ninja-manual-only-v8.5
+BookingSystem2026 - Simple Wedding Workflow
+Build: 2026.08.05-simple-wedding-workflow-v8.6
 
 This build includes:
 - Protected, confirmation-gated Studio Ninja import endpoints
 - Client email, portal-link and reminder automation paused on every imported record
-- Imported weddings remain fully visible in confirmed totals, upcoming dates, calendars and workflows
+- Imported weddings remain fully visible in confirmed totals, upcoming dates and calendars
+- Old generated Studio Ninja task clutter is hidden without deleting imported data
 - Studio Ninja records are permanently excluded from automatic emails, payment confirmations and reminders
 - Protected one-off portal-link and manual-email controls leave automatic communication paused
 - Original Studio Ninja invoice and quote numbers retained beside new numbers
@@ -34,7 +35,10 @@ This build includes:
 - Matching brand logos embedded in HTML emails and invoice/receipt PDFs
 - Photography awards shown only on Weddings By Mark emails and invoices
 - Booking fee due one day after quote acceptance and final balance due 45 days before the wedding
-- Linked final-balance reminders 10 days before, one day before and two days after the due date
+- Initial quote follow-up after one day and final quote follow-up after nine days, stopping on acceptance
+- One booking-fee reminder the day after acceptance when no first payment has arrived
+- Friendly wedding check-in 120 days before and final-details questionnaire 30 days before
+- Final-balance reminders 7 days before, one day before, two days after and every two days until paid
 - Full accepted package and add-on wording shown on client invoices and invoice PDFs
 - Smaller Weddings By Mark awards panel reserved in the invoice footer
 - Immediate new-enquiry notification to mark@perfectweddingsbymark.uk with direct reply-to-client

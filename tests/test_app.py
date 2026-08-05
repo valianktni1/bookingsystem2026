@@ -97,7 +97,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.05-studio-ninja-manual-only-v8.5"}
+                                 "build": "2026.08.05-simple-wedding-workflow-v8.6"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -117,7 +117,10 @@ def test_phase_two_b_flow(monkeypatch):
         assert wedding_data["brand"] == "wbm"
         assert wedding_data["venue_place_id"] == "test-place-peckforton"
         assert wedding_data["venue_address"].startswith("Peckforton Castle")
-        assert len(wedding_data["tasks"]) == 7
+        assert len(wedding_data["tasks"]) == 3
+        assert {task["workflow_key"] for task in wedding_data["tasks"]} == {
+            "wbm_quote", "wbm_booking_form", "wbm_contract",
+        }
 
         templates = client.get("/api/communications/templates")
         assert templates.status_code == 200
@@ -136,8 +139,9 @@ def test_phase_two_b_flow(monkeypatch):
         assert "compare the available packages" in quote_template["body"]
         reminder_keys = {row["template_key"] for row in templates.json()["templates"]
                          if row["brand"] == "wbm" and row["is_active"]}
-        assert {"balance_due_10", "balance_due_1", "balance_overdue_2"} <= reminder_keys
-        assert not {"balance_due_14", "balance_due_7"} & reminder_keys
+        assert {"quote_followup_1", "quote_followup_final", "deposit_due_1", "check_in_120",
+                "balance_due_7", "balance_due_1", "balance_overdue_2"} <= reminder_keys
+        assert not {"balance_due_14", "balance_due_10"} & reminder_keys
         admin_enquiry_template = next(row for row in templates.json()["templates"]
                                       if row["brand"] == "wbm"
                                       and row["template_key"] == "new_enquiry_admin")
@@ -315,9 +319,10 @@ def test_phase_two_b_flow(monkeypatch):
                 lambda booking, profile, template, portal_url=None: (template.subject, template.body),
             )
             schedule = [
-                (expected_balance_due - timedelta(days=10), "balance_due_10"),
+                (expected_balance_due - timedelta(days=7), "balance_due_7"),
                 (expected_balance_due - timedelta(days=1), "balance_due_1"),
                 (expected_balance_due + timedelta(days=2), "balance_overdue_2"),
+                (expected_balance_due + timedelta(days=4), "balance_overdue_4"),
             ]
             for reminder_day, reminder_key in schedule:
                 FrozenDate.current = reminder_day
@@ -334,7 +339,7 @@ def test_phase_two_b_flow(monkeypatch):
                 paid_invoice.paid = paid_invoice.total
                 paid_invoice.status = "paid"
                 db.commit()
-                FrozenDate.current = expected_balance_due - timedelta(days=10)
+                FrozenDate.current = expected_balance_due - timedelta(days=7)
                 assert main_module.run_due_reminders(db) == {"sent": 0, "skipped": 0, "failed": 0}
                 paid_invoice.paid = 0
                 paid_invoice.status = "unpaid"
@@ -343,7 +348,7 @@ def test_phase_two_b_flow(monkeypatch):
         dashboard = client.get("/api/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json()["confirmed"] == 1
-        assert dashboard.json()["open_tasks"] == 11
+        assert dashboard.json()["open_tasks"] == 7
 
         upload = client.post(
             f"/api/bookings/{wedding_data['id']}/documents?category=contract",

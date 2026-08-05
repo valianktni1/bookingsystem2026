@@ -33,7 +33,8 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       PublicFormIn, QuoteAcceptIn, SendEmailIn, TaskIn, TaskPatch, TemplateTestIn)
 from .security import create_token, current_admin, verify_password
-from .services import audit, create_default_tasks, dashboard_counts, invoice_status, next_invoice_number
+from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
+                       next_invoice_number, visible_task_condition)
 from .v82_routes import register_v82_routes
 from .v84_routes import automations_allowed, final_details_unlocked, register_v84_routes
 
@@ -58,7 +59,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.5-manual-only", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.6-simple-workflow", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -196,9 +197,16 @@ def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | N
             "archived_at": item.archived_at.isoformat() if item.archived_at else None,
             "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat()}
     if full:
+        visible_tasks = [
+            task for task in item.tasks
+            if not (
+                item.legacy_source == "studio_ninja"
+                and (task.workflow_key or "").startswith("step_")
+            )
+        ]
         data.update({"notes": item.notes, "form_data": item.form_data, "workflow_state": item.workflow_state,
                      "legacy_timeline": (item.workflow_state or {}).get("legacy_timeline", []),
-                     "tasks": [task_json(t) for t in sorted(item.tasks, key=lambda x: (x.completed, x.created_at))],
+                     "tasks": [task_json(t) for t in sorted(visible_tasks, key=lambda x: (x.completed, x.created_at))],
                      "invoices": [invoice_json(i) for i in sorted(item.invoices, key=lambda x: x.sequence, reverse=True)],
                      "documents": [document_json(d) for d in sorted(item.documents, key=lambda x: x.created_at, reverse=True)],
                      "booking_notes": [{"id": n.id, "body": n.body, "created_at": n.created_at.isoformat()}
@@ -226,7 +234,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.05-studio-ninja-manual-only-v8.5"}
+            "build": "2026.08.05-simple-wedding-workflow-v8.6"}
 
 
 @app.get("/api/public/config")
@@ -454,7 +462,8 @@ def dashboard(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     tasks = db.scalars(select(Task).options(selectinload(Task.booking))
                        .join(Booking).where(Task.completed.is_(False),
                                             Booking.archived_at.is_(None),
-                                            Booking.status != RecordStatus.CANCELLED)
+                                            Booking.status != RecordStatus.CANCELLED,
+                                            visible_task_condition())
                        .order_by(Task.due_at.asc().nullslast()).limit(10)).all()
     counts.update({"upcoming": [booking_json(x) for x in upcoming], "tasks": [task_json(t) for t in tasks]})
     return counts
@@ -553,7 +562,8 @@ def restore_booking(booking_id: str, _: Admin = Depends(current_admin), db: Sess
 def list_tasks(brand: Brand | None = None, include_completed: bool = True,
                _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     stmt = select(Task).options(selectinload(Task.booking)).join(Booking).where(
-        Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED)
+        Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED,
+        visible_task_condition())
     if brand:
         stmt = stmt.where(Booking.brand == brand)
     if not include_completed:
@@ -1134,6 +1144,12 @@ def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
             email_sent = True
             db.add(EmailLog(booking_id=booking.id, template_key="quote",
                             recipient=booking.client.email, subject=subject, status="sent"))
+            if booking.status == RecordStatus.ENQUIRY:
+                booking.status = RecordStatus.QUOTED
+            for task in db.scalars(select(Task).where(
+                    Task.booking_id == booking.id,
+                    or_(Task.workflow_key == "wbm_quote", Task.title.ilike("%quote%")))).all():
+                task.completed = True
         except Exception as exc:
             email_error = str(exc)
             db.add(EmailLog(booking_id=booking.id, template_key="quote",
@@ -1484,50 +1500,84 @@ def run_due_reminders(db: Session) -> dict:
     today = date.today()
     sent, skipped, failed = 0, 0, 0
     bookings = db.scalars(select(Booking).options(selectinload(Booking.client),
-                                                  selectinload(Booking.invoices))
+                                                  selectinload(Booking.invoices),
+                                                  selectinload(Booking.quotes))
                           .where(Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED)).all()
     for booking in bookings:
         if not automations_allowed(booking):
             continue
-        keys: list[str] = []
+        reminders: list[tuple[str, str, str | None, int]] = []
         has_balance = any(invoice.status != "void" and invoice.paid < invoice.total
                           for invoice in booking.invoices)
-        if (booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
-                and booking.balance_due_date and has_balance):
-            days = (booking.balance_due_date - today).days
-            if days == 10:
-                keys.append("balance_due_10")
-            if days == 1:
-                keys.append("balance_due_1")
-            if days == -2:
-                keys.append("balance_overdue_2")
-        if booking.kind == RecordKind.WEDDING and booking.event_date and (booking.event_date - today).days == 30:
-            keys.append("final_questionnaire")
-        for key in keys:
+        is_wbm_wedding = booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
+        accepted_quote = next((quote for quote in booking.quotes if quote.status == "accepted"), None)
+
+        # Quote chasing is based on the most recent successfully sent initial quote.
+        # It stops immediately when a package has been accepted.
+        if (is_wbm_wedding and not accepted_quote
+                and booking.status in (RecordStatus.ENQUIRY, RecordStatus.QUOTED)):
+            quote_sent_at = db.scalar(select(EmailLog.sent_at).where(
+                EmailLog.booking_id == booking.id,
+                EmailLog.template_key == "quote",
+                EmailLog.status == "sent",
+            ).order_by(EmailLog.sent_at.desc()).limit(1))
+            if quote_sent_at:
+                days_since_quote = (today - quote_sent_at.date()).days
+                if days_since_quote == 1:
+                    reminders.append(("quote_followup_1", "quote_followup_1", "quote", 365))
+                if days_since_quote == 9:
+                    reminders.append(("quote_followup_final", "quote_followup_final", "quote", 365))
+
+        if is_wbm_wedding and accepted_quote:
+            accepted_invoice = next(
+                (invoice for invoice in booking.invoices if invoice.id == accepted_quote.invoice_id),
+                None,
+            )
+            if (accepted_invoice and accepted_invoice.status != "void"
+                    and money(accepted_invoice.paid) <= 0
+                    and accepted_invoice.deposit_due_date == today):
+                reminders.append(("deposit_due_1", "deposit_due_1", "invoices", 365))
+
+        if is_wbm_wedding and booking.event_date and booking.status in (
+                RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS):
+            days_to_wedding = (booking.event_date - today).days
+            if days_to_wedding == 120:
+                reminders.append(("check_in_120", "check_in_120", None, 0))
+            if days_to_wedding == 30:
+                reminders.append(("final_questionnaire", "final_questionnaire", "final-details", 60))
+
+        if is_wbm_wedding and booking.balance_due_date and has_balance:
+            days_to_balance = (booking.balance_due_date - today).days
+            if days_to_balance == 7:
+                reminders.append(("balance_due_7", "balance_due_7", "invoices", 365))
+            if days_to_balance == 1:
+                reminders.append(("balance_due_1", "balance_due_1", "invoices", 365))
+            overdue_days = -days_to_balance
+            if overdue_days >= 2 and overdue_days % 2 == 0:
+                reminders.append((f"balance_overdue_{overdue_days}", "balance_overdue_2", "invoices", 365))
+
+        for reminder_key, template_key, portal_tab, expires_days in reminders:
             if db.scalar(select(ReminderLog).where(ReminderLog.booking_id == booking.id,
-                                                   ReminderLog.reminder_key == key,
+                                                   ReminderLog.reminder_key == reminder_key,
                                                    ReminderLog.scheduled_for == today)):
                 skipped += 1
                 continue
-            reminder = ReminderLog(booking_id=booking.id, reminder_key=key, scheduled_for=today)
+            reminder = ReminderLog(booking_id=booking.id, reminder_key=reminder_key, scheduled_for=today)
             db.add(reminder)
             template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == booking.brand,
-                                                             EmailTemplate.template_key == key,
+                                                             EmailTemplate.template_key == template_key,
                                                              EmailTemplate.is_active.is_(True)))
             profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
             try:
                 portal_url = None
-                if key == "final_questionnaire":
-                    raw, _ = issue_portal_token(db, booking.id, 60)
-                    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=final-details"
-                elif key in {"balance_due_10", "balance_due_1", "balance_overdue_2"}:
-                    raw, _ = issue_portal_token(db, booking.id, 365)
-                    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=invoices"
                 if not template:
                     raise RuntimeError("Reminder template is inactive or missing")
+                if portal_tab:
+                    raw, _ = issue_portal_token(db, booking.id, expires_days)
+                    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab={portal_tab}"
                 subject, _ = send_template_email(booking, profile, template, portal_url)
                 reminder.status, reminder.sent_at = "sent", datetime.now(timezone.utc)
-                db.add(EmailLog(booking_id=booking.id, template_key=key, recipient=booking.client.email,
+                db.add(EmailLog(booking_id=booking.id, template_key=template_key, recipient=booking.client.email,
                                 subject=subject, status="sent"))
                 sent += 1
             except Exception as exc:
