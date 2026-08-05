@@ -22,6 +22,7 @@ from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .email_service import preview_template_email, send_template_email, smtp_credentials, smtp_ready
 from .migrations import apply_safe_migrations
+from .legacy_import import register_legacy_import_routes
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
                      EmailLog, EmailTemplate, FormSubmission, Invoice, PackageOption, Payment,
@@ -33,6 +34,8 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       PublicFormIn, QuoteAcceptIn, SendEmailIn, TaskIn, TaskPatch, TemplateTestIn)
 from .security import create_token, current_admin, verify_password
 from .services import audit, create_default_tasks, dashboard_counts, invoice_status, next_invoice_number
+from .v82_routes import register_v82_routes
+from .v84_routes import automations_allowed, final_details_unlocked, register_v84_routes
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -55,11 +58,19 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.0-client-experience", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.4-legacy-ready", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
     return float(value or 0)
+
+
+def portal_lifetime_days(booking: Booking, minimum_days: int = 365) -> int:
+    """Keep a wedding link valid through the event and for a year afterwards."""
+    if booking.event_date:
+        through_aftercare = (booking.event_date - date.today()).days + 365
+        return min(3650, max(minimum_days, through_aftercare))
+    return max(minimum_days, 1095)
 
 
 def confirm_when_paid(booking: Booking) -> bool:
@@ -108,6 +119,7 @@ def task_json(item: Task) -> dict:
 def payment_json(item: Payment) -> dict:
     return {"id": item.id, "amount": money(item.amount), "paid_date": item.paid_date.isoformat(),
             "payment_type": item.payment_type, "reference": item.reference, "notes": item.notes,
+            "legacy_source": item.legacy_source, "legacy_reference": item.legacy_reference,
             "created_at": item.created_at.isoformat()}
 
 
@@ -120,7 +132,13 @@ def invoice_json(item: Invoice) -> dict:
             "description": item.description, "notes": item.notes, "total": money(item.total),
             "deposit_amount": money(item.booking.deposit_amount if item.booking else 0),
             "line_items": item.line_items or [],
-            "paid": money(item.paid), "balance": money(item.total - item.paid), "status": item.status,
+            "payment_schedule": item.payment_schedule or [],
+            "legacy_number": item.legacy_number,
+            "legacy_quote_number": item.legacy_quote_number,
+            "legacy_source": item.legacy_source,
+            "paid": money(item.paid),
+            "balance": 0.0 if item.status == "void" else money(item.total - item.paid),
+            "status": item.status,
             "client": item.booking.title if item.booking else None,
             "payments": [payment_json(p) for p in sorted(item.payments, key=lambda x: x.paid_date, reverse=True)]}
 
@@ -146,6 +164,7 @@ def quote_json(item: Quote | None) -> dict | None:
             "selected_addon_ids": item.selected_addon_ids or [], "line_items": item.line_items or [],
             "total": money(item.total), "deposit_amount": money(item.deposit_amount),
             "invoice_id": item.invoice_id,
+            "legacy_number": item.legacy_number, "legacy_source": item.legacy_source,
             "accepted_at": item.accepted_at.isoformat() if item.accepted_at else None}
 
 
@@ -153,7 +172,12 @@ def document_json(item: Document) -> dict:
     return {"id": item.id, "booking_id": item.booking_id,
             "booking_title": item.booking.title if item.booking else None, "brand": item.booking.brand.value if item.booking else None,
             "category": item.category, "original_name": item.original_name, "content_type": item.content_type,
-            "size_bytes": item.size_bytes, "created_at": item.created_at.isoformat()}
+            "size_bytes": item.size_bytes, "source_system": item.source_system,
+            "legacy_document_type": item.legacy_document_type,
+            "legacy_reference": item.legacy_reference,
+            "document_date": item.document_date.isoformat() if item.document_date else None,
+            "is_client_visible": item.is_client_visible,
+            "created_at": item.created_at.isoformat()}
 
 
 def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | None = None) -> dict:
@@ -166,10 +190,14 @@ def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | N
             "deposit_paid_date": item.deposit_paid_date.isoformat() if item.deposit_paid_date else None,
             "balance_due_date": item.balance_due_date.isoformat() if item.balance_due_date else None,
             "client": client_json(item.client), "archived": item.archived_at is not None,
+            "legacy_source": item.legacy_source, "legacy_id": item.legacy_id,
+            "legacy_import_batch": item.legacy_import_batch,
+            "automation_suppressed": item.automation_suppressed,
             "archived_at": item.archived_at.isoformat() if item.archived_at else None,
             "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat()}
     if full:
         data.update({"notes": item.notes, "form_data": item.form_data, "workflow_state": item.workflow_state,
+                     "legacy_timeline": (item.workflow_state or {}).get("legacy_timeline", []),
                      "tasks": [task_json(t) for t in sorted(item.tasks, key=lambda x: (x.completed, x.created_at))],
                      "invoices": [invoice_json(i) for i in sorted(item.invoices, key=lambda x: x.sequence, reverse=True)],
                      "documents": [document_json(d) for d in sorted(item.documents, key=lambda x: x.created_at, reverse=True)],
@@ -185,7 +213,8 @@ def full_booking(db: Session, booking_id: str) -> Booking:
     item = db.scalar(select(Booking).options(
         selectinload(Booking.client), selectinload(Booking.tasks),
         selectinload(Booking.invoices).selectinload(Invoice.payments),
-        selectinload(Booking.documents), selectinload(Booking.booking_notes)
+        selectinload(Booking.documents), selectinload(Booking.booking_notes),
+        selectinload(Booking.quotes)
     ).where(Booking.id == booking_id))
     if not item:
         raise HTTPException(404, "Record not found")
@@ -197,7 +226,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.03-client-experience-v8"}
+            "build": "2026.08.05-legacy-import-ready-v8.4"}
 
 
 @app.get("/api/public/config")
@@ -248,9 +277,14 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
     db.add(booking)
     db.flush()
     create_default_tasks(db, booking.id, booking.kind)
+    raw_portal_token, portal_row = issue_portal_token(
+        db, booking.id, portal_lifetime_days(booking)
+    )
+    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw_portal_token}"
     audit(db, "website_enquiry", "booking", booking.id,
           {"title": title, "event_date": payload.event_date.isoformat(),
-           "heard_about_us": payload.heard_about_us})
+           "heard_about_us": payload.heard_about_us,
+           "portal_expires_at": portal_row.expires_at.isoformat()})
 
     acknowledgement = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
                                                             EmailTemplate.template_key == "enquiry_received",
@@ -263,7 +297,9 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
     if profile and smtp_ready(Brand.WBM):
         if acknowledgement:
             try:
-                subject, _ = send_template_email(booking, profile, acknowledgement)
+                subject, _ = send_template_email(
+                    booking, profile, acknowledgement, portal_url
+                )
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
                                 recipient=client.email, subject=subject, status="sent"))
             except Exception as exc:
@@ -294,7 +330,8 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                                 recipient=notification_recipient, subject=admin_notification.subject,
                                 status="failed", error=str(exc)[:2000]))
     db.commit()
-    return {"ok": True, "message": "Thank you - your enquiry has been received."}
+    return {"ok": True, "portal_created": True,
+            "message": "Thank you - your enquiry has been received."}
 
 
 @app.post("/api/auth/login")
@@ -410,10 +447,14 @@ def patch_addon(addon_id: str, payload: AddOnOptionPatch,
 def dashboard(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     counts = dashboard_counts(db)
     upcoming = db.scalars(select(Booking).options(selectinload(Booking.client))
-                          .where(Booking.archived_at.is_(None), Booking.event_date >= date.today())
+                          .where(Booking.archived_at.is_(None),
+                                 Booking.status != RecordStatus.CANCELLED,
+                                 Booking.event_date >= date.today())
                           .order_by(Booking.event_date).limit(8)).all()
     tasks = db.scalars(select(Task).options(selectinload(Task.booking))
-                       .join(Booking).where(Task.completed.is_(False), Booking.archived_at.is_(None))
+                       .join(Booking).where(Task.completed.is_(False),
+                                            Booking.archived_at.is_(None),
+                                            Booking.status != RecordStatus.CANCELLED)
                        .order_by(Task.due_at.asc().nullslast()).limit(10)).all()
     counts.update({"upcoming": [booking_json(x) for x in upcoming], "tasks": [task_json(t) for t in tasks]})
     return counts
@@ -464,6 +505,12 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
     if not item:
         raise HTTPException(404, "Record not found")
     values = payload.model_dump(exclude_unset=True)
+    requested_status = values.get("status")
+    if requested_status == RecordStatus.CANCELLED and item.status != RecordStatus.CANCELLED:
+        raise HTTPException(409, "Use Cancel record so links, tasks and the cancellation reason are handled safely")
+    if (item.status == RecordStatus.CANCELLED and requested_status is not None
+            and requested_status != RecordStatus.CANCELLED):
+        raise HTTPException(409, "Use Reopen record so the previous status and tasks are restored safely")
     client_values = values.pop("client", None)
     for key, value in values.items():
         setattr(item, key, value)
@@ -505,7 +552,8 @@ def restore_booking(booking_id: str, _: Admin = Depends(current_admin), db: Sess
 @app.get("/api/tasks")
 def list_tasks(brand: Brand | None = None, include_completed: bool = True,
                _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
-    stmt = select(Task).options(selectinload(Task.booking)).join(Booking).where(Booking.archived_at.is_(None))
+    stmt = select(Task).options(selectinload(Task.booking)).join(Booking).where(
+        Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED)
     if brand:
         stmt = stmt.where(Booking.brand == brand)
     if not include_completed:
@@ -576,7 +624,10 @@ def delete_note(note_id: str, _: Admin = Depends(current_admin), db: Session = D
 
 @app.get("/api/invoices")
 def list_invoices(brand: Brand | None = None, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
-    stmt = select(Invoice).options(selectinload(Invoice.booking), selectinload(Invoice.payments)).order_by(Invoice.sequence.desc())
+    # WBM and Ivory now have independent sequences, so a date-first ordering
+    # avoids ambiguous rows when both brands legitimately have number 02001.
+    stmt = (select(Invoice).options(selectinload(Invoice.booking), selectinload(Invoice.payments))
+            .order_by(Invoice.issue_date.desc(), Invoice.created_at.desc()))
     if brand:
         stmt = stmt.where(Invoice.brand == brand)
     return [invoice_json(x) for x in db.scalars(stmt).all()]
@@ -621,23 +672,85 @@ def full_invoice(db: Session, invoice_id: str) -> Invoice:
 @app.post("/api/invoices/{invoice_id}/payments", status_code=201)
 def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     invoice = full_invoice(db, invoice_id)
+    if invoice.status == "void":
+        raise HTTPException(409, "A payment cannot be added to a void invoice")
     if payload.amount > invoice.total - invoice.paid:
         raise HTTPException(422, "Payment cannot exceed the outstanding balance")
     payment = Payment(invoice_id=invoice.id, **payload.model_dump())
     db.add(payment)
     invoice.paid += payload.amount
     invoice.status = invoice_status(invoice.total, invoice.paid)
-    if invoice.booking and not invoice.booking.deposit_paid_date:
-        invoice.booking.deposit_paid_date = payload.paid_date
-    if invoice.booking and money(invoice.booking.deposit_amount) <= 0:
-        invoice.booking.deposit_amount = payload.amount
+    auto_confirmed = False
+    if invoice.booking:
+        if not invoice.booking.deposit_paid_date:
+            invoice.booking.deposit_paid_date = payload.paid_date
+        if money(invoice.booking.deposit_amount) <= 0:
+            invoice.booking.deposit_amount = payload.amount
+        # Any first bank-transfer payment secures an enquiry, even when it is
+        # only part of the requested booking fee (for example £50 of £100).
         auto_confirmed = confirm_when_paid(invoice.booking)
-    else:
-        auto_confirmed = False
     audit(db, "record_payment", "booking", invoice.booking_id,
           {"invoice": invoice.number, "amount": money(payload.amount), "auto_confirmed": auto_confirmed})
     db.commit()
-    return invoice_json(full_invoice(db, invoice.id))
+
+    invoice = full_invoice(db, invoice.id)
+    booking = invoice.booking
+    payment_email_sent = False
+    payment_email_error = None
+    payment_email_paused = not automations_allowed(booking)
+    template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == invoice.brand,
+        EmailTemplate.template_key == "payment_received",
+        EmailTemplate.is_active.is_(True),
+    ))
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
+    if payment_email_paused:
+        payment_email_error = "Client emails are paused for this imported booking"
+    elif not template:
+        payment_email_error = "The payment confirmation template is missing or inactive"
+    elif not profile:
+        payment_email_error = "The business profile is missing"
+    elif not smtp_ready(invoice.brand):
+        payment_email_error = f"SMTP is not configured for {invoice.brand.value}"
+    else:
+        raw, _ = issue_portal_token(
+            db, booking.id, portal_lifetime_days(booking)
+        )
+        portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=invoices"
+        outstanding = max(Decimal("0"), invoice.total - invoice.paid)
+        deposit_remaining = max(Decimal("0"), booking.deposit_amount - invoice.paid)
+        try:
+            subject, _ = send_template_email(
+                booking,
+                profile,
+                template,
+                portal_url,
+                extra_values={
+                    "payment_amount": f"£{money(payload.amount):,.2f}",
+                    "payment_date": payload.paid_date.strftime("%d %B %Y"),
+                    "invoice_number": invoice.number,
+                    "total_paid": f"£{money(invoice.paid):,.2f}",
+                    "deposit_remaining": f"£{money(deposit_remaining):,.2f}",
+                    "outstanding_balance": f"£{money(outstanding):,.2f}",
+                    "payment_status": ("Paid in full" if outstanding <= 0
+                                       else "Your booking is secured"),
+                },
+            )
+            db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
+                            recipient=booking.client.email, subject=subject, status="sent"))
+            payment_email_sent = True
+        except Exception as exc:
+            payment_email_error = str(exc)
+            db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
+                            recipient=booking.client.email, subject=template.subject,
+                            status="failed", error=payment_email_error[:2000]))
+        db.commit()
+
+    result = invoice_json(full_invoice(db, invoice.id))
+    result.update({"payment_email_sent": payment_email_sent,
+                   "payment_email_error": payment_email_error,
+                   "payment_email_paused": payment_email_paused})
+    return result
 
 
 @app.delete("/api/payments/{payment_id}", status_code=204)
@@ -645,7 +758,11 @@ def delete_payment(payment_id: str, _: Admin = Depends(current_admin), db: Sessi
     payment = db.get(Payment, payment_id)
     if not payment:
         raise HTTPException(404, "Payment not found")
+    if payment.legacy_source == "studio_ninja":
+        raise HTTPException(409, "Imported Studio Ninja payment history is retained and cannot be deleted")
     invoice = db.get(Invoice, payment.invoice_id)
+    if invoice.status == "void":
+        raise HTTPException(409, "Payment history on a void invoice is retained")
     invoice.paid = max(Decimal("0"), invoice.paid - payment.amount)
     invoice.status = invoice_status(invoice.total, invoice.paid)
     db.delete(payment)
@@ -681,8 +798,18 @@ def list_documents(brand: Brand | None = None, _: Admin = Depends(current_admin)
 
 
 @app.post("/api/bookings/{booking_id}/documents", status_code=201)
-def upload_document(booking_id: str, category: str = Query(pattern="^[a-zA-Z0-9_-]{2,30}$"),
-                    file: UploadFile = File(...), _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+def upload_document(
+    booking_id: str,
+    category: str = Query(pattern="^[a-zA-Z0-9_-]{2,60}$"),
+    source_system: str | None = Query(default=None, max_length=60),
+    legacy_document_type: str | None = Query(default=None, max_length=80),
+    legacy_reference: str | None = Query(default=None, max_length=160),
+    document_date: date | None = Query(default=None),
+    client_visible: bool = Query(default=False),
+    file: UploadFile = File(...),
+    _: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
     if not db.get(Booking, booking_id):
         raise HTTPException(404, "Record not found")
     content_type = file.content_type or mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
@@ -702,10 +829,18 @@ def upload_document(booking_id: str, category: str = Query(pattern="^[a-zA-Z0-9_
                 raise HTTPException(413, f"File exceeds {settings.max_upload_mb}MB limit")
             output.write(chunk)
     document = Document(booking_id=booking_id, category=category, original_name=original,
-                        storage_name=storage_name, content_type=content_type, size_bytes=size)
+                        storage_name=storage_name, content_type=content_type, size_bytes=size,
+                        source_system=source_system,
+                        legacy_document_type=legacy_document_type,
+                        legacy_reference=legacy_reference,
+                        document_date=document_date,
+                        is_client_visible=client_visible)
     db.add(document)
     db.flush()
-    audit(db, "upload_document", "booking", booking_id, {"name": original, "category": category})
+    audit(db, "upload_document", "booking", booking_id, {
+        "name": original, "category": category, "source_system": source_system,
+        "client_visible": client_visible,
+    })
     db.commit()
     return document_json(document)
 
@@ -726,6 +861,8 @@ def delete_document(document_id: str, _: Admin = Depends(current_admin), db: Ses
     document = db.get(Document, document_id)
     if not document:
         raise HTTPException(404, "Document not found")
+    if document.source_system == "studio_ninja":
+        raise HTTPException(409, "Original Studio Ninja documents are retained and cannot be deleted")
     path = settings.storage_root / document.storage_name
     booking_id, name = document.booking_id, document.original_name
     db.delete(document)
@@ -741,7 +878,7 @@ def token_digest(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def issue_portal_token(db: Session, booking_id: str, expires_days: int = 90) -> tuple[str, ClientPortalToken]:
+def issue_portal_token(db: Session, booking_id: str, expires_days: int = 365) -> tuple[str, ClientPortalToken]:
     raw = secrets.token_urlsafe(32)
     row = ClientPortalToken(booking_id=booking_id, token_hash=token_digest(raw),
                             expires_at=datetime.now(timezone.utc) + timedelta(days=expires_days))
@@ -757,6 +894,8 @@ def resolve_portal(db: Session, token: str) -> ClientPortalToken:
                            ClientPortalToken.expires_at > datetime.now(timezone.utc)))
     if not row:
         raise HTTPException(404, "This booking link is invalid or has expired")
+    if row.booking.status == RecordStatus.CANCELLED:
+        raise HTTPException(404, "This booking link is no longer active")
     return row
 
 
@@ -773,14 +912,35 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         quote_data["invoice_number"] = invoice.number if invoice else None
     return {
         "submissions": [{"id": x.id, "form_type": x.form_type, "data": x.data,
+                         "submission_source": x.submission_source,
                          "submitted_at": x.submitted_at.isoformat()} for x in submissions],
         "contract": ({"accepted_name": acceptance.accepted_name, "accepted_email": acceptance.accepted_email,
-                      "accepted_at": acceptance.accepted_at.isoformat(), "version": acceptance.contract_version}
+                      "accepted_at": acceptance.accepted_at.isoformat(), "version": acceptance.contract_version,
+                      "acceptance_source": acceptance.acceptance_source,
+                      "source_detail": acceptance.source_detail,
+                      "is_legacy_import": acceptance.is_legacy_import}
                      if acceptance else None),
         "emails": [{"template_key": x.template_key, "recipient": x.recipient, "subject": x.subject,
                     "status": x.status, "sent_at": x.sent_at.isoformat()} for x in logs],
         "quote": quote_data,
+        "automation_suppressed": booking.automation_suppressed,
+        "final_details_unlocked": final_details_unlocked(db, booking),
     }
+
+
+def require_booking_journey_unlocked(db: Session, booking: Booking) -> None:
+    """Website enquiries complete forms only after accepting a package quote."""
+    if (booking.kind != RecordKind.WEDDING
+            or booking.status not in (RecordStatus.ENQUIRY, RecordStatus.QUOTED)):
+        return
+    accepted_quote = db.scalar(select(Quote.id).where(
+        Quote.booking_id == booking.id, Quote.status == "accepted"
+    ).limit(1))
+    if not accepted_quote:
+        raise HTTPException(
+            409,
+            "Please choose and accept your package before completing the booking form or contract",
+        )
 
 
 @app.get("/api/communications/templates")
@@ -908,7 +1068,13 @@ def create_portal_link(booking_id: str, payload: PortalCreateIn, _: Admin = Depe
     booking = db.get(Booking, booking_id)
     if not booking:
         raise HTTPException(404, "Record not found")
-    raw, row = issue_portal_token(db, booking_id, payload.expires_days)
+    if booking.status == RecordStatus.CANCELLED:
+        raise HTTPException(409, "Reopen the record before creating a new client portal link")
+    if not automations_allowed(booking):
+        raise HTTPException(409, "Activate this imported booking after checking it before creating a client link")
+    raw, row = issue_portal_token(
+        db, booking_id, max(payload.expires_days, portal_lifetime_days(booking))
+    )
     audit(db, "create_client_link", "booking", booking_id, {"expires_at": row.expires_at.isoformat()})
     db.commit()
     return {"url": f"{settings.app_url.rstrip('/')}/client/{raw}", "expires_at": row.expires_at.isoformat()}
@@ -920,11 +1086,17 @@ def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
     booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(Booking.id == booking_id))
     if not booking:
         raise HTTPException(404, "Record not found")
+    if booking.status == RecordStatus.CANCELLED:
+        raise HTTPException(409, "Reopen the record before sending another quote")
+    if not automations_allowed(booking):
+        raise HTTPException(409, "Client emails are paused for this imported booking")
     if booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING:
         raise HTTPException(422, "Package quotes are only available for Weddings By Mark bookings")
     if db.scalar(select(Quote).where(Quote.booking_id == booking.id, Quote.status == "accepted")):
         raise HTTPException(409, "This couple has already accepted their package quote")
-    raw, row = issue_portal_token(db, booking.id, payload.expires_days)
+    raw, row = issue_portal_token(
+        db, booking.id, max(payload.expires_days, portal_lifetime_days(booking))
+    )
     quote_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=quote"
     template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
                                                      EmailTemplate.template_key == "quote",
@@ -959,6 +1131,8 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
     booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(Booking.id == booking_id))
     if not booking:
         raise HTTPException(404, "Record not found")
+    if not automations_allowed(booking):
+        raise HTTPException(409, "Activate client emails for this imported booking before sending")
     template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == booking.brand,
                                                      EmailTemplate.template_key == payload.template_key,
                                                      EmailTemplate.is_active.is_(True)))
@@ -999,20 +1173,27 @@ def public_portal_data(token: str, db: Session = Depends(get_db)):
                                                           selectinload(Invoice.payments))
                                  .where(Invoice.booking_id == booking.id)
                                  .order_by(Invoice.sequence.desc())).all()
+    client_documents = db.scalars(select(Document).where(
+        Document.booking_id == booking.id,
+        Document.is_client_visible.is_(True),
+    ).order_by(Document.document_date.desc(), Document.created_at.desc())).all()
     return {"business": {"name": profile.display_name, "brand": profile.brand.value,
                          "email": profile.email, "phone": profile.phone},
             "record": {"title": booking.title, "kind": booking.kind.value,
+                       "status": booking.status.value,
                        "event_date": booking.event_date.isoformat() if booking.event_date else None,
                        "venue_or_project": booking.venue_or_project, "venue_address": booking.venue_address,
                        "venue_place_id": booking.venue_place_id, "venue_lat": booking.venue_lat,
                        "venue_lng": booking.venue_lng, "package_name": booking.package_name,
                        "quoted_total": money(booking.quoted_total), "deposit_amount": money(booking.deposit_amount),
+                       "legacy_source": booking.legacy_source,
                        "client": client_json(booking.client)},
             "contract_template": ({"title": contract.title, "version": contract.version, "body": contract.body}
                                   if contract else None),
             "catalog": {"packages": [package_json(x) for x in packages],
                         "addons": [addon_json(x) for x in addons]},
-            "invoices": [invoice_json(x) for x in client_invoices], **status_data}
+            "invoices": [invoice_json(x) for x in client_invoices],
+            "documents": [document_json(x) for x in client_documents], **status_data}
 
 
 def public_invoice_for_portal(db: Session, token: str, invoice_id: str) -> Invoice:
@@ -1041,6 +1222,22 @@ def public_receipt_pdf(token: str, invoice_id: str, db: Session = Depends(get_db
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile, receipt=True), media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{invoice.number}-receipt.pdf"'})
+
+
+@app.get("/api/client/{token}/documents/{document_id}")
+def public_legacy_document(token: str, document_id: str, db: Session = Depends(get_db)):
+    portal = resolve_portal(db, token)
+    document = db.scalar(select(Document).where(
+        Document.id == document_id,
+        Document.booking_id == portal.booking_id,
+        Document.is_client_visible.is_(True),
+    ))
+    if not document:
+        raise HTTPException(404, "Document not found for this booking")
+    path = settings.storage_root / document.storage_name
+    if not path.exists():
+        raise HTTPException(404, "Document file is missing")
+    return FileResponse(path, media_type=document.content_type, filename=document.original_name)
 
 
 @app.post("/api/client/{token}/quote", status_code=201)
@@ -1117,9 +1314,10 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
         EmailTemplate.brand == booking.brand, EmailTemplate.template_key == "quote_accepted",
         EmailTemplate.is_active.is_(True)))
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
-    if acceptance_template and profile and smtp_ready(booking.brand):
+    if (automations_allowed(booking) and acceptance_template and profile
+            and smtp_ready(booking.brand)):
         try:
-            invoice_portal_url = f"{settings.app_url.rstrip('/')}/client/{token}?tab=invoices"
+            invoice_portal_url = f"{settings.app_url.rstrip('/')}/client/{token}"
             subject, _ = send_template_email(
                 booking, profile, acceptance_template, invoice_portal_url,
                 extra_values={
@@ -1148,13 +1346,19 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
 def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(get_db)):
     portal = resolve_portal(db, token)
     booking = portal.booking
+    require_booking_journey_unlocked(db, booking)
+    if (payload.form_type == "final_questionnaire"
+            and not final_details_unlocked(db, booking)):
+        raise HTTPException(409, "Final wedding details open 30 days before the wedding")
     row = db.scalar(select(FormSubmission).where(FormSubmission.booking_id == booking.id,
                                                  FormSubmission.form_type == payload.form_type))
     if row:
         row.data = payload.data
         row.updated_at = datetime.now(timezone.utc)
+        row.submission_source = "client_portal_updated"
     else:
-        row = FormSubmission(booking_id=booking.id, form_type=payload.form_type, data=payload.data)
+        row = FormSubmission(booking_id=booking.id, form_type=payload.form_type,
+                             data=payload.data, submission_source="client_portal")
         db.add(row)
     if payload.form_type == "booking_form":
         booking.form_data = payload.data
@@ -1207,6 +1411,7 @@ def accept_contract(token: str, payload: ContractAcceptIn, request: Request, db:
         raise HTTPException(422, "You must agree before accepting the contract")
     portal = resolve_portal(db, token)
     booking = portal.booking
+    require_booking_journey_unlocked(db, booking)
     if payload.accepted_email.lower() != booking.client.email.lower():
         raise HTTPException(422, "Please use the email address shown on your booking")
     if db.scalar(select(ContractAcceptance).where(ContractAcceptance.booking_id == booking.id)):
@@ -1221,7 +1426,8 @@ def accept_contract(token: str, payload: ContractAcceptIn, request: Request, db:
                              accepted_name=payload.accepted_name.strip(),
                              accepted_email=str(payload.accepted_email).lower(),
                              ip_address=forwarded or (request.client.host if request.client else None),
-                             user_agent=request.headers.get("user-agent", "")[:500])
+                             user_agent=request.headers.get("user-agent", "")[:500],
+                             acceptance_source="client_portal", is_legacy_import=False)
     db.add(row)
     for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
                                               Task.title.ilike("%contract%"))).all():
@@ -1239,8 +1445,11 @@ def run_due_reminders(db: Session) -> dict:
                                                   selectinload(Booking.invoices))
                           .where(Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED)).all()
     for booking in bookings:
+        if not automations_allowed(booking):
+            continue
         keys: list[str] = []
-        has_balance = any(invoice.paid < invoice.total for invoice in booking.invoices)
+        has_balance = any(invoice.status != "void" and invoice.paid < invoice.total
+                          for invoice in booking.invoices)
         if (booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
                 and booking.balance_due_date and has_balance):
             days = (booking.balance_due_date - today).days
@@ -1300,6 +1509,10 @@ async def reminder_loop():
             with SessionLocal() as db:
                 await asyncio.to_thread(run_due_reminders, db)
 
+
+register_v82_routes(app)
+register_v84_routes(app)
+register_legacy_import_routes(app)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

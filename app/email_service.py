@@ -46,6 +46,13 @@ def template_values(booking: Booking, profile: BusinessProfile, portal_url: str 
         "deposit_due_date": "within one day of accepting your quote",
         "balance_due_date": booking.balance_due_date.strftime("%d %B %Y") if booking.balance_due_date else "as shown on your invoice",
         "portal_url": portal_url or "",
+        "payment_amount": "£100.00",
+        "payment_date": "today",
+        "invoice_number": "WBM02001" if booking.brand == Brand.WBM else "ID02001",
+        "total_paid": "£100.00",
+        "deposit_remaining": "£0.00",
+        "outstanding_balance": f"£{max(0, float(booking.quoted_total or 0) - 100):,.2f}",
+        "payment_status": "Your booking is secured",
         "business_email": profile.email or "",
         "business_phone": profile.phone or "",
     }

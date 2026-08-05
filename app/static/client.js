@@ -2,7 +2,7 @@ const $ = selector => document.querySelector(selector);
 let data = null;
 let bookingStep = 0;
 const requestedTab = new URLSearchParams(location.search).get("tab");
-const requestedTabs = {quote:"Choose package", invoices:"Invoices", booking:"Booking form", "final-details":"Final details", agreement:"Agreement"};
+const requestedTabs = {quote:"Choose package", invoices:"Invoices", booking:"Booking form", "final-details":"Final details", documents:"Documents", agreement:"Agreement"};
 let active = requestedTabs[requestedTab] || "Overview";
 const token = location.pathname.split("/").filter(Boolean).pop();
 
@@ -24,13 +24,16 @@ function toast(text) {
   setTimeout(() => $("#toast").classList.add("hidden"), 3200);
 }
 function existing(type) { return data.submissions.find(x => x.form_type === type)?.data || {}; }
+function bookingJourneyUnlocked() {
+  return data.record.kind !== "wedding" || Boolean(data.quote) || !["enquiry", "quoted"].includes(data.record.status);
+}
 function completed() {
   const booking = existing("booking_form"), final = existing("final_questionnaire");
   return {
     quote: Boolean(data.quote),
     invoices: Boolean(data.invoices.length),
-    booking: Boolean(booking.primary_full_name || booking.contact_phone),
-    final: Boolean(final.timeline),
+    booking: Boolean(data.submissions.some(x => x.form_type === "booking_form")),
+    final: Boolean(data.submissions.some(x => x.form_type === "final_questionnaire")),
     agreement: Boolean(data.contract),
   };
 }
@@ -55,6 +58,8 @@ function directionsUrl() {
 async function init() {
   try {
     data = await api(`/api/client/${token}`);
+    if (!bookingJourneyUnlocked() && !["Overview", "Choose package"].includes(active)) active = "Overview";
+    if (active === "Final details" && !data.final_details_unlocked) active = "Overview";
     const brand = data.business.brand || (data.record.kind === "wedding" ? "wbm" : "ivory");
     document.body.classList.add(`brand-${brand}`);
     $("#business-logo").src = brand === "ivory" ? "/static/branding/ivory-digital-logo.png" : "/static/branding/weddings-by-mark-logo.png";
@@ -80,23 +85,29 @@ async function init() {
 function tabDefinition() {
   const done = completed();
   const hasQuote = data.record.kind === "wedding" && data.catalog.packages.length;
+  const unlocked = bookingJourneyUnlocked();
   return [
     {name:"Overview", icon:"⌂"},
     ...(hasQuote ? [{name:"Choose package", icon:"♡", done:done.quote}] : []),
-    {name:"Invoices", icon:"£", done:done.invoices},
-    {name:"Booking form", icon:"✎", done:done.booking},
-    ...(data.record.kind === "wedding" ? [{name:"Final details", icon:"☷", done:done.final}] : []),
-    {name:"Agreement", icon:"✓", done:done.agreement},
+    ...(unlocked ? [{name:"Invoices", icon:"£", done:done.invoices},
+      {name:"Booking form", icon:"✎", done:done.booking},
+      ...(data.record.kind === "wedding" ? [{name:"Final details", icon:"☷", done:done.final, locked:!data.final_details_unlocked}] : []),
+      ...(data.documents?.length ? [{name:"Documents", icon:"▤"}] : []),
+      {name:"Agreement", icon:"✓", done:done.agreement}] : []),
   ];
 }
 function setActive(tab) {
+  if (tab === "Final details" && !data.final_details_unlocked) {
+    toast("Final wedding details open 30 days before your wedding");
+    return;
+  }
   active = tab;
   window.scrollTo({top:Math.max(0, $("#tabs").offsetTop - 10), behavior:"smooth"});
   renderTabs();
   render();
 }
 function renderTabs() {
-  $("#tabs").innerHTML = tabDefinition().map(tab => `<button class="${tab.name === active ? "active" : ""}" data-tab="${tab.name}"><span class="tab-icon">${tab.icon}</span><span>${tab.name}</span>${tab.done ? `<i class="tab-check">✓</i>` : ""}</button>`).join("");
+  $("#tabs").innerHTML = tabDefinition().map(tab => `<button class="${tab.name === active ? "active" : ""} ${tab.locked?"locked":""}" data-tab="${tab.name}" ${tab.locked?"aria-disabled=\"true\"":""}><span class="tab-icon">${tab.locked?"🔒":tab.icon}</span><span>${tab.name}</span>${tab.done ? `<i class="tab-check">✓</i>` : ""}</button>`).join("");
   document.querySelectorAll("[data-tab]").forEach(button => button.onclick = () => setActive(button.dataset.tab));
 }
 function render() {
@@ -105,18 +116,23 @@ function render() {
   else if (active === "Invoices") invoicesPanel();
   else if (active === "Booking form") bookingForm();
   else if (active === "Final details") finalForm();
+  else if (active === "Documents") documentsPanel();
   else agreement();
 }
 
 function overview() {
   const done = completed();
-  const journey = data.record.kind === "wedding" ? [
+  const unlocked = bookingJourneyUnlocked();
+  const journey = data.record.kind === "wedding" && !unlocked
+    ? [["Choose package", "Package quote", done.quote]]
+    : data.record.kind === "wedding" ? [
     ["Choose package", "Package quote", done.quote], ["Booking form", "Booking form", done.booking],
-    ["Agreement", "Agreement", done.agreement], ["Final details", "Final details", done.final]
+    ["Agreement", "Agreement", done.agreement], ["Final details", "Final details", done.final, !data.final_details_unlocked]
   ] : [["Booking form", "Project information", done.booking], ["Agreement", "Agreement", done.agreement]];
-  const next = journey.find(item => !item[2]);
+  const next = journey.find(item => !item[2] && !item[3]);
   const directions = directionsUrl();
-  $("#panel").innerHTML = `<div class="welcome-grid"><article class="welcome-card"><small>WELCOME TO YOUR SECURE AREA</small><h2>Hello ${esc(data.record.client.first_name)}, everything is in one place.</h2><p>Choose your package, complete the details and keep your invoice and agreement safely together. You can return using the same private link whenever you need to.</p>${next ? `<div class="next-step"><span><strong>Your next step</strong><small>${esc(next[1])} is ready when you are.</small></span><button data-go="${esc(next[0])}">Continue</button></div>` : `<div class="complete">Everything currently requested has been completed - thank you!</div>`}</article><aside class="venue-card"><small>${data.record.kind === "wedding" ? "YOUR WEDDING VENUE" : "YOUR PROJECT"}</small><strong>${esc(data.record.venue_or_project || "Details to be confirmed")}</strong><span>${esc(data.record.venue_address || (data.record.kind === "wedding" ? "The full address will appear here once confirmed." : data.record.package_name || ""))}</span>${directions ? `<a href="${esc(directions)}" target="_blank" rel="noopener">Open directions in Google Maps ↗</a>` : ""}</aside></div><div class="journey">${journey.map((item,index) => `<button class="${item[2] ? "done" : ""}" data-go="${esc(item[0])}"><i>${item[2] ? "✓" : index + 1}</i><span><strong>${esc(item[1])}</strong><small>${item[2] ? "Completed" : "Waiting for you"}</small></span></button>`).join("")}</div><div class="summary"><div><small>PACKAGE / SERVICE</small><strong>${esc(data.record.package_name || "To be confirmed")}</strong></div><div><small>TOTAL</small><strong>${money(data.record.quoted_total)}</strong></div><div><small>BOOKING FEE / DEPOSIT</small><strong>${money(data.record.deposit_amount)}</strong></div></div>`;
+  const welcomeText = unlocked ? "Your invoice, Wedding Booking Form/questionnaire and contract are all kept safely together here. You can return using the same secure link whenever you need to." : "Your enquiry has been received and your secure wedding area is ready. Your package choices will appear here as soon as Mark sends your quote.";
+  $("#panel").innerHTML = `<div class="welcome-grid"><article class="welcome-card"><small>WELCOME TO YOUR SECURE AREA</small><h2>Hello ${esc(data.record.client.first_name)}, everything is in one place.</h2><p>${welcomeText}</p>${next ? `<div class="next-step"><span><strong>Your next step</strong><small>${esc(next[1])} is ready when you are.</small></span><button data-go="${esc(next[0])}">Continue</button></div>` : `<div class="complete">Everything currently requested has been completed - thank you!</div>`}</article><aside class="venue-card"><small>${data.record.kind === "wedding" ? "YOUR WEDDING VENUE" : "YOUR PROJECT"}</small><strong>${esc(data.record.venue_or_project || "Details to be confirmed")}</strong><span>${esc(data.record.venue_address || (data.record.kind === "wedding" ? "The full address will appear here once confirmed." : data.record.package_name || ""))}</span>${directions ? `<a href="${esc(directions)}" target="_blank" rel="noopener">Open directions in Google Maps ↗</a>` : ""}</aside></div><div class="journey">${journey.map((item,index) => `<button class="${item[2] ? "done" : ""} ${item[3]?"locked":""}" data-go="${esc(item[0])}"><i>${item[2] ? "✓" : item[3]?"🔒":index + 1}</i><span><strong>${esc(item[1])}</strong><small>${item[2] ? "Completed" : item[3]?"Opens 30 days before your wedding":"Waiting for you"}</small></span></button>`).join("")}</div><div class="summary"><div><small>PACKAGE / SERVICE</small><strong>${esc(data.record.package_name || "To be confirmed")}</strong></div><div><small>TOTAL</small><strong>${money(data.record.quoted_total)}</strong></div><div><small>BOOKING FEE / DEPOSIT</small><strong>${money(data.record.deposit_amount)}</strong></div></div>`;
   document.querySelectorAll("[data-go]").forEach(button => button.onclick = () => setActive(button.dataset.go));
 }
 
@@ -139,7 +155,12 @@ function invoicesPanel() {
     $("#panel").innerHTML = `<h2>Your invoices</h2><p class="intro">Your invoice will appear here automatically after you accept your package or service quote.</p><div class="invoice-empty"><strong>No invoice yet</strong><span>Choose and accept your package first - there is nothing else you need to do.</span></div>`;
     return;
   }
-  $("#panel").innerHTML = `<h2>Your invoices & payments</h2><p class="intro">Download your invoice for the bank-transfer details and use the invoice number as your payment reference.</p><div class="client-invoices">${data.invoices.map(invoice => `<article class="client-invoice"><header><div><strong>${esc(invoice.number)}</strong><span class="invoice-status ${invoice.status}">${esc(String(invoice.status).replaceAll("_"," "))}</span></div><b>${money(invoice.total)}</b></header>${invoice.line_items?.length ? `<div class="client-invoice-lines">${invoice.line_items.map(item => `<div><span><b>${esc(item.name)}</b>${item.description ? `<small>${esc(item.description)}</small>` : ""}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : invoice.description ? `<div class="client-invoice-lines"><div><span><b>${esc(invoice.description)}</b></span><strong>${money(invoice.total)}</strong></div></div>` : ""}<dl><dt>Issued</dt><dd>${date(invoice.issue_date)}</dd>${invoice.deposit_due_date ? `<dt>Booking fee</dt><dd>${money(invoice.deposit_amount)} · due ${date(invoice.deposit_due_date)}</dd>` : ""}${invoice.due_date ? `<dt>Remaining balance</dt><dd>${money(Math.max(0,Number(invoice.total)-Number(invoice.deposit_amount||0)))} · due ${date(invoice.due_date)}</dd>` : ""}<dt>Paid so far</dt><dd>${money(invoice.paid)}</dd><dt><strong>Total outstanding</strong></dt><dd><strong>${money(invoice.balance)}</strong></dd></dl><div class="client-invoice-actions"><a class="primary" href="/api/client/${token}/invoices/${invoice.id}/invoice.pdf">Download invoice PDF</a>${invoice.paid > 0 ? `<a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/receipt.pdf">Download receipt</a>` : ""}</div></article>`).join("")}</div>`;
+  $("#panel").innerHTML = `<h2>Your invoices & payments</h2><p class="intro">Download your invoice for the bank-transfer details and use the current invoice number as your payment reference.</p><div class="client-invoices">${data.invoices.map(invoice => `<article class="client-invoice"><header><div><span><strong>${esc(invoice.number)}</strong>${invoice.legacy_number?`<small class="client-legacy-ref">Previously ${esc(invoice.legacy_number)} in Studio Ninja</small>`:""}</span><span class="invoice-status ${invoice.status}">${esc(String(invoice.status).replaceAll("_"," "))}</span></div><b>${money(invoice.total)}</b></header>${invoice.line_items?.length ? `<div class="client-invoice-lines">${invoice.line_items.map(item => `<div><span><b>${esc(item.name)}</b>${item.description ? `<small>${esc(item.description)}</small>` : ""}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : invoice.description ? `<div class="client-invoice-lines"><div><span><b>${esc(invoice.description)}</b></span><strong>${money(invoice.total)}</strong></div></div>` : ""}${invoice.payment_schedule?.length?`<section class="client-payment-schedule"><strong>Original payment schedule</strong>${invoice.payment_schedule.map(item=>`<div><span>${esc(item.label||"Scheduled payment")}<small>${item.due_date?date(item.due_date):"No due date recorded"} · ${esc(String(item.status||"scheduled").replaceAll("_"," "))}</small></span><b>${money(item.amount)}</b></div>`).join("")}</section>`:""}<dl><dt>Issued</dt><dd>${date(invoice.issue_date)}</dd>${!invoice.payment_schedule?.length&&invoice.deposit_due_date ? `<dt>Booking fee</dt><dd>${money(invoice.deposit_amount)} · due ${date(invoice.deposit_due_date)}</dd>` : ""}${!invoice.payment_schedule?.length&&invoice.due_date ? `<dt>Remaining balance</dt><dd>${money(Math.max(0,Number(invoice.total)-Number(invoice.deposit_amount||0)))} · due ${date(invoice.due_date)}</dd>` : ""}<dt>Paid so far</dt><dd>${money(invoice.paid)}</dd><dt><strong>Total outstanding</strong></dt><dd><strong>${money(invoice.balance)}</strong></dd></dl><div class="client-invoice-actions"><a class="primary" href="/api/client/${token}/invoices/${invoice.id}/invoice.pdf">Download invoice PDF</a>${invoice.paid > 0 ? `<a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/receipt.pdf">Download receipt</a>` : ""}</div></article>`).join("")}</div>`;
+}
+
+function documentsPanel() {
+  const documents = data.documents || [];
+  $("#panel").innerHTML = `<h2>Your original documents</h2><p class="intro">These are the original files retained from your previous booking record. Your current invoice and receipt remain in the Invoices section.</p><div class="client-documents">${documents.map(document => `<article><i>▤</i><span><strong>${esc(document.original_name)}</strong><small>${esc(String(document.legacy_document_type||document.category||"document").replaceAll("_"," "))}${document.document_date?` · ${date(document.document_date)}`:""}</small></span><a class="secondary-client" href="/api/client/${token}/documents/${document.id}">Download</a></article>`).join("")||`<div class="invoice-empty"><strong>No documents available</strong><span>Any files shared with you will appear here.</span></div>`}</div>`;
 }
 
 function selectedPackage() {
@@ -209,6 +230,11 @@ function wireBookingSteps() {
   show();
 }
 function finalForm() {
+  if (!data.final_details_unlocked) {
+    $("#panel").innerHTML = `<h2>Final wedding details</h2><div class="final-details-locked"><i>🔒</i><strong>This section opens 30 days before your wedding</strong><span>It keeps the last timings and supplier information up to date. Mark can also open it early if needed.</span><button class="secondary-client" data-return-overview>Return to overview</button></div>`;
+    $("[data-return-overview]").onclick = () => setActive("Overview");
+    return;
+  }
   const x = existing("final_questionnaire");
   $("#panel").innerHTML = `<h2>Final wedding details</h2><p class="intro">Please give as much detail as possible so the day runs smoothly.</p>${x.timeline ? `<div class="complete">✓ Previously submitted - you can update it below.</div><br>` : ""}<form id="final-form"><div class="form-grid"><label class="full">Full timeline for the day *<textarea name="timeline" rows="6" required>${esc(x.timeline||"")}</textarea></label><label class="full">Important family/group photographs<textarea name="group_photos" rows="4">${esc(x.group_photos||"")}</textarea></label><label class="full">Supplier names and contact details<textarea name="suppliers" rows="4">${esc(x.suppliers||"")}</textarea></label>${field("Speeches planned for","speeches_time",x.speeches_time||"")}${field("First dance time","first_dance_time",x.first_dance_time||"")}<label class="full">Surprises, sensitivities or special requests<textarea name="special_requests" rows="4">${esc(x.special_requests||"")}</textarea></label><label class="full">Video music suggestions, if included<textarea name="music_suggestions" rows="3">${esc(x.music_suggestions||"")}</textarea></label></div><div class="actions"><button class="primary" type="submit">Save final details</button></div></form>`;
   $("#final-form").onsubmit = event => submitForm(event,"final_questionnaire");
@@ -229,7 +255,12 @@ async function submitForm(event, type) {
 function agreement() {
   const contract = data.contract_template;
   if (!contract) { $("#panel").innerHTML = `<h2>Agreement unavailable</h2><p class="intro">Please contact ${esc(data.business.name)}.</p>`; return; }
-  if (data.contract) { $("#panel").innerHTML = `<h2>Agreement accepted</h2><div class="complete">✓ Accepted by ${esc(data.contract.accepted_name)} on ${date(data.contract.accepted_at)}. Version ${esc(data.contract.version)}.</div><div class="contract" style="margin-top:16px">${esc(contract.body)}</div>`; return; }
+  if (data.contract) {
+    const imported = data.contract.is_legacy_import;
+    $("#panel").innerHTML = `<h2>Agreement accepted</h2><div class="complete">✓ ${imported?"Original acceptance recorded for":"Accepted by"} ${esc(data.contract.accepted_name)} on ${date(data.contract.accepted_at)}. Version ${esc(data.contract.version)}.</div>${imported?`<div class="legacy-contract-note"><strong>Imported from your Studio Ninja booking</strong><span>${esc(data.contract.source_detail||"The original signed contract is retained in your Documents section.")}</span>${data.documents?.some(x=>x.legacy_document_type==="contract")?`<button class="secondary-client" data-open-documents>View original document</button>`:""}</div>`:`<div class="contract" style="margin-top:16px">${esc(contract.body)}</div>`}`;
+    if ($("[data-open-documents]")) $("[data-open-documents]").onclick = () => setActive("Documents");
+    return;
+  }
   $("#panel").innerHTML = `<h2>${esc(contract.title)}</h2><p class="intro">Version ${esc(contract.version)}. Please read the complete agreement before accepting it.</p><div class="contract">${esc(contract.body)}</div><form id="contract-form"><div class="form-grid" style="margin-top:17px">${field("Your full legal name","accepted_name",`${data.record.client.first_name} ${data.record.client.last_name||""}`,false,"text",true)}${field("Your booking email","accepted_email",data.record.client.email,false,"email",true)}</div><label class="agreement"><input name="agreed" type="checkbox" required><span>I have read and agree to the complete booking agreement above. I understand this electronic acceptance will be recorded with the date and technical audit information.</span></label><div class="actions"><button class="primary" type="submit">Accept agreement</button></div></form>`;
   $("#contract-form").onsubmit = async event => {
     event.preventDefault(); const form = new FormData(event.currentTarget);

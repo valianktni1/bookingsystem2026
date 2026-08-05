@@ -15,7 +15,7 @@ os.environ["INVOICE_START"] = "2000"
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.database import SessionLocal
+from app.database import SessionLocal, engine
 from app.email_service import build_email_message
 from app.main import app
 from app.models import Booking, Brand, BusinessProfile, Client, ReminderLog
@@ -89,13 +89,15 @@ def test_branded_email_artwork_is_brand_specific():
 
 def test_phase_two_b_flow(monkeypatch):
     db_file = TEST_ROOT / "test.db"
+    engine.dispose()
     db_file.unlink(missing_ok=True)
+    (TEST_ROOT / "test.db-journal").unlink(missing_ok=True)
     with TestClient(app) as client:
         health = client.get("/api/health")
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.03-client-experience-v8"}
+                                 "build": "2026.08.05-legacy-import-ready-v8.4"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -140,6 +142,22 @@ def test_phase_two_b_flow(monkeypatch):
                                       if row["brand"] == "wbm"
                                       and row["template_key"] == "new_enquiry_admin")
         assert "New wedding enquiry" in admin_enquiry_template["subject"]
+        enquiry_template = next(row for row in templates.json()["templates"]
+                                if row["brand"] == "wbm"
+                                and row["template_key"] == "enquiry_received")
+        assert "{portal_url}" in enquiry_template["body"]
+        accepted_template = next(row for row in templates.json()["templates"]
+                                 if row["brand"] == "wbm"
+                                 and row["template_key"] == "quote_accepted")
+        assert "Wedding Booking Form/questionnaire" in accepted_template["body"]
+        assert "digitally sign your wedding contract" in accepted_template["body"]
+        payment_template = next(row for row in templates.json()["templates"]
+                                if row["brand"] == "wbm"
+                                and row["template_key"] == "payment_received")
+        assert {"{payment_amount}", "{total_paid}", "{outstanding_balance}",
+                "{portal_url}"} <= {item for item in (
+                    "{payment_amount}", "{total_paid}", "{outstanding_balance}",
+                    "{portal_url}") if item in payment_template["body"]}
         preview = client.get(f"/api/communications/templates/{quote_template['id']}/preview")
         assert preview.status_code == 200
         assert "/static/branding/weddings-by-mark-logo.png" in preview.json()["html"]
@@ -211,7 +229,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert client.patch(f"/api/bookings/{digital_data['id']}", json={"status": "enquiry"}).status_code == 200
         ivory_invoice = client.post(f"/api/bookings/{digital_data['id']}/invoices", json={"total": 399, "paid": 399, "issue_date": "2026-01-19"})
         assert ivory_invoice.status_code == 201
-        assert ivory_invoice.json()["number"] == "ID02002"
+        assert ivory_invoice.json()["number"] == "ID02001"
         assert ivory_invoice.json()["status"] == "paid"
         assert client.get(f"/api/bookings/{digital_data['id']}").json()["status"] == "confirmed"
 
@@ -229,7 +247,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert receipt.status_code == 200
 
         invoices = client.get("/api/invoices").json()
-        assert [row["number"] for row in invoices] == ["ID02002", "WBM02001"]
+        assert {row["number"] for row in invoices} == {"ID02001", "WBM02001"}
 
         catalog = client.get("/api/catalog?brand=wbm").json()
         assert [row["price"] for row in catalog["packages"]] == [475, 699, 899, 1299, 1699]
@@ -245,7 +263,7 @@ def test_phase_two_b_flow(monkeypatch):
         })
         assert quote.status_code == 201
         assert quote.json()["quote"]["total"] == 1019
-        assert quote.json()["invoice"]["number"] == "WBM02003"
+        assert quote.json()["invoice"]["number"] == "WBM02002"
         assert quote.json()["acceptance_email_sent"] is False
         expected_deposit_due = date.today() + timedelta(days=1)
         expected_balance_due = max(date(2026, 10, 4) - timedelta(days=45), expected_deposit_due)
@@ -256,9 +274,9 @@ def test_phase_two_b_flow(monkeypatch):
         ]
         assert "Highlight Video" in quote.json()["invoice"]["line_items"][0]["description"]
         refreshed_public = client.get(f"/api/client/{token}").json()
-        assert refreshed_public["quote"]["invoice_number"] == "WBM02003"
+        assert refreshed_public["quote"]["invoice_number"] == "WBM02002"
         assert refreshed_public["record"]["quoted_total"] == 1019
-        assert refreshed_public["invoices"][0]["number"] == "WBM02003"
+        assert refreshed_public["invoices"][0]["number"] == "WBM02002"
         assert refreshed_public["invoices"][0]["deposit_due_date"] == expected_deposit_due.isoformat()
         assert client.get(f"/api/bookings/{wedding_data['id']}").json()["balance_due_date"] == expected_balance_due.isoformat()
         public_invoice_pdf = client.get(
@@ -380,6 +398,7 @@ def test_phase_two_b_flow(monkeypatch):
                 "key": template.template_key,
                 "recipient": recipient or booking.client.email,
                 "reply_to": reply_to,
+                "portal_url": portal_url,
                 "values": extra_values or {},
             })
             return template.subject, template.body
@@ -391,10 +410,13 @@ def test_phase_two_b_flow(monkeypatch):
             enquiry = client.post("/api/public/enquiries", json=enquiry_payload)
         assert enquiry.status_code == 201
         assert enquiry.json()["ok"] is True
+        assert enquiry.json()["portal_created"] is True
         assert [mail["key"] for mail in sent_enquiry_emails] == [
             "enquiry_received", "new_enquiry_admin"
         ]
         assert sent_enquiry_emails[0]["recipient"] == "rachel@example.com"
+        enquiry_portal_url = sent_enquiry_emails[0]["portal_url"]
+        assert "/client/" in enquiry_portal_url
         assert sent_enquiry_emails[1]["recipient"] == "mark@perfectweddingsbymark.uk"
         assert sent_enquiry_emails[1]["reply_to"] == "rachel@example.com"
         assert sent_enquiry_emails[1]["values"]["heard_about_us"] == "Google search"
@@ -408,6 +430,89 @@ def test_phase_two_b_flow(monkeypatch):
         assert imported_enquiry[0]["venue_place_id"] == "test-place-lytham-hall"
         assert imported_enquiry[0]["venue_address"].startswith("Lytham Hall")
 
+        # Complete automated client journey: enquiry -> quote -> forms -> first
+        # partial payment. A £50 first payment must secure a £100-deposit booking.
+        enquiry_token = enquiry_portal_url.split("/client/")[1]
+        enquiry_portal = client.get(f"/api/client/{enquiry_token}")
+        assert enquiry_portal.status_code == 200
+        assert enquiry_portal.json()["record"]["status"] == "enquiry"
+        assert enquiry_portal.json()["quote"] is None
+        assert client.post(f"/api/client/{enquiry_token}/forms", json={
+            "form_type": "booking_form", "data": {"primary_full_name": "Rachel Green"}
+        }).status_code == 409
+        assert client.post(f"/api/client/{enquiry_token}/contract", json={
+            "accepted_name": "Rachel Green", "accepted_email": "rachel@example.com",
+            "agreed": True,
+        }).status_code == 409
+
+        journey_emails = []
+
+        def fake_journey_email(booking, profile, template, portal_url=None, extra_values=None,
+                               recipient=None, reply_to=None):
+            journey_emails.append({
+                "key": template.template_key,
+                "portal_url": portal_url,
+                "values": extra_values or {},
+                "body": template.body,
+            })
+            return template.subject, template.body
+
+        with monkeypatch.context() as journey_patch:
+            journey_patch.setattr(main_module, "smtp_ready", lambda brand=None: True)
+            journey_patch.setattr(main_module, "send_template_email", fake_journey_email)
+            sent_quote = client.post(
+                f"/api/bookings/{imported_enquiry[0]['id']}/quote/send",
+                json={"expires_days": 365},
+            )
+            assert sent_quote.status_code == 200
+            assert sent_quote.json()["email_sent"] is True
+            quote_token = sent_quote.json()["url"].split("/client/")[1].split("?")[0]
+            public_catalog = client.get("/api/public/catalog").json()
+            bronze = next(row for row in public_catalog["packages"] if row["code"] == "bronze")
+            accepted_quote = client.post(f"/api/client/{quote_token}/quote", json={
+                "package_id": bronze["id"], "addon_ids": [], "confirmed": True,
+            })
+            assert accepted_quote.status_code == 201
+            assert accepted_quote.json()["acceptance_email_sent"] is True
+            invoice = accepted_quote.json()["invoice"]
+            assert invoice["deposit_due_date"] == (date.today() + timedelta(days=1)).isoformat()
+            assert invoice["due_date"] == (date(2027, 6, 12) - timedelta(days=45)).isoformat()
+
+            assert client.post(f"/api/client/{quote_token}/forms", json={
+                "form_type": "booking_form",
+                "data": {"primary_full_name": "Rachel Green", "primary_phone": "07700 900456"},
+            }).status_code == 200
+            assert client.post(f"/api/client/{quote_token}/contract", json={
+                "accepted_name": "Rachel Green", "accepted_email": "rachel@example.com",
+                "agreed": True,
+            }).status_code == 200
+
+            partial_payment = client.post(f"/api/invoices/{invoice['id']}/payments", json={
+                "amount": 50, "paid_date": date.today().isoformat(),
+                "reference": invoice["number"],
+            })
+            assert partial_payment.status_code == 201
+            assert partial_payment.json()["payment_email_sent"] is True
+            assert partial_payment.json()["paid"] == 50
+            assert partial_payment.json()["status"] == "part_paid"
+            assert partial_payment.json()["balance"] == invoice["total"] - 50
+
+        assert [mail["key"] for mail in journey_emails] == [
+            "quote", "quote_accepted", "payment_received"
+        ]
+        assert "Wedding Booking Form/questionnaire" in journey_emails[1]["body"]
+        assert "digitally sign your wedding contract" in journey_emails[1]["body"]
+        assert journey_emails[1]["portal_url"].endswith(f"/client/{quote_token}")
+        payment_mail = journey_emails[2]
+        assert payment_mail["values"]["payment_amount"] == "£50.00"
+        assert payment_mail["values"]["total_paid"] == "£50.00"
+        assert payment_mail["values"]["payment_status"] == "Your booking is secured"
+        assert payment_mail["portal_url"].endswith("?tab=invoices")
+        secured = client.get(f"/api/bookings/{imported_enquiry[0]['id']}").json()
+        assert secured["status"] == "confirmed"
+
 
 def teardown_module():
+    engine.dispose()
     (TEST_ROOT / "test.db").unlink(missing_ok=True)
+    (TEST_ROOT / "test.db-journal").unlink(missing_ok=True)

@@ -74,6 +74,7 @@ class Client(Base):
 
 class Booking(Base):
     __tablename__ = "bookings"
+    __table_args__ = (UniqueConstraint("legacy_source", "legacy_id", name="uq_booking_legacy_source_id"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     brand: Mapped[Brand] = mapped_column(Enum(Brand), index=True)
     kind: Mapped[RecordKind] = mapped_column(Enum(RecordKind), index=True)
@@ -96,6 +97,8 @@ class Booking(Base):
     workflow_state: Mapped[dict] = mapped_column(JSON, default=dict)
     legacy_source: Mapped[str | None] = mapped_column(String(60), nullable=True)
     legacy_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    legacy_import_batch: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    automation_suppressed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
@@ -151,6 +154,8 @@ class Quote(Base):
     total: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
     deposit_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))
     invoice_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    legacy_number: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    legacy_source: Mapped[str | None] = mapped_column(String(60), nullable=True)
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     booking: Mapped[Booking] = relationship(back_populates="quotes")
@@ -192,6 +197,10 @@ class Invoice(Base):
     status: Mapped[str] = mapped_column(String(30), default="unpaid")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     line_items: Mapped[list] = mapped_column(JSON, default=list)
+    payment_schedule: Mapped[list] = mapped_column(JSON, default=list)
+    legacy_number: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    legacy_quote_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    legacy_source: Mapped[str | None] = mapped_column(String(60), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     booking: Mapped[Booking] = relationship(back_populates="invoices")
     payments: Mapped[list["Payment"]] = relationship(back_populates="invoice", cascade="all, delete-orphan")
@@ -206,6 +215,8 @@ class Payment(Base):
     payment_type: Mapped[str] = mapped_column(String(40), default="bank_transfer")
     reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    legacy_source: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    legacy_reference: Mapped[str | None] = mapped_column(String(160), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     invoice: Mapped[Invoice] = relationship(back_populates="payments")
 
@@ -228,6 +239,11 @@ class Document(Base):
     storage_name: Mapped[str] = mapped_column(String(255), unique=True)
     content_type: Mapped[str] = mapped_column(String(120))
     size_bytes: Mapped[int]
+    source_system: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    legacy_document_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    legacy_reference: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    document_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    is_client_visible: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     booking: Mapped[Booking] = relationship(back_populates="documents")
 
@@ -285,6 +301,8 @@ class FormSubmission(Base):
     booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id"), index=True)
     form_type: Mapped[str] = mapped_column(String(80), index=True)
     data: Mapped[dict] = mapped_column(JSON, default=dict)
+    submission_source: Mapped[str] = mapped_column(String(60), default="client_portal")
+    source_document_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
     booking: Mapped[Booking] = relationship()
@@ -301,6 +319,9 @@ class ContractAcceptance(Base):
     accepted_email: Mapped[str] = mapped_column(String(254))
     ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    acceptance_source: Mapped[str] = mapped_column(String(80), default="client_portal")
+    source_detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_legacy_import: Mapped[bool] = mapped_column(Boolean, default=False)
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     booking: Mapped[Booking] = relationship()
 

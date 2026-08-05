@@ -1,0 +1,38 @@
+/* Version 8.2 — safe record controls */
+.v82-record-actions{display:flex;align-items:center;gap:7px;margin-right:auto}.v82-record-actions .secondary{white-space:nowrap}.v82-cancelled-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;padding:15px 17px;border:1px solid #e3b9b2;border-radius:11px;color:#702d28;background:#fff3f1}.v82-cancelled-banner small,.v82-cancelled-banner strong,.v82-cancelled-banner span{display:block}.v82-cancelled-banner small{margin-bottom:4px;font-size:8px;font-weight:800;letter-spacing:.1em}.v82-cancelled-banner strong{font-size:11px}.v82-cancelled-banner span{margin-top:4px;color:#8b5a55;font-size:9px}.v82-cancelled-banner>b{padding:6px 9px;border-radius:999px;color:#fff;background:#a84444;font-size:9px}.v82-modal-warning,.v82-delete-warning{padding:14px 15px;border:1px solid #e3d5b9;border-radius:10px;color:#604b24;background:#fff8e9;font-size:10px;line-height:1.55}.v82-delete-warning{border-color:#e4b7b1;color:#722f2a;background:#fff1ef}.v82-delete-warning strong,.v82-delete-warning span{display:block}.v82-delete-warning strong{margin-bottom:5px;font-size:11px}.v82-field-help{display:block;margin-top:5px;color:#8d604c;font-size:8px;font-weight:500}.v82-invoice-actions{display:flex;justify-content:flex-end;gap:7px;padding:10px 16px 15px;border-top:1px solid var(--line);background:#fff}.v82-void-invoice{border-color:#d6b7b1!important;background:#fcf7f6!important}.v82-void-invoice>header{background:#5c4a47!important}.v82-void-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;color:#79362f;background:#fff0ed}.v82-void-strip strong{font-size:16px;letter-spacing:.08em}.v82-void-strip span{font-size:9px;text-align:right}.v82-void-status{color:#fff!important;background:#8f514b!important}.v82-invoice-register{min-width:1020px}.v82-invoice-register .table-head,.v82-invoice-register .table-row{grid-template-columns:100px minmax(150px,1.25fr) 95px 95px 95px 80px 110px 120px}.v82-void-row{opacity:.78;background:#fcf7f6!important}.v82-register-actions{display:flex;gap:4px;justify-content:flex-end}.v82-reset-panel{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;margin-top:18px;padding:15px;border:1px solid #e3d6bd;border-radius:11px;background:#fffaf0}.v82-reset-panel strong,.v82-reset-panel span{display:block}.v82-reset-panel strong{font-size:11px}.v82-reset-panel span{margin-top:4px;color:var(--muted);font-size:9px}.v82-reset-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px}.v82-portal-cancelled{margin-bottom:13px;padding:12px 14px;border:1px solid #e4b7b1;border-radius:10px;color:#75342e;background:#fff2f0;font-size:10px;line-height:1.5}.v82-reset-panel button,.v82-record-actions button{min-height:36px}.danger-button{border-color:#d5a09a!important;color:#883b34!important;background:#fff5f3!important}.danger-button:hover{border-color:#b7655d!important;background:#fff0ed!important}
+@media(max-width:760px){#drawer footer{flex-wrap:wrap}.v82-record-actions{order:3;width:100%;display:grid;grid-template-columns:1fr 1fr;margin:4px 0 0}.v82-record-actions button{width:100%}.v82-reset-panel{grid-template-columns:1fr}.v82-reset-actions{justify-content:stretch;display:grid;grid-template-columns:1fr}.v82-reset-actions button{width:100%}.v82-void-strip{align-items:flex-start;flex-direction:column}.v82-void-strip span{text-align:left}.v82-invoice-actions{align-items:stretch;flex-direction:column}.v82-invoice-actions button{width:100%}}
+
+/* V8.2.1 - clearer mobile typography without changing the desktop layout. */
+@media(max-width:580px){
+  .page-heading p{max-width:270px;font-size:13px;line-height:1.55}
+  .focus-card{min-height:98px;padding:19px 20px}
+  .focus-card strong{font-size:14px}
+  .focus-card span{font-size:11px;line-height:1.55}
+  .focus-card .focus-number{font-size:29px}
+  .stat-card span small{font-size:12px}
+  .stat-card em{font-size:11px}
+  .panel-title h2,.section-actions h3{font-size:15px}
+  .panel-title p,.section-actions p,.panel-title>button{font-size:11px;line-height:1.45}
+  .record-row{min-height:78px}
+  .record-main strong{font-size:13px}
+  .record-main small{font-size:11px;line-height:1.4}
+  .status{min-height:27px;padding-inline:10px;font-size:10px}
+  .mobile-nav{height:72px}
+  .mobile-nav button{font-size:10px}
+  .mobile-nav button span{font-size:20px}
+  .mobile-nav .mobile-add{width:54px;height:54px}
+  main{padding-bottom:78px}
+  .tabs button{font-size:11px}
+  .summary small{font-size:9px}
+  .summary strong{font-size:13px}
+  .detail h3,.section-title{font-size:13px}
+  .detail p,.note-card p{font-size:12px}
+  .detail dl,.invoice-card dl{font-size:11px}
+  .task-main strong,.document-row>span strong,.template-row span strong,.template-row-v8>span strong,.portal-progress strong{font-size:12px}
+  .task-main small,.document-row>span small,.template-row span small,.template-row-v8>span small,.portal-progress small{font-size:10px}
+  .form-grid label,.settings-fields label{font-size:11px}
+  .form-grid input,.form-grid select,.form-grid textarea,.settings-fields input,.settings-fields textarea{font-size:13px}
+  .venue-summary,.venue-manual-toggle,.directions-link{font-size:11px}
+  .venue-summary strong{font-size:12px}
+  .venue-summary small{font-size:10px}
+}

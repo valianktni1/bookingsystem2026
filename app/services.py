@@ -24,9 +24,18 @@ def create_default_tasks(db: Session, booking_id: str, kind: RecordKind) -> None
 
 def next_invoice_number(db: Session, brand: Brand) -> tuple[int, str]:
     settings = get_settings()
-    counter = db.execute(select(InvoiceCounter).where(InvoiceCounter.key == "global").with_for_update()).scalar_one_or_none()
+    counter_key = f"brand:{brand.value}"
+    counter = db.execute(
+        select(InvoiceCounter).where(InvoiceCounter.key == counter_key).with_for_update()
+    ).scalar_one_or_none()
     if not counter:
-        counter = InvoiceCounter(key="global", value=settings.invoice_start)
+        highest_existing = db.scalar(
+            select(func.max(Invoice.sequence)).where(Invoice.brand == brand)
+        ) or settings.invoice_start
+        counter = InvoiceCounter(
+            key=counter_key,
+            value=max(settings.invoice_start, int(highest_existing)),
+        )
         db.add(counter)
         db.flush()
     counter.value += 1
@@ -45,6 +54,9 @@ def invoice_status(total: Decimal, paid: Decimal) -> str:
 def dashboard_counts(db: Session) -> dict:
     confirmed = db.scalar(select(func.count()).select_from(Booking).where(Booking.archived_at.is_(None), Booking.status == RecordStatus.CONFIRMED)) or 0
     open_enquiries = db.scalar(select(func.count()).select_from(Booking).where(Booking.archived_at.is_(None), Booking.status.in_([RecordStatus.ENQUIRY, RecordStatus.QUOTED]))) or 0
-    outstanding = db.scalar(select(func.coalesce(func.sum(Invoice.total - Invoice.paid), 0)).where(Invoice.status != "paid")) or 0
-    due_tasks = db.scalar(select(func.count()).select_from(Task).join(Booking).where(Booking.archived_at.is_(None), Task.completed.is_(False))) or 0
+    outstanding = db.scalar(select(func.coalesce(func.sum(Invoice.total - Invoice.paid), 0))
+                            .where(~Invoice.status.in_(["paid", "void"]))) or 0
+    due_tasks = db.scalar(select(func.count()).select_from(Task).join(Booking).where(
+        Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED,
+        Task.completed.is_(False))) or 0
     return {"confirmed": confirmed, "open_enquiries": open_enquiries, "outstanding": float(outstanding), "open_tasks": due_tasks, "generated_at": datetime.now(timezone.utc).isoformat()}

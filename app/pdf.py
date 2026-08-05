@@ -1,3 +1,4 @@
+from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -79,7 +80,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     identity.append(Paragraph(f"<font color='#65767c'>{contact}</font>", small))
     header = Table([
         [identity,
-         Paragraph("RECEIPT" if receipt else "INVOICE", heading)]
+         Paragraph("RECEIPT" if receipt else ("VOID INVOICE" if invoice.status == "void" else "INVOICE"), heading)]
     ], colWidths=[105 * mm, 51 * mm])
     header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                 ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
@@ -89,6 +90,8 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     client_name = client.company_name or invoice.booking.title
     client_lines = "<br/>".join(escape(str(x)) for x in [client_name, client.email, client.phone, client.address] if x)
     meta_lines = [f"<b>Number</b>&nbsp;&nbsp; {invoice.number}", f"<b>Issue date</b>&nbsp;&nbsp; {invoice.issue_date.strftime('%d %B %Y')}"]
+    if invoice.legacy_number:
+        meta_lines.append(f"<b>Previous Studio Ninja number</b>&nbsp;&nbsp; {escape(invoice.legacy_number)}")
     if invoice.deposit_due_date:
         meta_lines.append(f"<b>Booking fee due</b>&nbsp;&nbsp; {invoice.deposit_due_date.strftime('%d %B %Y')}")
     if invoice.due_date:
@@ -145,7 +148,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
                        ("BOTTOMPADDING", (0, row_index), (-1, row_index), 1)]
     lines.setStyle(TableStyle(line_style))
     story += [lines, Spacer(1, 6 * mm)]
-    outstanding = invoice.total - invoice.paid
+    outstanding = Decimal("0") if invoice.status == "void" else invoice.total - invoice.paid
     totals = Table([
         ["Subtotal", pounds(invoice.total)], ["VAT", "£0.00"], ["Paid", pounds(invoice.paid)],
         [Paragraph("<b>TOTAL OUTSTANDING</b>", normal), Paragraph(f"<b>{pounds(outstanding)}</b>", right)]
@@ -156,13 +159,36 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     story += [totals, Spacer(1, 6 * mm)]
 
     expected_deposit = min(invoice.total, invoice.booking.deposit_amount or Decimal("0"))
-    if invoice.brand == Brand.WBM and invoice.deposit_due_date and expected_deposit > 0:
-        payment_schedule = Table([
-            [Paragraph("<b>PAYMENT SCHEDULE</b>", small), "", "", ""],
+    schedule_rows = []
+    if invoice.status != "void" and invoice.payment_schedule:
+        for item in invoice.payment_schedule:
+            due = item.get("due_date") or "To be confirmed"
+            if hasattr(due, "strftime"):
+                due = due.strftime("%d %B %Y")
+            elif due and due != "To be confirmed":
+                try:
+                    from datetime import date
+                    due = date.fromisoformat(str(due)).strftime("%d %B %Y")
+                except ValueError:
+                    due = str(due)
+            schedule_rows.append([
+                Paragraph(escape(str(item.get("label") or "Scheduled payment")), normal),
+                Paragraph(f"<b>{pounds(item.get('amount'))}</b>", right),
+                Paragraph(escape(str(item.get("status") or "Due")).replace("_", " ").title(), small),
+                Paragraph(escape(str(due)), right),
+            ])
+    elif (invoice.status != "void" and invoice.brand == Brand.WBM
+          and invoice.deposit_due_date and expected_deposit > 0):
+        schedule_rows = [
             [Paragraph("Booking fee", normal), Paragraph(f"<b>{pounds(expected_deposit)}</b>", right),
              Paragraph("Due", small), Paragraph(invoice.deposit_due_date.strftime("%d %B %Y"), right)],
             [Paragraph("Remaining balance", normal), Paragraph(f"<b>{pounds(invoice.total - expected_deposit)}</b>", right),
              Paragraph("Due", small), Paragraph(invoice.due_date.strftime("%d %B %Y") if invoice.due_date else "To be confirmed", right)],
+        ]
+    if schedule_rows:
+        payment_schedule = Table([
+            [Paragraph("<b>PAYMENT SCHEDULE</b>", small), "", "", ""],
+            *schedule_rows,
         ], colWidths=[40 * mm, 28 * mm, 24 * mm, 64 * mm])
         payment_schedule.setStyle(TableStyle([
             ("SPAN", (0, 0), (-1, 0)),
@@ -182,11 +208,16 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     for label, key in [("Account name", "account_name"), ("Sort code", "sort_code"), ("Account number", "account_number")]:
         if bank.get(key):
             bank_lines.append(f"<b>{label}:</b> {escape(str(bank[key]))}")
-    note_parts = ["No VAT has been charged on this invoice."]
-    if not receipt:
-        note_parts.insert(0, f"Please use <b>{invoice.number}</b> as your bank-transfer reference.")
-    if bank_lines and not receipt:
-        note_parts.append("<br/>".join(bank_lines))
+    if invoice.status == "void" and not receipt:
+        note_parts = ["<b>VOID INVOICE — no payment is due.</b>",
+                      "This invoice number has been retained in the financial record and has not been reused.",
+                      "No VAT has been charged on this invoice."]
+    else:
+        note_parts = ["No VAT has been charged on this invoice."]
+        if not receipt:
+            note_parts.insert(0, f"Please use <b>{invoice.number}</b> as your bank-transfer reference.")
+        if bank_lines and not receipt:
+            note_parts.append("<br/>".join(bank_lines))
     if invoice.notes:
         note_parts.append(escape(invoice.notes))
     box = Table([[Paragraph("<br/><br/>".join(note_parts), normal)]], colWidths=[156 * mm])

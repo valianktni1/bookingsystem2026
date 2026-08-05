@@ -1,4 +1,4 @@
-# Mark's Business Studio — Version 8
+# Mark's Business Studio — Version 8.4
 
 Phase 2B of Mark's private, self-hosted booking and business management system. It adds secure client forms, electronic agreement acceptance, editable email templates, SMTP sending and reminders to the Phase 2A record, workflow, document and invoice tools.
 
@@ -11,8 +11,8 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - Contact information, dates, venue/project, packages, values and notes
 - Automatic starter workflow tasks for each new record
 - Task completion and dashboard workflow health
-- Bank-transfer invoice records with one shared chronological counter
-- Brand-aware invoice numbers: `WBM02001`, `ID02002`, and so on
+- Bank-transfer invoice records with separate counters for each business
+- Brand-aware invoice numbers: WBM and Ivory Digital each have their own `02001`, `02002` sequence
 - PDF, DOCX, JPEG and PNG document uploads against the correct record
 - Audit trail foundation for logins, records, tasks, invoices and uploads
 - Studio Ninja migration fields ready for a later preview/import tool
@@ -54,7 +54,13 @@ Phase 2B of Mark's private, self-hosted booking and business management system. 
 - Immediate branded website-enquiry notification to `mark@perfectweddingsbymark.uk`
 - New-enquiry notifications include all submitted details and reply directly to the couple
 
-Studio Ninja import and gallery automation remain planned for later phases without restructuring the core data.
+Version 8.4 includes the protected Studio Ninja import foundation. Imported
+records retain their original references, payments, schedules, forms, contract
+provenance and documents. Client automation is always paused during import and
+must be deliberately activated per booking after checking. The actual Studio
+Ninja data is not bundled with the application and is imported separately only
+after deployment and backup. Gallery automation remains planned for a later
+phase without restructuring the core data.
 
 ## Version 8 client experience
 

@@ -153,16 +153,16 @@ A £150 deposit secures your date."""),
 
     template_rows = {
         "quote": ("Quote email", "Your {business_name} quote", "Hi {client_first_name},\n\nThank you for getting in touch. Your quote for {package_name} is {quoted_total}.\n\nYou can review the details, complete your booking form and accept the agreement using your booking link:\n{portal_url}\n\nIf you have any questions, just reply to this email.\n\nMark\n{business_name}\n{business_phone}"),
-        "booking_link": ("Booking link", "Your {business_name} booking link", "Hi {client_first_name},\n\nHere is your booking link:\n{portal_url}\n\nPlease complete the booking form and read and accept the agreement. The date is secured once the booking fee and agreement are received.\n\nMark\n{business_name}"),
+        "booking_link": ("Booking link", "Your {business_name} booking link", "Hi {client_first_name},\n\nHere is your booking link:\n{portal_url}\n\nPlease complete the booking form and read and accept the agreement. Your date is secured as soon as I receive your first payment.\n\nMark\n{business_name}"),
         "contract_reminder": ("Contract reminder", "A quick reminder about your booking agreement", "Hi {client_first_name},\n\nJust a quick reminder to complete your booking form and accept the agreement using your wedding booking link:\n{portal_url}\n\nGive me a shout if you need anything.\n\nMark"),
         "final_questionnaire": ("Final details questionnaire", "Final details for {event_date}", "Hi {client_first_name},\n\nYour wedding is getting closer, so it is time to collect the final timings and details. Please complete the final questionnaire here:\n{portal_url}\n\nMark\nWeddings By Mark"),
         "balance_due_10": ("Final balance reminder - 10 days before", "A little reminder about your wedding balance", "Hi {client_first_name},\n\nI hope you are both well and the wedding plans are coming along nicely.\n\nJust a friendly reminder that the remaining balance for your wedding is due on {balance_due_date}. There is no need to do anything today; I simply like to give everyone plenty of notice.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf you have already made the transfer, please ignore this email and I will update your booking as soon as it reaches me.\n\nThanks,\nMark\nWeddings By Mark"),
         "balance_due_1": ("Final balance reminder - day before", "Your wedding balance is due tomorrow", "Hi {client_first_name},\n\nI hope you are both well. Just a quick friendly reminder that the remaining balance for your wedding is due tomorrow, {balance_due_date}.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf the transfer is already on its way, please ignore this message and I will update your booking when it arrives.\n\nThanks,\nMark\nWeddings By Mark"),
         "balance_overdue_2": ("Final balance reminder - 2 days after", "A quick reminder about your wedding balance", "Hi {client_first_name},\n\nI hope you are both well. Just a little reminder that the remaining balance for your wedding was due on {balance_due_date}. I know how busy things can become in the run-up to a wedding, so this may simply have slipped your mind.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf you have already made the transfer, please ignore this message and I will update your booking as soon as it reaches me. If you need to speak to me about anything, just reply to this email.\n\nThanks,\nMark\nWeddings By Mark"),
-        "payment_received": ("Payment received", "Payment received - thank you", "Hi {client_first_name},\n\nThank you, your payment has been received and your record is now confirmed.\n\nMark\n{business_name}"),
-        "enquiry_received": ("Website enquiry acknowledgement", "Thank you for your Weddings By Mark enquiry", "Hi {client_first_name},\n\nThank you for getting in touch about your wedding on {event_date} at {venue_or_project}. I have received your enquiry and will come back to you as soon as I can.\n\nIn the meantime, if you need to add anything, simply reply to this email.\n\nMark\nWeddings By Mark\n{business_phone}"),
+        "payment_received": ("Payment received", "Payment received - {payment_amount} - thank you", "Hi {client_first_name},\n\nThank you, I have received your payment of {payment_amount} on {payment_date}.\n\n{payment_status}.\n\nInvoice: {invoice_number}\nTotal paid so far: {total_paid}\nRemaining balance: {outstanding_balance}\nFinal balance due: {balance_due_date}\n\nYou can view the updated invoice, payment history and download your receipt in your wedding booking:\n{portal_url}\n\nThank you,\nMark\n{business_name}\n{business_phone}"),
+        "enquiry_received": ("Website enquiry acknowledgement", "Thank you for your Weddings By Mark enquiry", "Hi {client_first_name},\n\nThank you for getting in touch about your wedding on {event_date} at {venue_or_project}. I have received your enquiry and will come back to you as soon as I can.\n\nYour secure wedding area has also been created. You can use this private link to return to your enquiry and, once prepared, view your package quote:\n{portal_url}\n\nIn the meantime, if you need to add anything, simply reply to this email.\n\nMark\nWeddings By Mark\n{business_phone}"),
         "new_enquiry_admin": ("New website enquiry - notify Mark", "New wedding enquiry - {couple_or_company} - {event_date}", "Hi Mark,\n\nA new wedding enquiry has just been submitted through your website.\n\nCouple: {couple_or_company}\nWedding date: {event_date}\nVenue/location: {venue_or_project}\nEmail: {client_email}\nPhone: {client_phone}\nPackage interest: {package_interest}\nSelfie booth interest: {selfie_booth_interest}\nSpecial offer code: {promo_code}\nHow they found you: {heard_about_us}\n\nTheir message:\n{enquiry_message}\n\nFun question answer:\n{fun_answer}\n\nOpen the booking system:\n{admin_url}\n\nYou can reply directly to this notification and it will go to the couple.\n\nWeddings By Mark Booking System"),
-        "quote_accepted": ("Package accepted and invoice ready", "Your package is confirmed and your invoice is ready", "Hi {client_first_name},\n\nThank you for choosing your Weddings By Mark package. Your selection has been saved and your invoice is now available in your wedding booking:\n\n{portal_url}\n\nYour booking fee of {deposit_amount} is due by {deposit_due_date}. The remaining balance is due by {balance_due_date}.\n\nThe invoice contains the bank-transfer details and payment reference. You can use the same wedding booking link to complete your Wedding Booking Form, read and accept the agreement and return whenever needed.\n\nYour date is secured when the booking fee and agreement have been received.\n\nMark\nWeddings By Mark\n{business_phone}"),
+        "quote_accepted": ("Package accepted and invoice ready", "Your package is confirmed and your invoice is ready", "Hi {client_first_name},\n\nThank you for choosing your Weddings By Mark package. Your selection and any add-ons have been saved, and your invoice is now available in your wedding booking:\n\n{portal_url}\n\nYour booking fee of {deposit_amount} is due by {deposit_due_date}. The remaining balance is due by {balance_due_date}.\n\nPlease use the same secure link to complete your Wedding Booking Form/questionnaire and read and digitally sign your wedding contract. The invoice also contains the bank-transfer details and payment reference.\n\nYour date is secured as soon as I receive your first payment.\n\nMark\nWeddings By Mark\n{business_phone}"),
     }
     for brand in (Brand.WBM, Brand.IVORY):
         for key, (name, subject, body) in template_rows.items():
@@ -188,13 +188,31 @@ I have put together your Weddings By Mark quote. Use your wedding booking link b
 
 {portal_url}
 
-Once you accept your selection, your invoice will be created automatically. Your date is secured when the booking fee and agreement have been received.
+Once you accept your selection, your invoice will be created automatically. Your date is secured as soon as I receive your first payment.
 
 If you have any questions at all, simply reply to this email.
 
 Mark
 Weddings By Mark
 {business_phone}"""
+
+    if (quote_template and quote_template.display_name == "Initial package quote"
+            and "booking fee and agreement have been received" in quote_template.body):
+        quote_template.body = quote_template.body.replace(
+            "Your date is secured when the booking fee and agreement have been received.",
+            "Your date is secured as soon as I receive your first payment.",
+        )
+
+    booking_link_template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == Brand.WBM,
+        EmailTemplate.template_key == "booking_link",
+    ))
+    if (booking_link_template and booking_link_template.display_name == "Booking link"
+            and "booking fee and agreement are received" in booking_link_template.body):
+        booking_link_template.body = booking_link_template.body.replace(
+            "The date is secured once the booking fee and agreement are received.",
+            "Your date is secured as soon as I receive your first payment.",
+        )
 
     # Retire the superseded 14/7-day reminders and gently upgrade untouched WBM wording.
     for legacy in db.scalars(select(EmailTemplate).where(
@@ -217,6 +235,28 @@ Weddings By Mark
     if (accepted_template and accepted_template.display_name == "Package accepted and invoice ready"
             and "deposit_due_date" not in accepted_template.body):
         accepted_template.body = template_rows["quote_accepted"][2]
+    if (accepted_template and accepted_template.display_name == "Package accepted and invoice ready"
+            and "digitally sign your wedding contract" not in accepted_template.body):
+        accepted_template.subject = template_rows["quote_accepted"][1]
+        accepted_template.body = template_rows["quote_accepted"][2]
+
+    enquiry_template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == Brand.WBM,
+        EmailTemplate.template_key == "enquiry_received",
+    ))
+    if (enquiry_template and enquiry_template.display_name == "Website enquiry acknowledgement"
+            and "{portal_url}" not in enquiry_template.body):
+        enquiry_template.subject = template_rows["enquiry_received"][1]
+        enquiry_template.body = template_rows["enquiry_received"][2]
+
+    for payment_template in db.scalars(select(EmailTemplate).where(
+            EmailTemplate.template_key == "payment_received")).all():
+        if (payment_template.display_name == "Payment received"
+                and ("{payment_amount}" not in payment_template.body
+                     or "{outstanding_balance}" not in payment_template.body
+                     or "{portal_url}" not in payment_template.body)):
+            payment_template.subject = template_rows["payment_received"][1]
+            payment_template.body = template_rows["payment_received"][2]
 
     # Bring quotes accepted on earlier builds onto the new fixed payment schedule.
     for accepted_quote in db.scalars(select(Quote).where(Quote.status == "accepted")).all():

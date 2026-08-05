@@ -1,7 +1,27 @@
-BookingSystem2026 - Client Experience and Venue Search
-Build: 2026.08.03-client-experience-v8
+BookingSystem2026 - Protected Studio Ninja Migration Foundation
+Build: 2026.08.05-legacy-import-ready-v8.4
 
 This build includes:
+- Protected, confirmation-gated Studio Ninja import endpoints
+- Client email, portal-link and reminder automation paused on every imported record
+- Deliberate per-booking activation after Mark has checked the migrated information
+- Original Studio Ninja invoice and quote numbers retained beside new numbers
+- Separate WBM and Ivory Digital invoice sequences, both beginning from their own configured start
+- Individual historic payments and original instalment schedules retained
+- Imported questionnaire answers prefilled into the existing wedding forms
+- Contract completion provenance retained without inventing IP or signature evidence
+- Original client-visible documents available from a dedicated portal section
+- Imported financial and source documents protected from accidental deletion
+- Final wedding details remain locked until 30 days before the wedding unless Mark opens them early
+- Secure wedding area created automatically when an enquiry is submitted
+- Enquiry acknowledgement includes the couple's private wedding link
+- Booking form and contract become available after package acceptance
+- Quote-accepted email clearly links to the wedding area and requests the booking form and digital contract signature
+- Every recorded payment automatically emails the amount received, total paid and remaining balance
+- Payment confirmation includes a fresh secure link to the same wedding area and receipt
+- Any first payment secures/confirms the wedding while later part-payments continue reducing the balance
+- Time-aware UK greeting: Good morning, Good afternoon or Good evening
+- Clearer mobile text, labels, booking details, status pills and navigation
 - One-click create and send quote
 - Quote link opens directly on package selection
 - Client invoice area in the same wedding booking
@@ -24,3 +44,10 @@ This build includes:
 - Saved venue address, Place ID and coordinates with one-click Google Maps directions
 - Improved admin dashboard focus cards and new-enquiry notification badge
 - Branded email preview and explicit send-test controls
+- Cancel and reopen bookings/projects with reasons and portal-link revocation
+- Cancelled records excluded from dashboards, workflows and automated reminders
+- Void invoices while retaining invoice numbers and payment history
+- Protected deletion of genuinely mistaken unpaid invoices
+- Reset incorrect agreement acceptances and submitted client forms
+- Typed-confirmation permanent deletion for tests, duplicates and spam
+- Permanent deletion blocked wherever payment or retained financial history exists

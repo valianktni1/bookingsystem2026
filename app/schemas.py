@@ -131,7 +131,7 @@ class ContractTemplatePatch(BaseModel):
 
 
 class PortalCreateIn(BaseModel):
-    expires_days: int = Field(default=90, ge=1, le=365)
+    expires_days: int = Field(default=365, ge=1, le=3650)
 
 
 class PublicFormIn(BaseModel):
