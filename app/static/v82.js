@@ -75,8 +75,8 @@
   async function permanentlyDeleteRecordV82(r) {
     const phrase = `DELETE ${r.title}`;
     confirmedDeleteModal(
-      "Permanently delete record",
-      "The booking/project, removable invoices, tasks, notes, documents and stored files, quotes, portal links, submitted forms, agreement acceptance, emails and reminder history will be deleted. Records containing payments or retained financial invoices are protected and will be refused.",
+      "Delete test or duplicate record",
+      "The booking/project, zero-payment invoices (including a voided test invoice), tasks, notes, documents, quotes, portal links, submitted forms, agreement acceptance, emails and reminder history will be deleted. Any consumed invoice number stays consumed and is never reused. Records containing genuine payments remain protected.",
       phrase,
       async () => {
         const result = await api(`/api/bookings/${r.id}/permanent-delete`, {
@@ -93,9 +93,24 @@
         toast(result.message || "Record permanently deleted");
       }
     );
+    setModalActionLabel("Delete test / duplicate");
   }
 
   function enhanceDrawerV82(r) {
+    const primary = $(".record-primary-actions", $("#drawer"));
+    const safetyMenu = $(".record-safety-actions", $("#drawer"));
+    if (primary && safetyMenu && !safetyMenu.querySelector(".v82-delete-record")) {
+      if (r.status === "cancelled") {
+        primary.innerHTML = `<button class="secondary v82-reopen" type="button">Reopen record</button>`;
+      } else {
+        primary.innerHTML = `<button class="secondary danger-button v82-cancel" type="button">Cancel ${r.kind === "wedding" ? "booking" : "project"}</button>`;
+      }
+      safetyMenu.innerHTML = `<button class="v82-delete-record" type="button">Delete test / duplicate</button>`;
+      primary.querySelector(".v82-cancel")?.addEventListener("click", () => cancelRecordV82(r));
+      primary.querySelector(".v82-reopen")?.addEventListener("click", () => reopenRecordV82(r));
+      safetyMenu.querySelector(".v82-delete-record")?.addEventListener("click", () => permanentlyDeleteRecordV82(r));
+      return;
+    }
     const footer = $("#drawer footer");
     if (!footer || footer.querySelector(".v82-record-actions")) return;
     const actions = document.createElement("div");

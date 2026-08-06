@@ -391,10 +391,13 @@ def register_v82_routes(app: FastAPI) -> None:
                 409,
                 "This record has payment history and cannot be permanently deleted. Cancel and archive it instead.",
             )
-        if any(invoice.status != "unpaid" for invoice in invoices):
+        # A deliberately confirmed test/duplicate may contain an accepted
+        # quote and a voided zero-payment invoice. Its invoice number remains
+        # consumed by the counter, but the false client record may be removed.
+        if any(invoice.status not in ("unpaid", "void") for invoice in invoices):
             raise HTTPException(
                 409,
-                "This record contains a void or otherwise retained invoice and cannot be permanently deleted. Cancel and archive it instead.",
+                "This record contains a retained financial invoice and cannot be permanently deleted. Cancel and archive it instead.",
             )
 
         client_id = booking.client_id

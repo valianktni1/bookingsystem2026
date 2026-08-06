@@ -1,26 +1,26 @@
-BookingSystem2026 - Phone Call and Email Controls
-Build: 2026.08.06-phone-call-email-controls-v8.9.4
+BookingSystem2026 - Clean Admin Workspace
+Build: 2026.08.06-clean-admin-workspace-v8.9.5
 
-This is a complete cumulative build containing every feature through V8.9.4.
+This is a complete cumulative build containing every feature through V8.9.5.
 
-V8.9.4 changes:
+V8.9.5 admin refinement:
 
-- There is one client Wedding Booking Form / questionnaire only.
-- The incorrect final-questionnaire waiting stage and client reminder have been removed.
-- A private Finalise wedding details by phone task is scheduled for Mark 30 days before each upcoming wedding.
-- The phone task sends no client email and does not create another client form.
-- Existing imported historical final-details submissions are retained as read-only history.
-- Email templates can be added, edited, activated, deactivated and permanently deleted.
-- Deleted templates stay deleted after an application restart.
-- Active custom templates are available from the individual booking email control.
-- Every email sent to an individual client automatically receives a fresh, booking-specific secure account link.
-- The account link is appended even when the template does not contain {portal_url}.
-- The initial quote email uses Mark's warmer wording and a clear VIEW YOUR FULL QUOTE HERE button.
-- Secure client links are displayed as short branded buttons in HTML emails instead of long jumbled addresses.
-- Bank details in the quote are taken from Business settings rather than hard-coded into the template.
-- Admin-only enquiry notifications and test previews are not given a live client account link.
-- Imported Studio Ninja records remain permanently automation-suppressed and receive no automatic emails.
+- A compact booking command centre replaces the long accordion-based admin record.
+- Every record follows the same order: Overview, Quote & emails, Payments,
+  Forms & agreement, Files, Notes & history.
+- A sticky header keeps Back, Edit, Cancel/Reopen and More actions visible.
+- Email, telephone, directions and client-area controls are available immediately.
+- Six at-a-glance cards show wedding date, package, outstanding balance,
+  payment due date, forms progress and active/void invoice counts.
+- The workflow bar follows Enquiry, Quote, Payment, Booking form, Agreement, Wedding.
+- The Overview combines client details, wedding details, notes and private tasks.
+- Voided invoices are clearly retained and linked from the Overview and Payments screens.
+- Cancel booking is a visible top-level action rather than a buried footer control.
+- Delete test / duplicate safely removes zero-payment test records, including a voided
+  test invoice, while the consumed invoice number remains consumed and is never reused.
+- Genuine payments, imported Studio Ninja bookings and retained financial records remain protected.
+- Desktop and mobile use the same logical workflow with responsive controls.
 
-All previous cumulative behaviour is retained, including agreed payment dates, protected archive imports,
-original documents and invoice history, packages and add-ons, discounts, client portals, invoices,
-payment recording, payment reminders, branded email/PDF output and separate WBM/Ivory Digital numbering.
+All V8.9.4 behaviour remains included: the single Wedding Booking Form, private
+30-day phone task, editable email templates, automatic client account links,
+friendly quote wording and branded quote button.

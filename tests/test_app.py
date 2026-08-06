@@ -113,6 +113,49 @@ def test_deleted_default_email_template_stays_deleted_after_restart():
         assert ("wbm", "contract_reminder") not in keys
 
 
+def test_zero_payment_voided_test_booking_can_be_deleted_without_reusing_number():
+    db_file = TEST_ROOT / "test.db"
+    engine.dispose()
+    db_file.unlink(missing_ok=True)
+    (TEST_ROOT / "test.db-journal").unlink(missing_ok=True)
+    with TestClient(app) as client:
+        assert client.post("/api/auth/login", json={
+            "email": "mark@example.com", "password": "SecureTestPassword!123",
+        }).status_code == 200
+        booking = client.post("/api/bookings", json=booking_payload(title="Test Couple")).json()
+        first_invoice = client.post(f"/api/bookings/{booking['id']}/invoices", json={
+            "total": 899, "paid": 0, "issue_date": "2026-08-06",
+            "due_date": "2026-08-20", "description": "Test quote invoice",
+        })
+        assert first_invoice.status_code == 201
+        first_number = first_invoice.json()["number"]
+        assert client.post(f"/api/invoices/{first_invoice.json()['id']}/void", json={
+            "reason": "Test quote created while checking the workflow",
+        }).status_code == 200
+        deleted = client.post(f"/api/bookings/{booking['id']}/permanent-delete", json={
+            "reason": "Remove completed test enquiry and booking",
+            "confirmation": "DELETE Test Couple",
+        })
+        assert deleted.status_code == 200
+        assert client.get(f"/api/bookings/{booking['id']}").status_code == 404
+
+        next_booking = client.post("/api/bookings", json=booking_payload(title="Real Couple")).json()
+        next_invoice = client.post(f"/api/bookings/{next_booking['id']}/invoices", json={
+            "total": 899, "paid": 0, "issue_date": "2026-08-06",
+            "due_date": "2026-08-20", "description": "Real invoice",
+        })
+        assert next_invoice.status_code == 201
+        assert int(next_invoice.json()["number"].replace("WBM", "")) == int(first_number.replace("WBM", "")) + 1
+        assert client.post(f"/api/invoices/{next_invoice.json()['id']}/payments", json={
+            "amount": 100, "paid_date": "2026-08-06", "payment_type": "bank_transfer",
+        }).status_code == 201
+        protected = client.post(f"/api/bookings/{next_booking['id']}/permanent-delete", json={
+            "reason": "This must be refused because real money is recorded",
+            "confirmation": "DELETE Real Couple",
+        })
+        assert protected.status_code == 409
+
+
 def test_phase_two_b_flow(monkeypatch):
     db_file = TEST_ROOT / "test.db"
     engine.dispose()
@@ -123,7 +166,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.06-phone-call-email-controls-v8.9.4"}
+                                 "build": "2026.08.06-clean-admin-workspace-v8.9.5"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -138,6 +181,11 @@ def test_phase_two_b_flow(monkeypatch):
         assert "Change final payment date" in compatibility_javascript
         assert "data-due-invoice" in compatibility_javascript
         assert "changeInvoiceDueDate" in compatibility_javascript
+        workspace_javascript = client.get("/static/v895.js").text
+        assert "record-command-header" in workspace_javascript
+        assert "Quote & emails" in workspace_javascript
+        assert "Forms & agreement" in workspace_javascript
+        assert "record-primary-actions" in workspace_javascript
         client_javascript = client.get("/static/client.js").text
         assert 'name:"Final details"' not in client_javascript
         assert 'submitForm(event,"final_questionnaire")' not in client_javascript
