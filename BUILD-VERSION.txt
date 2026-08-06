@@ -1,7 +1,14 @@
 BookingSystem2026 - Full Booking Page
-Build: 2026.08.06-admin-questionnaires-v8.8.2
+Build: 2026.08.06-complete-archive-import-v8.9
 
-This build includes:
+This build includes every V8.8.2 feature plus:
+
+- Protected complete Studio Ninja archive import support.
+- Multiple original invoices per historic booking.
+- Original historic invoice numbers retained exactly.
+- Archive imports never advance the live WBM or Ivory Digital counters.
+- Historic invoices stay within archived records instead of overwhelming the active payment register.
+- Imported archive records remain permanently automation-suppressed.
 - Jobs now open as a full-screen, independently scrolling booking page
 - Clear Back to bookings control returns to the existing jobs list
 - No fixed right-hand drawer or trapped job-section scrolling

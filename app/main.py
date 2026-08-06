@@ -22,6 +22,7 @@ from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .email_service import preview_template_email, send_template_email, smtp_credentials, smtp_ready
 from .migrations import apply_safe_migrations
+from .legacy_archive_import import register_legacy_archive_import_routes
 from .legacy_import import register_legacy_import_routes
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
@@ -60,7 +61,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.8.2-admin-questionnaires", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9-complete-archive-import", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -253,7 +254,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.06-admin-questionnaires-v8.8.2"}
+            "build": "2026.08.06-complete-archive-import-v8.9"}
 
 
 @app.get("/api/public/config")
@@ -699,8 +700,16 @@ def delete_note(note_id: str, _: Admin = Depends(current_admin), db: Session = D
 
 
 @app.get("/api/invoices")
-def list_invoices(brand: Brand | None = None, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
-    stmt = select(Invoice).options(selectinload(Invoice.booking), selectinload(Invoice.payments))
+def list_invoices(brand: Brand | None = None, archived: bool = False,
+                  _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    # Keep the day-to-day payment register useful after the complete Studio
+    # Ninja archive is imported. Historic invoices remain available inside
+    # their archived records and through ?archived=true, but do not swamp the
+    # active balances screen.
+    stmt = (select(Invoice)
+            .join(Booking)
+            .options(selectinload(Invoice.booking), selectinload(Invoice.payments))
+            .where(Booking.archived_at.is_not(None) if archived else Booking.archived_at.is_(None)))
     if brand:
         stmt = stmt.where(Invoice.brand == brand)
     rows = list(db.scalars(stmt).all())
@@ -1766,6 +1775,7 @@ async def reminder_loop():
 register_v82_routes(app)
 register_v84_routes(app)
 register_legacy_import_routes(app)
+register_legacy_archive_import_routes(app)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
