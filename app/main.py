@@ -30,14 +30,14 @@ from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, 
                      Quote, RecordKind, RecordStatus, ReminderLog, Task)
 from .pdf import invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
-                      ContractAcceptIn, ContractTemplatePatch, EmailTemplatePatch, EnquiryIn,
+                      ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
                       InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       PublicFormIn, QuoteAcceptIn, QuotePreparationIn, SendEmailIn, TaskIn, TaskPatch,
                       TemplateTestIn)
 from .security import create_token, current_admin, verify_password
 from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
-                       next_invoice_number, visible_task_condition)
+                       next_invoice_number, sync_final_details_call_task, visible_task_condition)
 from .v82_routes import register_v82_routes
 from .v84_routes import automations_allowed, final_details_unlocked, register_v84_routes
 
@@ -62,7 +62,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.3-agreed-payment-date-ui-fix", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.4-phone-call-email-controls", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -75,6 +75,28 @@ def portal_lifetime_days(booking: Booking, minimum_days: int = 365) -> int:
         through_aftercare = (booking.event_date - date.today()).days + 365
         return min(3650, max(minimum_days, through_aftercare))
     return max(minimum_days, 1095)
+
+
+def issue_client_email_url(db: Session, booking: Booking, template_key: str,
+                           minimum_days: int = 365) -> str:
+    """Issue a fresh correct account link for an individual client email."""
+    raw, _ = issue_portal_token(db, booking.id,
+                                portal_lifetime_days(booking, max(365, minimum_days)))
+    tabs = {
+        "quote": "quote",
+        "quote_followup_1": "quote",
+        "quote_followup_final": "quote",
+        "quote_accepted": "invoices",
+        "deposit_due_1": "invoices",
+        "payment_received": "invoices",
+        "balance_due_7": "invoices",
+        "balance_due_1": "invoices",
+        "balance_overdue_2": "invoices",
+        "contract_reminder": "agreement",
+    }
+    tab = tabs.get(template_key)
+    base = f"{settings.app_url.rstrip('/')}/client/{raw}"
+    return f"{base}?tab={tab}" if tab else base
 
 
 def confirm_when_paid(booking: Booking) -> bool:
@@ -267,7 +289,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.06-agreed-payment-date-ui-fix-v8.9.3"}
+            "build": "2026.08.06-phone-call-email-controls-v8.9.4"}
 
 
 @app.get("/api/public/config")
@@ -317,7 +339,7 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                       workflow_state={"source": "website_enquiry", "received_at": datetime.now(timezone.utc).isoformat()})
     db.add(booking)
     db.flush()
-    create_default_tasks(db, booking.id, booking.kind)
+    create_default_tasks(db, booking.id, booking.kind, booking.event_date)
     raw_portal_token, portal_row = issue_portal_token(
         db, booking.id, portal_lifetime_days(booking)
     )
@@ -574,7 +596,7 @@ def create_booking(payload: BookingIn, _: Admin = Depends(current_admin), db: Se
     booking = Booking(**payload.model_dump(exclude={"client"}), client_id=client.id)
     db.add(booking)
     db.flush()
-    create_default_tasks(db, booking.id, booking.kind)
+    create_default_tasks(db, booking.id, booking.kind, booking.event_date)
     audit(db, "create", "booking", booking.id, {"title": booking.title, "brand": booking.brand.value})
     db.commit()
     return get_booking(booking.id, _, db)
@@ -620,6 +642,8 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
             if agreed_due:
                 replace_final_schedule_due_date(invoice, agreed_due)
                 replace_balance_note(invoice, agreed_due)
+    if "event_date" in values:
+        sync_final_details_call_task(db, item)
     auto_confirmed = confirm_when_paid(item)
     audit(db, "update", "booking", item.id,
           {"fields": list(payload.model_fields_set), "auto_confirmed": auto_confirmed})
@@ -1091,6 +1115,11 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
     if quote_data and quote.invoice_id:
         invoice = db.get(Invoice, quote.invoice_id)
         quote_data["invoice_number"] = invoice.number if invoice else None
+    client_templates = db.scalars(select(EmailTemplate).where(
+        EmailTemplate.brand == booking.brand,
+        EmailTemplate.is_active.is_(True),
+        EmailTemplate.template_key != "new_enquiry_admin",
+    ).order_by(EmailTemplate.display_name)).all()
     return {
         "submissions": [{"id": x.id, "form_type": x.form_type, "data": x.data,
                          "submission_source": x.submission_source,
@@ -1107,6 +1136,9 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "quote_preparation": quote_preparation_json(booking),
         "automation_suppressed": booking.automation_suppressed,
         "final_details_unlocked": final_details_unlocked(db, booking),
+        "email_templates": [{"template_key": item.template_key,
+                             "display_name": item.display_name}
+                            for item in client_templates],
     }
 
 
@@ -1218,6 +1250,24 @@ def test_template(template_id: str, payload: TemplateTestIn, admin: Admin = Depe
     return {"ok": True, "subject": subject, "recipient": str(payload.recipient)}
 
 
+@app.post("/api/communications/templates", status_code=201)
+def create_template(payload: EmailTemplateIn, _: Admin = Depends(current_admin),
+                    db: Session = Depends(get_db)):
+    if db.scalar(select(EmailTemplate.id).where(
+            EmailTemplate.brand == payload.brand,
+            EmailTemplate.template_key == payload.template_key).limit(1)):
+        raise HTTPException(409, "That template key already exists for this business")
+    row = EmailTemplate(**payload.model_dump())
+    db.add(row)
+    db.flush()
+    audit(db, "create_email_template", "email_template", row.id,
+          {"key": row.template_key, "brand": row.brand.value})
+    db.commit()
+    return {"id": row.id, "brand": row.brand.value, "template_key": row.template_key,
+            "display_name": row.display_name, "subject": row.subject, "body": row.body,
+            "is_active": row.is_active}
+
+
 @app.patch("/api/communications/templates/{template_id}")
 def patch_template(template_id: str, payload: EmailTemplatePatch, _: Admin = Depends(current_admin),
                    db: Session = Depends(get_db)):
@@ -1229,6 +1279,20 @@ def patch_template(template_id: str, payload: EmailTemplatePatch, _: Admin = Dep
     audit(db, "update_email_template", "email_template", row.id, {"key": row.template_key})
     db.commit()
     return {"ok": True}
+
+
+@app.delete("/api/communications/templates/{template_id}", status_code=204)
+def delete_template(template_id: str, _: Admin = Depends(current_admin),
+                    db: Session = Depends(get_db)):
+    row = db.get(EmailTemplate, template_id)
+    if not row:
+        raise HTTPException(404, "Email template not found")
+    audit(db, "delete_email_template", "email_template", row.id,
+          {"key": row.template_key, "brand": row.brand.value,
+           "display_name": row.display_name})
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.patch("/api/communications/contracts/{contract_id}")
@@ -1411,7 +1475,8 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
         raise HTTPException(404, "Active email template not found")
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
     try:
-        subject, _ = send_template_email(booking, profile, template, payload.portal_url)
+        portal_url = issue_client_email_url(db, booking, template.template_key)
+        subject, _ = send_template_email(booking, profile, template, portal_url)
         log = EmailLog(booking_id=booking.id, template_key=template.template_key,
                        recipient=booking.client.email, subject=subject, status="sent")
         db.add(log)
@@ -1658,9 +1723,6 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
     portal = resolve_portal(db, token)
     booking = portal.booking
     require_booking_journey_unlocked(db, booking)
-    if (payload.form_type == "final_questionnaire"
-            and not final_details_unlocked(db, booking)):
-        raise HTTPException(409, "Final wedding details open 30 days before the wedding")
     row = db.scalar(select(FormSubmission).where(FormSubmission.booking_id == booking.id,
                                                  FormSubmission.form_type == payload.form_type))
     if row:
@@ -1685,6 +1747,7 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
             try:
                 booking.event_date = date.fromisoformat(str(payload.data["wedding_date"]))
                 refresh_wedding_payment_dates(db, booking)
+                sync_final_details_call_task(db, booking)
             except ValueError:
                 pass
         if payload.data.get("ceremony_details") and not booking.venue_or_project:
@@ -1705,11 +1768,6 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
             booking.package_name = str(payload.data["package_selected"]).strip()[:160]
         for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
                                                   Task.title.ilike("%booking form%"))).all():
-            task.completed = True
-    else:
-        booking.workflow_state = {**(booking.workflow_state or {}), "final_questionnaire": payload.data}
-        for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
-                                                  Task.title.ilike("%questionnaire%"))).all():
             task.completed = True
     audit(db, "submit_form", "booking", booking.id, {"form_type": payload.form_type})
     db.commit()
@@ -1796,8 +1854,6 @@ def run_due_reminders(db: Session) -> dict:
             days_to_wedding = (booking.event_date - today).days
             if days_to_wedding == 120:
                 reminders.append(("check_in_120", "check_in_120", None, 0))
-            if days_to_wedding == 30:
-                reminders.append(("final_questionnaire", "final_questionnaire", "final-details", 60))
 
         if is_wbm_wedding and booking.balance_due_date and has_balance:
             days_to_balance = (booking.balance_due_date - today).days
@@ -1822,12 +1878,11 @@ def run_due_reminders(db: Session) -> dict:
                                                              EmailTemplate.is_active.is_(True)))
             profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
             try:
-                portal_url = None
                 if not template:
                     raise RuntimeError("Reminder template is inactive or missing")
-                if portal_tab:
-                    raw, _ = issue_portal_token(db, booking.id, expires_days)
-                    portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab={portal_tab}"
+                portal_url = issue_client_email_url(
+                    db, booking, template_key, max(365, expires_days)
+                )
                 subject, _ = send_template_email(booking, profile, template, portal_url)
                 reminder.status, reminder.sent_at = "sent", datetime.now(timezone.utc)
                 db.add(EmailLog(booking_id=booking.id, template_key=template_key, recipient=booking.client.email,

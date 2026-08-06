@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, or_, select
@@ -12,21 +12,47 @@ def audit(db: Session, action: str, entity_type: str, entity_id: str | None = No
     db.add(AuditLog(action=action, entity_type=entity_type, entity_id=entity_id, details=details or {}))
 
 
-def create_default_tasks(db: Session, booking_id: str, kind: RecordKind) -> None:
+def final_details_call_due(event_date: date | None) -> datetime | None:
+    if not event_date:
+        return None
+    return datetime.combine(event_date - timedelta(days=30), time(hour=10), tzinfo=timezone.utc)
+
+
+def create_default_tasks(db: Session, booking_id: str, kind: RecordKind,
+                         event_date: date | None = None) -> None:
     if kind == RecordKind.WEDDING:
         # Payment reminders and the two pre-wedding check-ins are automatic.
         # Keep only the three things Mark may genuinely need to chase by hand.
         tasks = [
-            ("Send package quote", "wbm_quote"),
-            ("Booking form completed", "wbm_booking_form"),
-            ("Wedding contract signed", "wbm_contract"),
+            ("Send package quote", "wbm_quote", None),
+            ("Booking form completed", "wbm_booking_form", None),
+            ("Wedding contract signed", "wbm_contract", None),
+            ("Finalise wedding details by phone", "wbm_final_details_call",
+             final_details_call_due(event_date)),
         ]
     else:
         names = ["Send quote", "Receive booking form", "Receive signed contract", "Confirm deposit",
                  "Receive website content", "Client review", "Launch website"]
-        tasks = [(name, f"digital_step_{position}") for position, name in enumerate(names, 1)]
-    for name, workflow_key in tasks:
-        db.add(Task(booking_id=booking_id, title=name, workflow_key=workflow_key))
+        tasks = [(name, f"digital_step_{position}", None) for position, name in enumerate(names, 1)]
+    for name, workflow_key, due_at in tasks:
+        db.add(Task(booking_id=booking_id, title=name, workflow_key=workflow_key, due_at=due_at))
+
+
+def sync_final_details_call_task(db: Session, booking: Booking) -> Task | None:
+    """Keep the private phone-call reminder aligned with the wedding date."""
+    if booking.kind != RecordKind.WEDDING:
+        return None
+    task = db.scalar(select(Task).where(
+        Task.booking_id == booking.id,
+        Task.workflow_key == "wbm_final_details_call",
+    ).limit(1))
+    if not task:
+        task = Task(booking_id=booking.id, title="Finalise wedding details by phone",
+                    workflow_key="wbm_final_details_call")
+        db.add(task)
+    task.title = "Finalise wedding details by phone"
+    task.due_at = final_details_call_due(booking.event_date)
+    return task
 
 
 def visible_task_condition():

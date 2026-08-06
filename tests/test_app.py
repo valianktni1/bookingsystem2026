@@ -62,6 +62,8 @@ def test_branded_email_artwork_is_brand_specific():
                   if part.get_content_maintype() == "image"}
     assert "cid:weddings-by-mark-logo" in wbm_html
     assert "cid:weddings-by-mark-awards" in wbm_html
+    assert ">OPEN YOUR SECURE ACCOUNT</a>" in wbm_html
+    assert ">https://booking.weddingsbymark.uk/client/example</a>" not in wbm_html
     assert wbm_images == {"weddings-by-mark-logo.png", "weddings-by-mark-awards.png"}
     notification = build_email_message(
         wedding, wbm_profile, "New enquiry", "A new enquiry has arrived",
@@ -87,6 +89,30 @@ def test_branded_email_artwork_is_brand_specific():
     assert ivory_images == {"ivory-digital-logo.png"}
 
 
+def test_deleted_default_email_template_stays_deleted_after_restart():
+    db_file = TEST_ROOT / "test.db"
+    engine.dispose()
+    db_file.unlink(missing_ok=True)
+    (TEST_ROOT / "test.db-journal").unlink(missing_ok=True)
+    with TestClient(app) as client:
+        assert client.post("/api/auth/login", json={
+            "email": "mark@example.com", "password": "SecureTestPassword!123",
+        }).status_code == 200
+        rows = client.get("/api/communications/templates").json()["templates"]
+        deleted = next(row for row in rows
+                       if row["brand"] == "wbm" and row["template_key"] == "contract_reminder")
+        assert client.delete(f"/api/communications/templates/{deleted['id']}").status_code == 204
+
+    # Startup must not quietly restore a template Mark deliberately removed.
+    with TestClient(app) as client:
+        assert client.post("/api/auth/login", json={
+            "email": "mark@example.com", "password": "SecureTestPassword!123",
+        }).status_code == 200
+        keys = {(row["brand"], row["template_key"])
+                for row in client.get("/api/communications/templates").json()["templates"]}
+        assert ("wbm", "contract_reminder") not in keys
+
+
 def test_phase_two_b_flow(monkeypatch):
     db_file = TEST_ROOT / "test.db"
     engine.dispose()
@@ -97,7 +123,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.06-agreed-payment-date-ui-fix-v8.9.3"}
+                                 "build": "2026.08.06-phone-call-email-controls-v8.9.4"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -112,6 +138,9 @@ def test_phase_two_b_flow(monkeypatch):
         assert "Change final payment date" in compatibility_javascript
         assert "data-due-invoice" in compatibility_javascript
         assert "changeInvoiceDueDate" in compatibility_javascript
+        client_javascript = client.get("/static/client.js").text
+        assert 'name:"Final details"' not in client_javascript
+        assert 'submitForm(event,"final_questionnaire")' not in client_javascript
 
         assert client.get("/api/dashboard").status_code == 401
 
@@ -124,10 +153,14 @@ def test_phase_two_b_flow(monkeypatch):
         assert wedding_data["brand"] == "wbm"
         assert wedding_data["venue_place_id"] == "test-place-peckforton"
         assert wedding_data["venue_address"].startswith("Peckforton Castle")
-        assert len(wedding_data["tasks"]) == 3
+        assert len(wedding_data["tasks"]) == 4
         assert {task["workflow_key"] for task in wedding_data["tasks"]} == {
-            "wbm_quote", "wbm_booking_form", "wbm_contract",
+            "wbm_quote", "wbm_booking_form", "wbm_contract", "wbm_final_details_call",
         }
+        final_call = next(task for task in wedding_data["tasks"]
+                          if task["workflow_key"] == "wbm_final_details_call")
+        assert final_call["title"] == "Finalise wedding details by phone"
+        assert final_call["due_at"].startswith("2026-09-04T10:00:00")
 
         templates = client.get("/api/communications/templates")
         assert templates.status_code == 200
@@ -143,7 +176,9 @@ def test_phase_two_b_flow(monkeypatch):
         assert "15. DELIVERY TIME FRAMES AND ALBUMS" in wedding_contract["body"]
         quote_template = next(row for row in templates.json()["templates"]
                               if row["brand"] == "wbm" and row["template_key"] == "quote")
-        assert "compare the available packages" in quote_template["body"]
+        assert "planning a wedding can feel overwhelming" in quote_template["body"]
+        assert "[VIEW YOUR FULL QUOTE HERE]({portal_url})" in quote_template["body"]
+        assert "{bank_account_name}" in quote_template["body"]
         reminder_keys = {row["template_key"] for row in templates.json()["templates"]
                          if row["brand"] == "wbm" and row["is_active"]}
         assert {"quote_followup_1", "quote_followup_final", "deposit_due_1", "check_in_120",
@@ -172,7 +207,30 @@ def test_phase_two_b_flow(monkeypatch):
         preview = client.get(f"/api/communications/templates/{quote_template['id']}/preview")
         assert preview.status_code == 200
         assert "/static/branding/weddings-by-mark-logo.png" in preview.json()["html"]
+        assert ">VIEW YOUR FULL QUOTE HERE</a>" in preview.json()["html"]
+        assert ">https://booking.weddingsbymark.uk/client/example-preview-link</a>" not in preview.json()["html"]
         assert preview.json()["test_recipient"] == "mark@perfectweddingsbymark.uk"
+        custom_template = client.post("/api/communications/templates", json={
+            "brand": "wbm", "template_key": "custom_client_note",
+            "display_name": "Custom client note",
+            "subject": "Hello {client_first_name}",
+            "body": "Hi {client_first_name},\n\nThis deliberately has no link placeholder.",
+            "is_active": True,
+        })
+        assert custom_template.status_code == 201
+        custom_preview = client.get(
+            f"/api/communications/templates/{custom_template.json()['id']}/preview"
+        )
+        assert custom_preview.status_code == 200
+        assert "VIEW YOUR WEDDING ACCOUNT, INVOICES AND BOOKING DETAILS" in custom_preview.json()["body"]
+        assert "/client/example-preview-link" in custom_preview.json()["body"]
+        assert client.patch(
+            f"/api/communications/templates/{custom_template.json()['id']}",
+            json={"is_active": False, "display_name": "Custom note paused"},
+        ).status_code == 200
+        assert client.delete(
+            f"/api/communications/templates/{custom_template.json()['id']}"
+        ).status_code == 204
 
         portal = client.post(f"/api/bookings/{wedding_data['id']}/portal", json={"expires_days": 90})
         assert portal.status_code == 201
@@ -411,7 +469,7 @@ def test_phase_two_b_flow(monkeypatch):
         dashboard = client.get("/api/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json()["confirmed"] == 1
-        assert dashboard.json()["open_tasks"] == 7
+        assert dashboard.json()["open_tasks"] == 8
 
         upload = client.post(
             f"/api/bookings/{wedding_data['id']}/documents?category=contract",

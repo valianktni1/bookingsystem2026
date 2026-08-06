@@ -297,7 +297,6 @@
     try {
       const data = await api(`/api/bookings/${r.id}/portal`);
       const bookingForm = data.submissions.find(item => item.form_type === "booking_form");
-      const finalForm = data.submissions.find(item => item.form_type === "final_questionnaire");
       if (r.status === "cancelled") {
         const warning = document.createElement("div");
         warning.className = "v82-portal-cancelled";
@@ -308,14 +307,13 @@
           if (button) button.disabled = true;
         });
       }
-      if (!data.contract && !bookingForm && !finalForm) return;
+      if (!data.contract && !bookingForm) return;
       const panel = document.createElement("section");
       panel.className = "v82-reset-panel";
-      panel.innerHTML = `<div><strong>Correct submitted client items</strong><span>Protected reset controls for mistakes, tests or corrected information.</span></div><div class="v82-reset-actions">${data.contract ? `<button class="secondary" data-v82-reset-contract>Reset agreement</button>` : ""}${bookingForm ? `<button class="secondary" data-v82-reset-form="booking_form">Reset booking form</button>` : ""}${finalForm ? `<button class="secondary" data-v82-reset-form="final_questionnaire">Reset final questionnaire</button>` : ""}</div>`;
+      panel.innerHTML = `<div><strong>Correct submitted client items</strong><span>Protected reset controls for mistakes, tests or corrected information.</span></div><div class="v82-reset-actions">${data.contract ? `<button class="secondary" data-v82-reset-contract>Reset agreement</button>` : ""}${bookingForm ? `<button class="secondary" data-v82-reset-form="booking_form">Reset booking form</button>` : ""}</div>`;
       body.append(panel);
       panel.querySelector("[data-v82-reset-contract]")?.addEventListener("click", () => resetContractV82(r));
       panel.querySelector('[data-v82-reset-form="booking_form"]')?.addEventListener("click", () => resetFormV82(r, "booking_form", "Wedding Booking Form"));
-      panel.querySelector('[data-v82-reset-form="final_questionnaire"]')?.addEventListener("click", () => resetFormV82(r, "final_questionnaire", "final questionnaire"));
     } catch (error) {
       console.error("Unable to add V8.2 reset controls", error);
     }

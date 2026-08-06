@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .content import WBM_CONTRACT_BODY, WBM_CONTRACT_TITLE, WBM_CONTRACT_VERSION
 from .models import (AddOnOption, Admin, Booking, Brand, BusinessProfile, Client, ContractTemplate,
-                     EmailTemplate, Invoice, InvoiceCounter, PackageOption, Quote, RecordKind, RecordStatus)
+                     EmailTemplate, Invoice, InvoiceCounter, PackageOption, Quote, RecordKind, RecordStatus,
+                     Task)
 from .security import hash_password
-from .services import create_default_tasks
+from .services import create_default_tasks, sync_final_details_call_task
 
 
 def bootstrap(db: Session) -> None:
@@ -156,7 +157,6 @@ A £150 deposit secures your date."""),
         "quote": ("Quote email", "Your {business_name} quote", "Hi {client_first_name},\n\nThank you for getting in touch. Your quote for {package_name} is {quoted_total}.\n\nYou can review the details, complete your booking form and accept the agreement using your booking link:\n{portal_url}\n\nIf you have any questions, just reply to this email.\n\nMark\n{business_name}\n{business_phone}"),
         "booking_link": ("Booking link", "Your {business_name} booking link", "Hi {client_first_name},\n\nHere is your booking link:\n{portal_url}\n\nPlease complete the booking form and read and accept the agreement. Your date is secured as soon as I receive your first payment.\n\nMark\n{business_name}"),
         "contract_reminder": ("Contract reminder", "A quick reminder about your booking agreement", "Hi {client_first_name},\n\nJust a quick reminder to complete your booking form and accept the agreement using your wedding booking link:\n{portal_url}\n\nGive me a shout if you need anything.\n\nMark"),
-        "final_questionnaire": ("Final details questionnaire", "Final details for {event_date}", "Hi {client_first_name},\n\nYour wedding is getting closer, so it is time to collect the final timings and details. Please complete the final questionnaire here:\n{portal_url}\n\nMark\nWeddings By Mark"),
         "quote_followup_1": ("Quote follow-up - next day", "Just checking you received your wedding quote", "Hi {client_first_name},\n\nI just wanted to check that the wedding quote I sent yesterday reached you safely. Emails occasionally find their way into spam or junk folders, so when you have a moment would you mind checking there if you cannot see it?\n\nHere is your wedding booking link again:\n{portal_url}\n\nThere is absolutely no pressure. If you have any questions or would like to talk through the packages, just reply to this email and I will be happy to help.\n\nThanks,\nMark\nWeddings By Mark"),
         "quote_followup_final": ("Quote follow-up - final check", "A final quick check about your wedding quote", "Hi {client_first_name},\n\nI just wanted to make one final quick check that you received your Weddings By Mark quote and were able to open it.\n\nYou can view it here whenever you are ready:\n{portal_url}\n\nIf your plans have changed, that is completely fine. If you would like any help choosing a package or have a question, simply reply and I will be happy to help.\n\nThanks,\nMark\nWeddings By Mark"),
         "deposit_due_1": ("Booking fee reminder", "A little reminder about your wedding booking fee", "Hi {client_first_name},\n\nThank you again for choosing Weddings By Mark. I just wanted to send a friendly reminder that the booking fee shown on your invoice is now due. Your date is secured as soon as I receive your first payment, even if you are paying the booking fee in more than one transfer.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf the transfer is already on its way, please ignore this message and I will update your invoice as soon as it reaches me.\n\nThanks,\nMark\nWeddings By Mark"),
@@ -178,8 +178,31 @@ A £150 deposit secures your date."""),
                                                 "balance_due_7", "balance_due_10", "balance_due_1",
                                                 "balance_overdue_2"):
                 continue
-            if not db.scalar(select(EmailTemplate).where(EmailTemplate.brand == brand, EmailTemplate.template_key == key)):
+            if fresh_install and not db.scalar(select(EmailTemplate).where(EmailTemplate.brand == brand, EmailTemplate.template_key == key)):
                 db.add(EmailTemplate(brand=brand, template_key=key, display_name=name, subject=subject, body=body))
+
+    # There is one Wedding Booking Form/questionnaire only. Final details are
+    # confirmed privately by Mark on the phone, so this old client form/email
+    # must never be offered or sent again. The row is retained only so it can
+    # be reviewed or deleted safely from the template manager.
+    for obsolete in db.scalars(select(EmailTemplate).where(
+            EmailTemplate.template_key == "final_questionnaire")).all():
+        obsolete.is_active = False
+
+    # Give every active upcoming wedding one private phone-call reminder.
+    # This creates no portal form and sends no client email, including for
+    # permanently suppressed Studio Ninja imports.
+    for booking in db.scalars(select(Booking).where(
+            Booking.brand == Brand.WBM,
+            Booking.kind == RecordKind.WEDDING,
+            Booking.archived_at.is_(None),
+            Booking.status != RecordStatus.CANCELLED,
+            Booking.event_date.is_not(None),
+            Booking.event_date >= date.today())).all():
+        sync_final_details_call_task(db, booking)
+    for obsolete_task in db.scalars(select(Task).where(
+            Task.title.ilike("%final%questionnaire%"))).all():
+        obsolete_task.completed = True
 
     db.flush()
     quote_template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
@@ -203,6 +226,40 @@ If you have any questions at all, simply reply to this email.
 Mark
 Weddings By Mark
 {business_phone}"""
+
+    # Keep Mark's friendly, personal quote wording while preserving the safe
+    # dynamic client/date/venue/link fields and business-settings bank details.
+    if (quote_template and quote_template.display_name == "Initial package quote"
+            and "I have put together your Weddings By Mark quote" in quote_template.body):
+        quote_template.subject = "Your Weddings By Mark wedding quote"
+        quote_template.body = """Hi {client_first_name},
+
+Thank you for considering Weddings By Mark to capture your special day. I am thrilled to let you know that I still have your wedding date, {event_date}, available, and I would be honoured to be a part of it.
+
+I understand that planning a wedding can feel overwhelming, but I am here to make the photography part as easy and stress-free as possible.
+
+That is why I have put together a tailored quote specifically for your wedding at {venue_or_project}, with all of my available packages and optional extras. You can compare everything, make your choices and accept the quote through my online booking system.
+
+[VIEW YOUR FULL QUOTE HERE]({portal_url})
+
+If you are happy to go ahead, your chosen package and any extras will be saved and your itemised invoice will be created automatically. The booking fee shown for your chosen package is due within one day of accepting the quote, and your wedding date is secured as soon as I receive your first payment.
+
+Why choose Weddings By Mark? Because I believe your wedding day is just as important to me as it is to you. I am committed to creating timeless images that will become cherished memories for years to come. With my experience, creativity and attention to detail, you can relax knowing that every precious moment will be captured beautifully.
+
+I am more than happy to answer any questions or provide any additional information. Simply reply to this email or give me a call on {business_phone}, and I will be delighted to help.
+
+Bank-transfer details
+Account name: {bank_account_name}
+Sort code: {bank_sort_code}
+Account number: {bank_account_number}
+
+Once you have accepted your quote, please use the invoice number shown in your wedding account as the payment reference.
+
+Lastly, I would like to wish you both all the very best for your upcoming wedding day and your future together. I look forward to hearing from you and hopefully being a part of your special day.
+
+Warmest wishes,
+Mark
+Weddings By Mark"""
 
     if (quote_template and quote_template.display_name == "Initial package quote"
             and "booking fee and agreement have been received" in quote_template.body):
@@ -322,5 +379,5 @@ Weddings By Mark
             booking = Booking(brand=brand, kind=kind, status=RecordStatus.CONFIRMED, title=title, client_id=client.id, event_date=date.today()+timedelta(days=7+index*7), venue_or_project=venue, quoted_total=Decimal(total))
             db.add(booking)
             db.flush()
-            create_default_tasks(db, booking.id, kind)
+            create_default_tasks(db, booking.id, kind, booking.event_date)
         db.commit()

@@ -2,7 +2,7 @@ const $ = selector => document.querySelector(selector);
 let data = null;
 let bookingStep = 0;
 const requestedTab = new URLSearchParams(location.search).get("tab");
-const requestedTabs = {quote:"Choose package", invoices:"Invoices", booking:"Booking form", "final-details":"Final details", documents:"Documents", agreement:"Agreement"};
+const requestedTabs = {quote:"Choose package", invoices:"Invoices", booking:"Booking form", documents:"Documents", agreement:"Agreement"};
 let active = requestedTabs[requestedTab] || "Overview";
 const token = location.pathname.split("/").filter(Boolean).pop();
 
@@ -28,12 +28,10 @@ function bookingJourneyUnlocked() {
   return data.record.kind !== "wedding" || Boolean(data.quote) || !["enquiry", "quoted"].includes(data.record.status);
 }
 function completed() {
-  const booking = existing("booking_form"), final = existing("final_questionnaire");
   return {
     quote: Boolean(data.quote),
     invoices: Boolean(data.invoices.length),
     booking: Boolean(data.submissions.some(x => x.form_type === "booking_form")),
-    final: Boolean(data.submissions.some(x => x.form_type === "final_questionnaire")),
     agreement: Boolean(data.contract),
   };
 }
@@ -59,7 +57,6 @@ async function init() {
   try {
     data = await api(`/api/client/${token}`);
     if (!bookingJourneyUnlocked() && !["Overview", "Choose package"].includes(active)) active = "Overview";
-    if (active === "Final details" && !data.final_details_unlocked) active = "Overview";
     const brand = data.business.brand || (data.record.kind === "wedding" ? "wbm" : "ivory");
     document.body.classList.add(`brand-${brand}`);
     $("#business-logo").src = brand === "ivory" ? "/static/branding/ivory-digital-logo.png" : "/static/branding/weddings-by-mark-logo.png";
@@ -91,16 +88,11 @@ function tabDefinition() {
     ...(hasQuote ? [{name:"Choose package", icon:"♡", done:done.quote}] : []),
     ...(unlocked ? [{name:"Invoices", icon:"£", done:done.invoices},
       {name:"Booking form", icon:"✎", done:done.booking},
-      ...(data.record.kind === "wedding" ? [{name:"Final details", icon:"☷", done:done.final, locked:!data.final_details_unlocked}] : []),
       ...(data.documents?.length ? [{name:"Documents", icon:"▤"}] : []),
       {name:"Agreement", icon:"✓", done:done.agreement}] : []),
   ];
 }
 function setActive(tab) {
-  if (tab === "Final details" && !data.final_details_unlocked) {
-    toast("Final wedding details open 30 days before your wedding");
-    return;
-  }
   active = tab;
   window.scrollTo({top:Math.max(0, $("#tabs").offsetTop - 10), behavior:"smooth"});
   renderTabs();
@@ -115,7 +107,6 @@ function render() {
   else if (active === "Choose package") quotePanel();
   else if (active === "Invoices") invoicesPanel();
   else if (active === "Booking form") bookingForm();
-  else if (active === "Final details") finalForm();
   else if (active === "Documents") documentsPanel();
   else agreement();
 }
@@ -127,7 +118,7 @@ function overview() {
     ? [["Choose package", "Package quote", done.quote]]
     : data.record.kind === "wedding" ? [
     ["Choose package", "Package quote", done.quote], ["Booking form", "Booking form", done.booking],
-    ["Agreement", "Agreement", done.agreement], ["Final details", "Final details", done.final, !data.final_details_unlocked]
+    ["Agreement", "Agreement", done.agreement]
   ] : [["Booking form", "Project information", done.booking], ["Agreement", "Agreement", done.agreement]];
   const next = journey.find(item => !item[2] && !item[3]);
   const directions = directionsUrl();
@@ -234,16 +225,6 @@ function wireBookingSteps() {
     bookingStep = Math.min(steps.length-1,bookingStep+1); show(); window.scrollTo({top:$("#panel").offsetTop-10,behavior:"smooth"});
   };
   show();
-}
-function finalForm() {
-  if (!data.final_details_unlocked) {
-    $("#panel").innerHTML = `<h2>Final wedding details</h2><div class="final-details-locked"><i>🔒</i><strong>This section opens 30 days before your wedding</strong><span>It keeps the last timings and supplier information up to date. Mark can also open it early if needed.</span><button class="secondary-client" data-return-overview>Return to overview</button></div>`;
-    $("[data-return-overview]").onclick = () => setActive("Overview");
-    return;
-  }
-  const x = existing("final_questionnaire");
-  $("#panel").innerHTML = `<h2>Final wedding details</h2><p class="intro">Please give as much detail as possible so the day runs smoothly.</p>${x.timeline ? `<div class="complete">✓ Previously submitted - you can update it below.</div><br>` : ""}<form id="final-form"><div class="form-grid"><label class="full">Full timeline for the day *<textarea name="timeline" rows="6" required>${esc(x.timeline||"")}</textarea></label><label class="full">Important family/group photographs<textarea name="group_photos" rows="4">${esc(x.group_photos||"")}</textarea></label><label class="full">Supplier names and contact details<textarea name="suppliers" rows="4">${esc(x.suppliers||"")}</textarea></label>${field("Speeches planned for","speeches_time",x.speeches_time||"")}${field("First dance time","first_dance_time",x.first_dance_time||"")}<label class="full">Surprises, sensitivities or special requests<textarea name="special_requests" rows="4">${esc(x.special_requests||"")}</textarea></label><label class="full">Video music suggestions, if included<textarea name="music_suggestions" rows="3">${esc(x.music_suggestions||"")}</textarea></label></div><div class="actions"><button class="primary" type="submit">Save final details</button></div></form>`;
-  $("#final-form").onsubmit = event => submitForm(event,"final_questionnaire");
 }
 async function submitForm(event, type) {
   event.preventDefault();

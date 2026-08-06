@@ -121,6 +121,15 @@ class BusinessPatch(BaseModel):
     bank_details: dict | None = None
 
 
+class EmailTemplateIn(BaseModel):
+    brand: Brand
+    template_key: str = Field(pattern="^[a-z0-9_]{2,80}$")
+    display_name: str = Field(min_length=1, max_length=140)
+    subject: str = Field(min_length=1, max_length=240)
+    body: str = Field(min_length=1, max_length=20000)
+    is_active: bool = True
+
+
 class EmailTemplatePatch(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=140)
     subject: str | None = Field(default=None, min_length=1, max_length=240)
@@ -142,7 +151,7 @@ class PortalCreateIn(BaseModel):
 
 
 class PublicFormIn(BaseModel):
-    form_type: str = Field(pattern="^(booking_form|final_questionnaire)$")
+    form_type: str = Field(pattern="^booking_form$")
     data: dict
 
 

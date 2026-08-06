@@ -45,6 +45,12 @@ def test_exact_simple_wedding_email_schedule(monkeypatch):
         })
         assert created.status_code == 201
         booking_id = created.json()["id"]
+        phone_call = next(task for task in created.json()["tasks"]
+                          if task["workflow_key"] == "wbm_final_details_call")
+        assert phone_call["title"] == "Finalise wedding details by phone"
+        assert phone_call["due_at"].startswith(
+            (wedding_day - timedelta(days=30)).isoformat()
+        )
 
         # A successful initial quote email is the anchor for both quote follow-ups.
         with SessionLocal() as db:
@@ -119,7 +125,6 @@ def test_exact_simple_wedding_email_schedule(monkeypatch):
             (balance_due - timedelta(days=1), "balance_due_1"),
             (balance_due + timedelta(days=2), "balance_overdue_2"),
             (balance_due + timedelta(days=4), "balance_overdue_4"),
-            (wedding_day - timedelta(days=30), "final_questionnaire"),
         )
         for reminder_day, reminder_key in schedule:
             FrozenDate.current = reminder_day
@@ -131,6 +136,18 @@ def test_exact_simple_wedding_email_schedule(monkeypatch):
                     ReminderLog.booking_id == booking_id,
                     ReminderLog.reminder_key == reminder_key,
                 ))
+
+        # Thirty days before is Mark's private phone-call task, not a
+        # second questionnaire or a client email.
+        FrozenDate.current = wedding_day - timedelta(days=30)
+        with SessionLocal() as db:
+            assert main_module.run_due_reminders(db) == {
+                "sent": 0, "skipped": 0, "failed": 0,
+            }
+            assert not db.scalar(select(ReminderLog).where(
+                ReminderLog.booking_id == booking_id,
+                ReminderLog.reminder_key == "final_questionnaire",
+            ))
 
         # Repeating overdue reminders stop as soon as Mark marks the invoice paid.
         with SessionLocal() as db:

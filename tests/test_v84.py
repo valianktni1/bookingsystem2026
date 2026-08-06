@@ -226,15 +226,11 @@ def test_v85_protected_legacy_import_manual_only_and_brand_counters(monkeypatch)
         assert public["documents"][0]["original_name"] == "original-contract.pdf"
         assert public["invoices"][0]["legacy_number"] == "WBM01706"
         assert public["contract"]["is_legacy_import"] is True
+        # There is no second client questionnaire. Final details are confirmed
+        # privately by phone, and the original imported questionnaire remains.
         assert client.post(f"/api/client/{token}/forms", json={
             "form_type": "final_questionnaire", "data": {"timeline": "Too early"},
-        }).status_code == 409
-        assert client.post(f"/api/bookings/{booking_id}/final-details", json={
-            "unlocked": True, "reason": "Couple asked to complete early",
-        }).status_code == 200
-        assert client.post(f"/api/client/{token}/forms", json={
-            "form_type": "final_questionnaire", "data": {"timeline": "Ceremony at 1pm"},
-        }).status_code == 200
+        }).status_code == 422
 
         def fake_manual_email(booking, profile, template, portal_url=None, extra_values=None,
                               recipient=None):
@@ -264,7 +260,8 @@ def test_v85_protected_legacy_import_manual_only_and_brand_counters(monkeypatch)
             assert run_due_reminders(db) == {"sent": 0, "skipped": 0, "failed": 0}
             assert db.scalar(select(func.count()).select_from(ReminderLog)) == 0
             assert db.scalar(select(func.count()).select_from(EmailLog)) == 1
-            assert db.scalar(select(func.count()).select_from(ClientPortalToken)) == 1
+            # The one-off email receives its own fresh, booking-specific link.
+            assert db.scalar(select(func.count()).select_from(ClientPortalToken)) == 2
 
         assert client.post("/api/legacy-import/records", json=payload).status_code == 409
 

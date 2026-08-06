@@ -1,89 +1,26 @@
-BookingSystem2026 - Agreed Payment Dates
-Build: 2026.08.06-agreed-payment-date-ui-fix-v8.9.3
+BookingSystem2026 - Phone Call and Email Controls
+Build: 2026.08.06-phone-call-email-controls-v8.9.4
 
-This cumulative build includes every V8.9 feature plus:
+This is a complete cumulative build containing every feature through V8.9.4.
 
-- A Change final payment date control on every outstanding invoice.
-- Per-couple payment extensions without changing the wedding date or anyone else's 45-day rule.
-- The agreed date is used consistently by the booking, invoice register, PDF and reminder schedule.
-- Invoice lists show due dates and remain ordered by the nearest payment date.
-- Optional private reasons are retained in the audit history.
-- Imported instalment schedules and generated invoice wording are kept consistent with an agreed date.
+V8.9.4 changes:
 
-- Protected complete Studio Ninja archive import support.
-- Multiple original invoices per historic booking.
-- Original historic invoice numbers retained exactly.
-- Archive imports never advance the live WBM or Ivory Digital counters.
-- Historic invoices stay within archived records instead of overwhelming the active payment register.
-- Imported archive records remain permanently automation-suppressed.
-- Jobs now open as a full-screen, independently scrolling booking page
-- Clear Back to bookings control returns to the existing jobs list
-- No fixed right-hand drawer or trapped job-section scrolling
-- Package and add-on internal codes are generated automatically from their names
-- Unused packages and add-ons can be permanently deleted, with accepted financial records protected
-- Clear New enquiries and Wedding bookings workspaces
-- Five-stage wedding journey: Enquiry, Quote, Payment, Forms and Wedding
-- One plain-English next action shown at the top of every booking
-- Wider desktop booking workspace and full-screen mobile booking workspace
-- Five simple booking tabs: Overview, Journey, Payments, Files and Notes
-- Quick contact, telephone and Google Maps direction links in the booking header
-- Larger, more readable booking text and controls
-- Guided wording suitable for photographers with little technical experience
-- Three clearly presented payment options on the website enquiry form
-- Studio Ninja-inspired expandable booking sections on desktop and mobile, using the system's own design
-- Full compatibility with V8.6 data, workflows and imported Studio Ninja weddings
-- Protected, confirmation-gated Studio Ninja import endpoints
-- Client email, portal-link and reminder automation paused on every imported record
-- Imported weddings remain fully visible in confirmed totals, upcoming dates and calendars
-- Old generated Studio Ninja task clutter is hidden without deleting imported data
-- Studio Ninja records are permanently excluded from automatic emails, payment confirmations and reminders
-- Protected one-off portal-link and manual-email controls leave automatic communication paused
-- Original Studio Ninja invoice and quote numbers retained beside new numbers
-- Separate WBM and Ivory Digital invoice sequences, both beginning from their own configured start
-- Individual historic payments and original instalment schedules retained
-- Imported questionnaire answers prefilled into the existing wedding forms
-- Contract completion provenance retained without inventing IP or signature evidence
-- Original client-visible documents available from a dedicated portal section
-- Imported financial and source documents protected from accidental deletion
-- Final wedding details remain locked until 30 days before the wedding unless Mark opens them early
-- Secure wedding area created automatically when an enquiry is submitted
-- Enquiry acknowledgement includes the couple's private wedding link
-- Booking form and contract become available after package acceptance
-- Quote-accepted email clearly links to the wedding area and requests the booking form and digital contract signature
-- Every recorded payment automatically emails the amount received, total paid and remaining balance
-- Payment confirmation includes a fresh secure link to the same wedding area and receipt
-- Any first payment secures/confirms the wedding while later part-payments continue reducing the balance
-- Time-aware UK greeting: Good morning, Good afternoon or Good evening
-- Clearer mobile text, labels, booking details, status pills and navigation
-- One-click create and send quote
-- Quote link opens directly on package selection
-- Client invoice area in the same wedding booking
-- Secure invoice and receipt PDF downloads
-- Automatic package-accepted and invoice-ready email
-- Booking form, questionnaire and contract in the same portal
-- Separate Hostinger SMTP identities for Weddings By Mark and Ivory Digital
-- Matching brand logos embedded in HTML emails and invoice/receipt PDFs
-- Photography awards shown only on Weddings By Mark emails and invoices
-- Booking fee due one day after quote acceptance and final balance due 45 days before the wedding
-- Initial quote follow-up after one day and final quote follow-up after nine days, stopping on acceptance
-- One booking-fee reminder the day after acceptance when no first payment has arrived
-- Friendly wedding check-in 120 days before and final-details questionnaire 30 days before
-- Final-balance reminders 7 days before, one day before, two days after and every two days until paid
-- Full accepted package and add-on wording shown on client invoices and invoice PDFs
-- Smaller Weddings By Mark awards panel reserved in the invoice footer
-- Immediate new-enquiry notification to mark@perfectweddingsbymark.uk with direct reply-to-client
-- Fully redesigned Weddings By Mark and Ivory Digital client areas
-- Real brand logos, wedding countdown, guided progress and completion ticks
-- Three-step mobile-friendly Wedding Booking Form
-- Improved invoice cards, empty states and responsive client navigation
-- Google Places venue search on the website enquiry and admin record editor
-- Saved venue address, Place ID and coordinates with one-click Google Maps directions
-- Improved admin dashboard focus cards and new-enquiry notification badge
-- Branded email preview and explicit send-test controls
-- Cancel and reopen bookings/projects with reasons and portal-link revocation
-- Cancelled records excluded from dashboards, workflows and automated reminders
-- Void invoices while retaining invoice numbers and payment history
-- Protected deletion of genuinely mistaken unpaid invoices
-- Reset incorrect agreement acceptances and submitted client forms
-- Typed-confirmation permanent deletion for tests, duplicates and spam
-- Permanent deletion blocked wherever payment or retained financial history exists
+- There is one client Wedding Booking Form / questionnaire only.
+- The incorrect final-questionnaire waiting stage and client reminder have been removed.
+- A private Finalise wedding details by phone task is scheduled for Mark 30 days before each upcoming wedding.
+- The phone task sends no client email and does not create another client form.
+- Existing imported historical final-details submissions are retained as read-only history.
+- Email templates can be added, edited, activated, deactivated and permanently deleted.
+- Deleted templates stay deleted after an application restart.
+- Active custom templates are available from the individual booking email control.
+- Every email sent to an individual client automatically receives a fresh, booking-specific secure account link.
+- The account link is appended even when the template does not contain {portal_url}.
+- The initial quote email uses Mark's warmer wording and a clear VIEW YOUR FULL QUOTE HERE button.
+- Secure client links are displayed as short branded buttons in HTML emails instead of long jumbled addresses.
+- Bank details in the quote are taken from Business settings rather than hard-coded into the template.
+- Admin-only enquiry notifications and test previews are not given a live client account link.
+- Imported Studio Ninja records remain permanently automation-suppressed and receive no automatic emails.
+
+All previous cumulative behaviour is retained, including agreed payment dates, protected archive imports,
+original documents and invoice history, packages and add-ons, discounts, client portals, invoices,
+payment recording, payment reminders, branded email/PDF output and separate WBM/Ivory Digital numbering.

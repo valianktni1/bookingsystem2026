@@ -31,6 +31,7 @@ BRAND_ASSETS = {
 def template_values(booking: Booking, profile: BusinessProfile, portal_url: str | None = None,
                     extra_values: dict[str, str] | None = None) -> dict[str, str]:
     client = booking.client
+    bank = profile.bank_details or {}
     values = {
         "client_first_name": client.first_name or "there",
         "client_name": " ".join(x for x in [client.first_name, client.last_name] if x),
@@ -55,6 +56,9 @@ def template_values(booking: Booking, profile: BusinessProfile, portal_url: str 
         "payment_status": "Your booking is secured",
         "business_email": profile.email or "",
         "business_phone": profile.phone or "",
+        "bank_account_name": bank.get("account_name") or "as shown on your invoice",
+        "bank_sort_code": bank.get("sort_code") or "as shown on your invoice",
+        "bank_account_number": bank.get("account_number") or "as shown on your invoice",
     }
     values.update(extra_values or {})
     return values
@@ -65,6 +69,17 @@ def render_template(text: str, values: dict[str, str]) -> str:
     for key, value in values.items():
         rendered = rendered.replace("{" + key + "}", value)
     return rendered
+
+
+def ensure_client_account_link(body: str, booking: Booking,
+                               portal_url: str | None) -> str:
+    """Guarantee the correct secure-account link in every client email."""
+    if not portal_url or portal_url in body:
+        return body
+    label = ("View your wedding account, invoices and booking details"
+             if booking.brand == Brand.WBM
+             else "View your client account, invoices and project details")
+    return f"{body.rstrip()}\n\n[{label.upper()}]({portal_url})"
 
 
 def smtp_credentials(brand: Brand | None = None) -> tuple[str | None, str | None]:
@@ -88,13 +103,45 @@ def smtp_ready(brand: Brand | None = None) -> bool:
 
 def _body_html(body: str) -> str:
     """Safely turn the editable plain-text template into email-friendly HTML."""
-    rendered = html.escape(body)
-    rendered = re.sub(
-        r"(https?://[^\s<]+)",
-        r'<a href="\1" style="color:#76591f;text-decoration:underline;word-break:break-all">\1</a>',
-        rendered,
-    )
+    buttons: list[str] = []
+
+    def button(match: re.Match) -> str:
+        label = html.escape(match.group(1).strip())
+        url = html.escape(match.group(2), quote=True)
+        buttons.append(
+            f'<a href="{url}" style="display:inline-block;padding:14px 22px;'
+            'border-radius:8px;background:#76591f;color:#ffffff;text-decoration:none;'
+            f'font-weight:bold;letter-spacing:.4px;text-align:center">{label}</a>'
+        )
+        return f"@@PORTAL_BUTTON_{len(buttons) - 1}@@"
+
+    # Template writers can use [BUTTON WORDING]({portal_url}). This keeps the
+    # editable template readable while the HTML email gets a polished button.
+    prepared = re.sub(r"\[([^\]\n]{1,100})\]\((https?://[^\s)]+)\)", button, body)
+    rendered = html.escape(prepared)
+
+    def link(match: re.Match) -> str:
+        url = match.group(1)
+        if "/client/" in url:
+            return (
+                f'<a href="{url}" style="display:inline-block;padding:14px 22px;'
+                'border-radius:8px;background:#76591f;color:#ffffff;text-decoration:none;'
+                'font-weight:bold;letter-spacing:.4px;text-align:center">'
+                'OPEN YOUR SECURE ACCOUNT</a>'
+            )
+        return (f'<a href="{url}" style="color:#76591f;text-decoration:underline;'
+                f'word-break:break-all">{url}</a>')
+
+    rendered = re.sub(r"(https?://[^\s<]+)", link, rendered)
+    for index, markup in enumerate(buttons):
+        rendered = rendered.replace(f"@@PORTAL_BUTTON_{index}@@", markup)
     return rendered.replace("\n", "<br>")
+
+
+def _plain_body(body: str) -> str:
+    """Keep accessible URLs in the plain-text alternative to the HTML email."""
+    return re.sub(r"\[([^\]\n]{1,100})\]\((https?://[^\s)]+)\)",
+                  lambda match: f"{match.group(1)}: {match.group(2)}", body)
 
 
 def _email_html(body: str, booking: Booking, profile: BusinessProfile) -> str:
@@ -155,7 +202,7 @@ def build_email_message(booking: Booking, profile: BusinessProfile, subject: str
     message["From"] = f"{profile.display_name} <{username}>"
     message["To"] = recipient or booking.client.email
     message["Reply-To"] = reply_to or profile.email or username
-    message.set_content(body)
+    message.set_content(_plain_body(body))
     message.add_alternative(_email_html(body, booking, profile), subtype="html")
     html_part = message.get_payload()[-1]
     assets = BRAND_ASSETS[booking.brand]
@@ -182,7 +229,9 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
         )
     values = template_values(booking, profile, portal_url, extra_values)
     subject = render_template(template.subject, values)
-    body = render_template(template.body, values)
+    body = ensure_client_account_link(
+        render_template(template.body, values), booking, portal_url
+    )
     message = build_email_message(booking, profile, subject, body, username,
                                   recipient=recipient, reply_to=reply_to)
     context = ssl.create_default_context()
@@ -203,5 +252,7 @@ def preview_template_email(booking: Booking, profile: BusinessProfile, template:
     """Render the exact subject, text and branded HTML without sending anything."""
     values = template_values(booking, profile, portal_url)
     subject = render_template(template.subject, values)
-    body = render_template(template.body, values)
-    return subject, body, _email_html(body, booking, profile)
+    body = ensure_client_account_link(
+        render_template(template.body, values), booking, portal_url
+    )
+    return subject, _plain_body(body), _email_html(body, booking, profile)
