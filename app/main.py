@@ -62,7 +62,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.2-agreed-payment-date", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.3-agreed-payment-date-ui-fix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -267,7 +267,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.06-agreed-payment-date-v8.9.2"}
+            "build": "2026.08.06-agreed-payment-date-ui-fix-v8.9.3"}
 
 
 @app.get("/api/public/config")

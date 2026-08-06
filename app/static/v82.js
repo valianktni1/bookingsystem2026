@@ -213,7 +213,8 @@
         return `<article class="invoice-card ${isVoid ? "v82-void-invoice" : ""}" data-v82-invoice="${i.id}">
           <header><div><strong>${esc(i.number)}</strong><span class="status ${statusClass(i.status)} ${isVoid ? "v82-void-status" : ""}">${esc(statusText(i.status))}</span></div><div class="file-actions"><a href="/api/invoices/${i.id}/pdf">Invoice PDF</a>${i.paid > 0 ? `<a href="/api/invoices/${i.id}/receipt.pdf">Receipt</a>` : ""}</div></header>
           ${isVoid ? `<div class="v82-void-strip"><strong>VOID</strong><span>This invoice is retained for the financial record and has no outstanding balance.</span></div>` : ""}
-          <dl><dt>Total</dt><dd>${money(i.total)}</dd><dt>Paid</dt><dd>${money(i.paid)}</dd><dt>Balance</dt><dd><strong>${money(isVoid ? 0 : i.balance)}</strong></dd></dl>
+          <dl><dt>Total</dt><dd>${money(i.total)}</dd><dt>Paid</dt><dd>${money(i.paid)}</dd><dt>Balance</dt><dd><strong>${money(isVoid ? 0 : i.balance)}</strong></dd><dt>Final payment due</dt><dd><strong>${isVoid ? "-" : i.due_date ? esc(fmtDate(i.due_date)) : "Not set"}</strong>${!isVoid && i.due_date_overridden ? ` <span class="agreed-date">Agreed date</span>` : ""}</dd></dl>
+          ${!isVoid && Number(i.balance || 0) > 0 ? `<button class="change-due-date" data-due-invoice="${i.id}" data-due-date="${attr(i.due_date || "")}" data-standard-due="${attr(i.standard_due_date || "")}">Change final payment date</button>` : ""}
           ${i.description ? `<p>${esc(i.description)}</p>` : ""}
           <div class="payments">${(i.payments || []).map(p => `<div data-payment="${p.id}"><span><strong>${money(p.amount)}</strong><small>${esc(fmtDate(p.paid_date))} · ${esc(statusText(p.payment_type))}</small></span>${isVoid ? "" : `<button class="mini danger-text" data-action="delete-payment">Delete</button>`}</div>`).join("")}</div>
           ${!isVoid && i.balance > 0 ? `<button class="secondary full" data-payment-invoice="${i.id}" data-balance="${i.balance}">Record bank transfer</button>` : ""}
@@ -223,6 +224,7 @@
 
     $("#new-invoice").onclick = () => newInvoice(r);
     $$('[data-payment-invoice]', body).forEach(button => button.onclick = () => recordPayment(r, button.dataset.paymentInvoice, Number(button.dataset.balance)));
+    $$('[data-due-invoice]', body).forEach(button => button.onclick = () => changeInvoiceDueDate(r, button.dataset.dueInvoice, button.dataset.dueDate, button.dataset.standardDue));
     $$('[data-action="delete-payment"]', body).forEach(button => button.onclick = async () => {
       if (!confirm("Remove this payment entry?")) return;
       await api(`/api/payments/${button.closest("[data-payment]").dataset.payment}`, { method: "DELETE" });
@@ -245,7 +247,7 @@
         const isVoid = i.status === "void";
         const deletable = i.status === "unpaid" && Number(i.paid || 0) === 0 && !(i.payments || []).length;
         const paid = Number(i.balance || 0) <= 0 || isVoid;
-        const dueDetail = paid ? (isVoid ? "Voided" : "Paid in full") : i.payment_due_status === "overdue" ? `${Math.abs(i.days_until_due)} day${Math.abs(i.days_until_due) === 1 ? "" : "s"} overdue` : i.payment_due_status === "due_today" ? "Due today" : i.wedding_date ? "45 days before wedding" : "Invoice due date";
+        const dueDetail = paid ? (isVoid ? "Voided" : "Paid in full") : i.payment_due_status === "overdue" ? `${Math.abs(i.days_until_due)} day${Math.abs(i.days_until_due) === 1 ? "" : "s"} overdue` : i.payment_due_status === "due_today" ? "Due today" : i.due_date_overridden ? "Agreed date" : i.wedding_date ? "45 days before wedding" : "Invoice due date";
         return `<div class="table-row ${isVoid ? "v82-void-row" : ""}"><strong>${esc(i.number)}</strong><button class="link-button" data-record="${i.booking_id}">${esc(i.client || "")}</button><span class="brand-badge ${i.brand}">${esc(labels[i.brand])}</span><span>${esc(fmtDate(i.issue_date))}</span><span class="v88-due-cell ${esc(i.payment_due_status || "no_date")}"><strong>${paid ? "-" : esc(fmtDate(i.payment_due_date))}</strong><small>${esc(dueDetail)}</small></span><strong>${money(isVoid ? 0 : i.balance)}</strong><span class="status ${statusClass(i.status)} ${isVoid ? "v82-void-status" : ""}">${esc(statusText(i.status))}</span><span class="file-actions"><a href="/api/invoices/${i.id}/pdf" title="Download invoice">PDF</a>${i.paid > 0 ? `<a href="/api/invoices/${i.id}/receipt.pdf" title="Download receipt">Receipt</a>` : ""}</span><span class="v82-register-actions">${!isVoid ? `<button class="mini danger-text" data-v82-register-void="${i.id}">Void</button>` : ""}${deletable ? `<button class="mini danger-text" data-v82-register-delete="${i.id}">Delete</button>` : ""}</span></div>`;
       }).join("")}</div>${rows.length ? "" : `<div class="empty"><strong>No invoices yet</strong>Create one from a record's Finance tab.</div>`}</div></article>`;
       wireRecords();

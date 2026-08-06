@@ -1,0 +1,18 @@
+BOOKINGSYSTEM2026 V8.9.3 - COMPLETE CUMULATIVE DEPLOYMENT
+
+Upload the complete ZIP contents to the repository main branch, then run:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml down
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d
+
+Check:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+curl http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.06-agreed-payment-date-ui-fix-v8.9.3
+
+Deploying V8.9.3 sends no client emails and changes no existing payment dates.
+Open a wedding, choose Payments, then use Change final payment date on an outstanding invoice.

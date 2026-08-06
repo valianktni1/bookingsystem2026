@@ -97,7 +97,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.06-agreed-payment-date-v8.9.2"}
+                                 "build": "2026.08.06-agreed-payment-date-ui-fix-v8.9.3"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -108,6 +108,10 @@ def test_phase_two_b_flow(monkeypatch):
         admin_javascript = client.get("/static/app.js").text
         assert 'id="record-inline-back"' in admin_javascript
         assert "function renderQuestionnaires" in admin_javascript
+        compatibility_javascript = client.get("/static/v82.js").text
+        assert "Change final payment date" in compatibility_javascript
+        assert "data-due-invoice" in compatibility_javascript
+        assert "changeInvoiceDueDate" in compatibility_javascript
 
         assert client.get("/api/dashboard").status_code == 401
 
