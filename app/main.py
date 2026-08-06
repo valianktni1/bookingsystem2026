@@ -59,7 +59,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.6-simple-workflow", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.7-guided-workspace", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -234,7 +234,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.05-simple-wedding-workflow-v8.6"}
+            "build": "2026.08.05-guided-booking-workspace-v8.7"}
 
 
 @app.get("/api/public/config")

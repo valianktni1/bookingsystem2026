@@ -97,7 +97,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.05-simple-wedding-workflow-v8.6"}
+                                 "build": "2026.08.05-guided-booking-workspace-v8.7"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

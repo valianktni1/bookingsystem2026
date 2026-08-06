@@ -1,7 +1,18 @@
-BookingSystem2026 - Simple Wedding Workflow
-Build: 2026.08.05-simple-wedding-workflow-v8.6
+BookingSystem2026 - Guided Booking Workspace
+Build: 2026.08.05-guided-booking-workspace-v8.7
 
 This build includes:
+- Clear New enquiries and Wedding bookings workspaces
+- Five-stage wedding journey: Enquiry, Quote, Payment, Forms and Wedding
+- One plain-English next action shown at the top of every booking
+- Wider desktop booking workspace and full-screen mobile booking workspace
+- Five simple booking tabs: Overview, Journey, Payments, Files and Notes
+- Quick contact, telephone and Google Maps direction links in the booking header
+- Larger, more readable booking text and controls
+- Guided wording suitable for photographers with little technical experience
+- Three clearly presented payment options on the website enquiry form
+- Studio Ninja-inspired expandable booking sections on desktop and mobile, using the system's own design
+- Full compatibility with V8.6 data, workflows and imported Studio Ninja weddings
 - Protected, confirmation-gated Studio Ninja import endpoints
 - Client email, portal-link and reminder automation paused on every imported record
 - Imported weddings remain fully visible in confirmed totals, upcoming dates and calendars

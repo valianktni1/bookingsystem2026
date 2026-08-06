@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#102b34">
   <title>Mark's Business Studio</title>
-  <link rel="stylesheet" href="/static/app.css?v=simple-wedding-workflow-v8-6">
+  <link rel="stylesheet" href="/static/app.css?v=guided-booking-workspace-v8-7">
   <link rel="stylesheet" href="/static/v82.css?v=legacy-ready-v8-4">
   <link rel="stylesheet" href="/static/catalog.css?v=client-experience-v8">
 </head>
@@ -40,15 +40,18 @@
       <nav>
         <p>WORKSPACE</p>
         <button class="active" data-view="dashboard"><span class="nav-icon">▦</span>Dashboard</button>
+        <button data-view="enquiries"><span class="nav-icon">◎</span>New enquiries</button>
         <button data-view="weddings"><span class="nav-icon">♡</span>Wedding bookings</button>
-        <button data-view="projects"><span class="nav-icon">▣</span>Digital projects</button>
         <button data-view="calendar"><span class="nav-icon">□</span>Calendar</button>
-        <button data-view="workflows"><span class="nav-icon">⌘</span>Workflows</button>
-        <button data-view="invoices"><span class="nav-icon">≣</span>Invoices</button>
-        <button data-view="documents"><span class="nav-icon">▤</span>Documents</button>
+        <button data-view="invoices"><span class="nav-icon">£</span>Payments & invoices</button>
+        <p>TOOLS</p>
+        <button data-view="workflows"><span class="nav-icon">✓</span>Things to do</button>
+        <button data-view="documents"><span class="nav-icon">▤</span>All files</button>
+        <button data-view="projects"><span class="nav-icon">▣</span>Ivory Digital projects</button>
+        <p>SETUP</p>
         <button data-view="packages"><span class="nav-icon">£</span>Packages & pricing</button>
-        <button data-view="communications"><span class="nav-icon">✉</span>Templates & email</button>
-        <button data-view="settings"><span class="nav-icon">⚙</span>Settings</button>
+        <button data-view="communications"><span class="nav-icon">✉</span>Email templates</button>
+        <button data-view="settings"><span class="nav-icon">⚙</span>Business settings</button>
       </nav>
       <div class="profile"><span>MP</span><div><strong>Mark Powell</strong><small>Administrator</small></div><button id="logout" title="Sign out">↗</button></div>
     </aside>
@@ -59,7 +62,7 @@
         <button id="open-menu" class="icon-button menu-button" aria-label="Open menu">☰</button>
         <div class="search"><span>⌕</span><input id="search" placeholder="Search weddings, clients, invoices…"><kbd>⌘ K</kbd></div>
         <button id="attention-button" class="attention-button" title="Items needing attention"><span>●</span><b id="attention-count">0</b></button>
-        <div class="phase-badge">LEGACY READY V8.4</div>
+        <div class="phase-badge">GUIDED WORKSPACE V8.7</div>
       </header>
       <div class="page">
         <div class="page-heading">
@@ -70,7 +73,7 @@
       </div>
     </main>
 
-    <nav class="mobile-nav"><button data-view="dashboard" class="active"><span>▦</span>Home</button><button data-view="weddings"><span>♡</span>Weddings</button><button id="mobile-add" class="mobile-add"><span>＋</span>Add</button><button data-view="invoices"><span>≣</span>Invoices</button><button id="mobile-more"><span>☰</span>More</button></nav>
+    <nav class="mobile-nav"><button data-view="dashboard" class="active"><span>▦</span>Home</button><button data-view="enquiries"><span>◎</span>Enquiries</button><button id="mobile-add" class="mobile-add"><span>＋</span>Add</button><button data-view="weddings"><span>♡</span>Weddings</button><button id="mobile-more"><span>☰</span>More</button></nav>
   </div>
 
   <button id="drawer-overlay" class="overlay hidden" aria-label="Close record"></button>
@@ -81,7 +84,7 @@
 
   <div id="toast" class="toast hidden" role="status"></div>
   <script src="/static/venue-autocomplete.js?v=client-experience-v8-1" defer></script>
-  <script src="/static/app.js?v=simple-wedding-workflow-v8-6" defer></script>
+  <script src="/static/app.js?v=guided-booking-workspace-v8-7" defer></script>
   <script src="/static/v82.js?v=legacy-ready-v8-4" defer></script>
 </body>
 </html>
