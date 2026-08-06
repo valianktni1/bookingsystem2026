@@ -1,5 +1,5 @@
 BookingSystem2026 - Full Booking Page
-Build: 2026.08.06-full-booking-page-v8.7.1
+Build: 2026.08.06-admin-questionnaires-v8.8.2
 
 This build includes:
 - Jobs now open as a full-screen, independently scrolling booking page

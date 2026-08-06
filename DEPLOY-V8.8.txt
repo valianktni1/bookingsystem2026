@@ -1,0 +1,19 @@
+BOOKINGSYSTEM2026 V8.8 - SAFE CUMULATIVE DEPLOYMENT
+
+This ZIP contains the complete application. Upload its contents to the main branch,
+then rebuild using your normal TrueNAS commands:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml down
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d
+
+Wait until healthy, then check:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+curl http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.06-required-quote-items-v8.8
+
+No data reset is required. Existing bookings, imported weddings, invoice numbers,
+payments, documents and settings remain in PostgreSQL and the storage dataset.

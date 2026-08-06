@@ -97,7 +97,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.06-full-booking-page-v8.7.1"}
+                                 "build": "2026.08.06-admin-questionnaires-v8.8.2"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -105,6 +105,9 @@ def test_phase_two_b_flow(monkeypatch):
         homepage = client.get("/")
         assert homepage.status_code == 200
         assert "Mark's Business Studio" in homepage.text
+        admin_javascript = client.get("/static/app.js").text
+        assert 'id="record-inline-back"' in admin_javascript
+        assert "function renderQuestionnaires" in admin_javascript
 
         assert client.get("/api/dashboard").status_code == 401
 
@@ -198,6 +201,7 @@ def test_phase_two_b_flow(monkeypatch):
         portal_status = client.get(f"/api/bookings/{wedding_data['id']}/portal").json()
         assert portal_status["contract"]["accepted_name"] == "Sophie Taylor"
         assert portal_status["submissions"][0]["form_type"] == "booking_form"
+        assert portal_status["submissions"][0]["data"]["ceremony_time"] == "13:00"
         assert client.post(f"/api/client/{token}/contract", json={
             "accepted_name": "Sophie Taylor", "accepted_email": "wbm@example.com", "agreed": True
         }).status_code == 409
@@ -278,6 +282,26 @@ def test_phase_two_b_flow(monkeypatch):
         assert not any(row["code"] == "duplicate_extra" for row in refreshed_catalog["addons"])
         album = next(row for row in catalog["addons"] if row["code"] == "album_offer")
         speeches = next(row for row in catalog["addons"] if row["code"] == "speeches")
+        travel = client.post("/api/catalog/addons?brand=wbm", json={
+            "code": "travel_expenses", "name": "Travel expenses",
+            "description": "Travel expenses agreed for this wedding", "price": 50,
+            "eligible_package_codes": [], "display_order": 90, "is_active": True,
+        }).json()
+        discount = client.post("/api/catalog/addons?brand=wbm", json={
+            "code": "thank_you_25", "name": "THANKYOU25 discount",
+            "description": "Discount code applied by Mark", "price": 25,
+            "eligible_package_codes": [], "display_order": 91, "is_active": True,
+            "is_discount": True,
+        }).json()
+        preparation = client.put(f"/api/bookings/{wedding_data['id']}/quote/preparation", json={
+            "required_addons": [{"addon_id": travel["id"], "price": 75}],
+            "discounts": [{"addon_id": discount["id"], "price": 25}],
+        })
+        assert preparation.status_code == 200
+        assert preparation.json()["required_addons"][0]["price"] == 75
+        prepared_public = client.get(f"/api/client/{token}").json()
+        assert prepared_public["quote_preparation"]["discounts"][0]["name"] == "THANKYOU25 discount"
+        assert not any(item["id"] == discount["id"] for item in prepared_public["catalog"]["addons"])
         assert album["price"] == 120
         gold = next(row for row in catalog["packages"] if row["code"] == "gold")
         assert client.post(f"/api/client/{token}/quote", json={
@@ -289,7 +313,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert quote.status_code == 201
         assert client.delete(f"/api/catalog/packages/{gold['id']}").status_code == 409
         assert client.delete(f"/api/catalog/addons/{album['id']}").status_code == 409
-        assert quote.json()["quote"]["total"] == 1019
+        assert quote.json()["quote"]["total"] == 1069
         assert quote.json()["invoice"]["number"] == "WBM02002"
         assert quote.json()["acceptance_email_sent"] is False
         expected_deposit_due = date.today() + timedelta(days=1)
@@ -297,14 +321,26 @@ def test_phase_two_b_flow(monkeypatch):
         assert quote.json()["invoice"]["deposit_due_date"] == expected_deposit_due.isoformat()
         assert quote.json()["invoice"]["due_date"] == expected_balance_due.isoformat()
         assert [line["name"] for line in quote.json()["invoice"]["line_items"]] == [
-            "Gold Package 3 2026/27/28", "Wedding album offer"
+            "Gold Package 3 2026/27/28", "Travel expenses", "Wedding album offer",
+            "THANKYOU25 discount"
         ]
+        assert quote.json()["invoice"]["line_items"][1]["required"] is True
+        assert quote.json()["invoice"]["line_items"][-1]["total"] == -25
+        assert client.put(f"/api/bookings/{wedding_data['id']}/quote/preparation", json={
+            "required_addons": [], "discounts": []
+        }).status_code == 409
         assert "Highlight Video" in quote.json()["invoice"]["line_items"][0]["description"]
         refreshed_public = client.get(f"/api/client/{token}").json()
         assert refreshed_public["quote"]["invoice_number"] == "WBM02002"
-        assert refreshed_public["record"]["quoted_total"] == 1019
+        assert refreshed_public["record"]["quoted_total"] == 1069
         assert refreshed_public["invoices"][0]["number"] == "WBM02002"
+        assert refreshed_public["invoices"][0]["payment_due_date"] == "2026-08-20"
+        assert refreshed_public["invoices"][0]["wedding_date"] == "2026-10-04"
         assert refreshed_public["invoices"][0]["deposit_due_date"] == expected_deposit_due.isoformat()
+        ordered_invoices = client.get("/api/invoices").json()
+        assert ordered_invoices[0]["number"] == "WBM02002"
+        assert ordered_invoices[0]["payment_due_date"] == "2026-08-20"
+        assert all(row["balance"] == 0 for row in ordered_invoices[1:])
         assert client.get(f"/api/bookings/{wedding_data['id']}").json()["balance_due_date"] == expected_balance_due.isoformat()
         public_invoice_pdf = client.get(
             f"/api/client/{token}/invoices/{quote.json()['invoice']['id']}/invoice.pdf"

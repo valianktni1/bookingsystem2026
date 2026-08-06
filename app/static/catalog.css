@@ -24,6 +24,19 @@
 .quote-send-card p { margin:0; color:#6a6e68; font-size:9px; line-height:1.5; }
 .quote-done { padding:8px 11px; border-radius:8px; color:#0a6259; background:#fff; font-size:9px; font-weight:800; white-space:nowrap; }
 .quote-help { margin-bottom:14px; padding:15px; border:1px dashed #c5d1d3; border-radius:9px; color:var(--muted); background:#fff; text-align:center; font-size:9px; }
+.quote-prep-note { display:grid; gap:4px; padding:12px; border-radius:9px; color:#40555b; background:#eef7f6; }
+.quote-prep-note strong { font-size:10px; }
+.quote-prep-note span { font-size:8px; line-height:1.5; }
+.quote-prep-note.discount-note { margin-top:8px; background:#fff7e8; }
+.quote-prep-row { display:grid !important; grid-template-columns:auto 1fr 105px !important; align-items:center; gap:10px !important; padding:10px; border:1px solid var(--line); border-radius:9px; }
+.quote-prep-row>input { width:18px !important; height:18px !important; accent-color:var(--teal); }
+.quote-prep-row strong,.quote-prep-row small { display:block; }
+.quote-prep-row small { margin-top:3px; color:var(--muted); font-size:8px; }
+.quote-prep-row .money-input { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:4px; }
+.quote-prep-row .money-input input { min-width:0; }
+.prepared-quote-summary { display:grid; gap:4px; margin-bottom:10px; padding:12px 14px; border:1px solid #b7d8d2; border-radius:9px; color:#0b6259; background:#f0faf7; }
+.prepared-quote-summary strong { font-size:9px; }
+.prepared-quote-summary span { color:#49655f; font-size:8px; line-height:1.5; }
 .portal-preview { display:grid; place-items:center; padding:0 11px; text-decoration:none; }
 .section-actions.compact { min-height:48px; margin-top:16px; }
 .comm-status.email-status { grid-template-columns:1fr 1fr 1fr auto; }

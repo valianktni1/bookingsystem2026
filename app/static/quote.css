@@ -36,6 +36,11 @@
 .addon-card strong { font-size: 10px; }
 .addon-card small { margin-top: 4px; color: var(--muted); font-size: 8px; line-height: 1.5; }
 .addon-card > b { color: var(--teal); font-size: 10px; white-space: nowrap; }
+.addon-card strong em { margin-left:6px; padding:3px 6px; border-radius:999px; color:#fff; background:var(--teal); font-size:7px; font-style:normal; text-transform:uppercase; }
+.addon-card.required-addon { cursor:default; border-color:#c9ad74; background:#fff9ed; }
+.addon-card.required-addon input { opacity:.75; }
+.addon-card.applied-discount { cursor:default; border-color:#a7d2ca; background:#eef9f6; }
+.addon-card.applied-discount > b { color:#087261; }
 .no-addons { padding: 17px; border-radius: 9px; color: var(--muted); background: #f5f8f8; font-size: 9px; }
 .quote-footer { display: grid; grid-template-columns: 1fr 1.7fr auto; align-items: center; gap: 15px; margin: 24px -23px -23px; padding: 17px 23px; border-top: 1px solid var(--line); border-radius: 0 0 13px 13px; background: #f8fafa; }
 .quote-footer > div small, .quote-footer > div strong, .quote-footer > div span { display: block; }

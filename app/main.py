@@ -31,7 +31,8 @@ from .pdf import invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplatePatch, EnquiryIn, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
-                      PublicFormIn, QuoteAcceptIn, SendEmailIn, TaskIn, TaskPatch, TemplateTestIn)
+                      PublicFormIn, QuoteAcceptIn, QuotePreparationIn, SendEmailIn, TaskIn, TaskPatch,
+                      TemplateTestIn)
 from .security import create_token, current_admin, verify_password
 from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
                        next_invoice_number, visible_task_condition)
@@ -59,7 +60,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.7.1-full-booking-page", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.8.2-admin-questionnaires", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -124,12 +125,29 @@ def payment_json(item: Payment) -> dict:
             "created_at": item.created_at.isoformat()}
 
 
+def effective_invoice_due_date(item: Invoice) -> date | None:
+    """Wedding final balances are due exactly 45 days before the wedding."""
+    booking = item.booking
+    if (booking and booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
+            and booking.event_date):
+        return booking.event_date - timedelta(days=45)
+    return item.due_date
+
+
 def invoice_json(item: Invoice) -> dict:
+    due = effective_invoice_due_date(item)
+    balance = Decimal("0") if item.status == "void" else item.total - item.paid
+    days_until_due = (due - date.today()).days if due and balance > 0 else None
+    due_status = ("paid" if balance <= 0 else "no_date" if not due else
+                  "overdue" if days_until_due < 0 else "due_today" if days_until_due == 0 else "upcoming")
     return {"id": item.id, "booking_id": item.booking_id, "brand": item.brand.value,
             "sequence": item.sequence, "number": item.number, "issue_date": item.issue_date.isoformat(),
             "deposit_due_date": item.deposit_due_date.isoformat() if item.deposit_due_date else None,
             "supply_date": item.supply_date.isoformat() if item.supply_date else None,
-            "due_date": item.due_date.isoformat() if item.due_date else None,
+            "due_date": due.isoformat() if due else None,
+            "payment_due_date": due.isoformat() if due else None,
+            "wedding_date": item.booking.event_date.isoformat() if item.booking and item.booking.event_date else None,
+            "payment_due_status": due_status, "days_until_due": days_until_due,
             "description": item.description, "notes": item.notes, "total": money(item.total),
             "deposit_amount": money(item.booking.deposit_amount if item.booking else 0),
             "line_items": item.line_items or [],
@@ -138,7 +156,7 @@ def invoice_json(item: Invoice) -> dict:
             "legacy_quote_number": item.legacy_quote_number,
             "legacy_source": item.legacy_source,
             "paid": money(item.paid),
-            "balance": 0.0 if item.status == "void" else money(item.total - item.paid),
+            "balance": money(balance),
             "status": item.status,
             "client": item.booking.title if item.booking else None,
             "payments": [payment_json(p) for p in sorted(item.payments, key=lambda x: x.paid_date, reverse=True)]}
@@ -155,7 +173,8 @@ def addon_json(item: AddOnOption) -> dict:
     return {"id": item.id, "brand": item.brand.value, "code": item.code, "name": item.name,
             "description": item.description, "price": money(item.price),
             "eligible_package_codes": item.eligible_package_codes or [],
-            "display_order": item.display_order, "is_active": item.is_active}
+            "display_order": item.display_order, "is_active": item.is_active,
+            "is_discount": item.is_discount}
 
 
 def quote_json(item: Quote | None) -> dict | None:
@@ -234,7 +253,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.06-full-booking-page-v8.7.1"}
+            "build": "2026.08.06-admin-questionnaires-v8.8.2"}
 
 
 @app.get("/api/public/config")
@@ -681,13 +700,26 @@ def delete_note(note_id: str, _: Admin = Depends(current_admin), db: Session = D
 
 @app.get("/api/invoices")
 def list_invoices(brand: Brand | None = None, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
-    # WBM and Ivory now have independent sequences, so a date-first ordering
-    # avoids ambiguous rows when both brands legitimately have number 02001.
-    stmt = (select(Invoice).options(selectinload(Invoice.booking), selectinload(Invoice.payments))
-            .order_by(Invoice.issue_date.desc(), Invoice.created_at.desc()))
+    stmt = select(Invoice).options(selectinload(Invoice.booking), selectinload(Invoice.payments))
     if brand:
         stmt = stmt.where(Invoice.brand == brand)
-    return [invoice_json(x) for x in db.scalars(stmt).all()]
+    rows = list(db.scalars(stmt).all())
+
+    def due_order(item: Invoice) -> tuple:
+        balance = Decimal("0") if item.status == "void" else item.total - item.paid
+        due = effective_invoice_due_date(item)
+        if balance <= 0:
+            return (3, date.max, -item.sequence)
+        if not due:
+            return (2, date.max, -item.sequence)
+        if due < date.today():
+            # Overdue first, with the nearest missed date at the top.
+            return (0, -due.toordinal(), -item.sequence)
+        # Then upcoming balances from the nearest due date onwards.
+        return (1, due.toordinal(), -item.sequence)
+
+    rows.sort(key=due_order)
+    return [invoice_json(item) for item in rows]
 
 
 @app.post("/api/bookings/{booking_id}/invoices", status_code=201)
@@ -980,8 +1012,17 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "emails": [{"template_key": x.template_key, "recipient": x.recipient, "subject": x.subject,
                     "status": x.status, "sent_at": x.sent_at.isoformat()} for x in logs],
         "quote": quote_data,
+        "quote_preparation": quote_preparation_json(booking),
         "automation_suppressed": booking.automation_suppressed,
         "final_details_unlocked": final_details_unlocked(db, booking),
+    }
+
+
+def quote_preparation_json(booking: Booking) -> dict:
+    raw = (booking.workflow_state or {}).get("quote_preparation") or {}
+    return {
+        "required_addons": [item for item in (raw.get("required_addons") or []) if isinstance(item, dict)],
+        "discounts": [item for item in (raw.get("discounts") or []) if isinstance(item, dict)],
     }
 
 
@@ -1158,6 +1199,54 @@ def create_portal_link(booking_id: str, payload: PortalCreateIn, _: Admin = Depe
     }
 
 
+@app.put("/api/bookings/{booking_id}/quote/preparation")
+def save_quote_preparation(booking_id: str, payload: QuotePreparationIn,
+                           _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    if booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING:
+        raise HTTPException(422, "Quote preparation is only available for wedding bookings")
+    if booking.status == RecordStatus.CANCELLED or not automations_allowed(booking):
+        raise HTTPException(409, "This booking is not available for automatic quote preparation")
+    if db.scalar(select(Quote.id).where(Quote.booking_id == booking.id,
+                                        Quote.status == "accepted").limit(1)):
+        raise HTTPException(409, "The accepted quote and invoice are locked")
+
+    required_input = {item.addon_id: item for item in payload.required_addons}
+    discount_input = {item.addon_id: item for item in payload.discounts}
+    if set(required_input) & set(discount_input):
+        raise HTTPException(422, "An item cannot be both an add-on and a discount")
+    wanted_ids = list(required_input) + list(discount_input)
+    rows = db.scalars(select(AddOnOption).where(
+        AddOnOption.id.in_(wanted_ids), AddOnOption.brand == booking.brand,
+        AddOnOption.is_active.is_(True),
+    )).all() if wanted_ids else []
+    if len(rows) != len(wanted_ids):
+        raise HTTPException(422, "One or more selected quote items are unavailable")
+    by_id = {row.id: row for row in rows}
+
+    def snapshot(item_id: str, entered: QuotePreparationIn, discount: bool) -> dict:
+        row = by_id[item_id]
+        if bool(row.is_discount) != discount:
+            raise HTTPException(422, f"{row.name} has the wrong quote item type")
+        source = discount_input[item_id] if discount else required_input[item_id]
+        return {"addon_id": row.id, "code": row.code, "name": row.name,
+                "description": row.description, "price": money(source.price),
+                "required": not discount, "discount": discount}
+
+    preparation = {
+        "required_addons": [snapshot(item_id, payload, False) for item_id in required_input],
+        "discounts": [snapshot(item_id, payload, True) for item_id in discount_input],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    booking.workflow_state = {**(booking.workflow_state or {}), "quote_preparation": preparation}
+    audit(db, "prepare_quote", "booking", booking.id,
+          {"required_addons": len(required_input), "discounts": len(discount_input)})
+    db.commit()
+    return quote_preparation_json(booking)
+
+
 @app.post("/api/bookings/{booking_id}/quote/send")
 def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
                           _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
@@ -1272,7 +1361,8 @@ def public_portal_data(token: str, db: Session = Depends(get_db)):
                                                        PackageOption.is_active.is_(True))
                           .order_by(PackageOption.display_order, PackageOption.price)).all()
     addons = db.scalars(select(AddOnOption).where(AddOnOption.brand == booking.brand,
-                                                  AddOnOption.is_active.is_(True))
+                                                  AddOnOption.is_active.is_(True),
+                                                  AddOnOption.is_discount.is_(False))
                         .order_by(AddOnOption.display_order, AddOnOption.price)).all()
     client_invoices = db.scalars(select(Invoice).options(selectinload(Invoice.booking),
                                                           selectinload(Invoice.payments))
@@ -1362,10 +1452,17 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
                                                     PackageOption.is_active.is_(True)))
     if not package:
         raise HTTPException(404, "The selected package is no longer available")
-    requested_ids = list(dict.fromkeys(payload.addon_ids))
+    preparation = quote_preparation_json(booking)
+    required_items = preparation["required_addons"]
+    discount_items = preparation["discounts"]
+    required_ids = [item["addon_id"] for item in required_items]
+    discount_ids = [item["addon_id"] for item in discount_items]
+    requested_ids = [item_id for item_id in dict.fromkeys(payload.addon_ids)
+                     if item_id not in required_ids and item_id not in discount_ids]
     addons = db.scalars(select(AddOnOption).where(AddOnOption.id.in_(requested_ids),
                                                   AddOnOption.brand == booking.brand,
-                                                  AddOnOption.is_active.is_(True))).all() if requested_ids else []
+                                                  AddOnOption.is_active.is_(True),
+                                                  AddOnOption.is_discount.is_(False))).all() if requested_ids else []
     if len(addons) != len(requested_ids):
         raise HTTPException(422, "One or more selected add-ons are unavailable")
     by_id = {x.id: x for x in addons}
@@ -1377,18 +1474,35 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
     line_items = [{"type": "package", "code": package.code, "name": package.name,
                    "description": package.description, "quantity": 1, "unit_price": money(package.price),
                    "total": money(package.price)}]
+    for item in required_items:
+        line_items.append({"type": "addon", "code": item["code"], "name": item["name"],
+                           "description": item["description"], "quantity": 1,
+                           "unit_price": money(item["price"]), "total": money(item["price"]),
+                           "required": True})
     for addon in addons:
         line_items.append({"type": "addon", "code": addon.code, "name": addon.name,
                            "description": addon.description, "quantity": 1,
-                           "unit_price": money(addon.price), "total": money(addon.price)})
-    total = package.price + sum((x.price for x in addons), Decimal("0"))
+                           "unit_price": money(addon.price), "total": money(addon.price),
+                           "required": False})
+    for item in discount_items:
+        amount = Decimal(str(item["price"]))
+        line_items.append({"type": "discount", "code": item["code"], "name": item["name"],
+                           "description": item["description"], "quantity": 1,
+                           "unit_price": money(-amount), "total": money(-amount),
+                           "discount": True})
+    required_total = sum((Decimal(str(item["price"])) for item in required_items), Decimal("0"))
+    discount_total = sum((Decimal(str(item["price"])) for item in discount_items), Decimal("0"))
+    total = package.price + sum((x.price for x in addons), Decimal("0")) + required_total - discount_total
+    if total < 0:
+        raise HTTPException(422, "The discount cannot be greater than the quote total")
     accepted_on = date.today()
     deposit_due_date = accepted_on + timedelta(days=1)
     normal_balance_due = booking.event_date - timedelta(days=45) if booking.event_date else None
     balance_due_date = (max(normal_balance_due, deposit_due_date)
                         if normal_balance_due else None)
     quote = Quote(booking_id=booking.id, status="accepted", package_id=package.id,
-                  selected_addon_ids=requested_ids, line_items=line_items, total=total,
+                  selected_addon_ids=required_ids + requested_ids + discount_ids,
+                  line_items=line_items, total=total,
                   deposit_amount=package.deposit_amount, accepted_at=datetime.now(timezone.utc))
     db.add(quote)
     db.flush()

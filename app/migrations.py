@@ -54,6 +54,9 @@ def apply_safe_migrations() -> None:
             "source_detail": "VARCHAR(500) NULL",
             "is_legacy_import": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
         },
+        "addon_options": {
+            "is_discount": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
+        },
     }
     with engine.begin() as connection:
         for table, columns in additions.items():

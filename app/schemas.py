@@ -185,6 +185,7 @@ class AddOnOptionIn(BaseModel):
     eligible_package_codes: list[str] = Field(default_factory=list, max_length=100)
     display_order: int = Field(default=0, ge=0, le=1000)
     is_active: bool = True
+    is_discount: bool = False
 
 
 class AddOnOptionPatch(BaseModel):
@@ -194,6 +195,17 @@ class AddOnOptionPatch(BaseModel):
     eligible_package_codes: list[str] | None = Field(default=None, max_length=100)
     display_order: int | None = Field(default=None, ge=0, le=1000)
     is_active: bool | None = None
+    is_discount: bool | None = None
+
+
+class QuotePreparationItemIn(BaseModel):
+    addon_id: str = Field(min_length=36, max_length=36)
+    price: Decimal = Field(ge=0, le=100000)
+
+
+class QuotePreparationIn(BaseModel):
+    required_addons: list[QuotePreparationItemIn] = Field(default_factory=list, max_length=50)
+    discounts: list[QuotePreparationItemIn] = Field(default_factory=list, max_length=20)
 
 
 class QuoteAcceptIn(BaseModel):

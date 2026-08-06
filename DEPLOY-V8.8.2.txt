@@ -1,0 +1,17 @@
+BOOKINGSYSTEM2026 V8.8.2 - SAFE CUMULATIVE DEPLOYMENT
+
+Upload the complete ZIP contents to the repository main branch, then run:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml down
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d
+
+Check:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+curl http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.06-admin-questionnaires-v8.8.2
+
+No data reset or re-import is required. Deployment sends no client emails.

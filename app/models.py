@@ -137,6 +137,7 @@ class AddOnOption(Base):
     description: Mapped[str] = mapped_column(Text)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     eligible_package_codes: Mapped[list] = mapped_column(JSON, default=list)
+    is_discount: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     display_order: Mapped[int] = mapped_column(default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
