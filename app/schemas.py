@@ -94,6 +94,11 @@ class InvoiceIn(BaseModel):
     notes: str | None = None
 
 
+class InvoiceDueDatePatch(BaseModel):
+    due_date: date
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class PaymentIn(BaseModel):
     amount: Decimal = Field(gt=0)
     paid_date: date = Field(default_factory=date.today)

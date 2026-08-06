@@ -30,7 +30,8 @@ from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, 
                      Quote, RecordKind, RecordStatus, ReminderLog, Task)
 from .pdf import invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
-                      ContractAcceptIn, ContractTemplatePatch, EmailTemplatePatch, EnquiryIn, InvoiceIn,
+                      ContractAcceptIn, ContractTemplatePatch, EmailTemplatePatch, EnquiryIn,
+                      InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       PublicFormIn, QuoteAcceptIn, QuotePreparationIn, SendEmailIn, TaskIn, TaskPatch,
                       TemplateTestIn)
@@ -61,7 +62,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9-complete-archive-import", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.2-agreed-payment-date", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -126,17 +127,27 @@ def payment_json(item: Payment) -> dict:
             "created_at": item.created_at.isoformat()}
 
 
-def effective_invoice_due_date(item: Invoice) -> date | None:
-    """Wedding final balances are due exactly 45 days before the wedding."""
+def standard_wedding_due_date(item: Invoice) -> date | None:
+    """Return the normal wedding payment date before any agreed exception."""
     booking = item.booking
     if (booking and booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
             and booking.event_date):
         return booking.event_date - timedelta(days=45)
-    return item.due_date
+    return None
+
+
+def effective_invoice_due_date(item: Invoice) -> date | None:
+    """Use the invoice's agreed date, falling back to the normal 45-day rule."""
+    if item.due_date:
+        return item.due_date
+    if item.booking and item.booking.balance_due_date:
+        return item.booking.balance_due_date
+    return standard_wedding_due_date(item)
 
 
 def invoice_json(item: Invoice) -> dict:
     due = effective_invoice_due_date(item)
+    standard_due = standard_wedding_due_date(item)
     balance = Decimal("0") if item.status == "void" else item.total - item.paid
     days_until_due = (due - date.today()).days if due and balance > 0 else None
     due_status = ("paid" if balance <= 0 else "no_date" if not due else
@@ -147,6 +158,8 @@ def invoice_json(item: Invoice) -> dict:
             "supply_date": item.supply_date.isoformat() if item.supply_date else None,
             "due_date": due.isoformat() if due else None,
             "payment_due_date": due.isoformat() if due else None,
+            "standard_due_date": standard_due.isoformat() if standard_due else None,
+            "due_date_overridden": bool(due and standard_due and due != standard_due),
             "wedding_date": item.booking.event_date.isoformat() if item.booking and item.booking.event_date else None,
             "payment_due_status": due_status, "days_until_due": days_until_due,
             "description": item.description, "notes": item.notes, "total": money(item.total),
@@ -254,7 +267,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.06-complete-archive-import-v8.9"}
+            "build": "2026.08.06-agreed-payment-date-v8.9.2"}
 
 
 @app.get("/api/public/config")
@@ -596,6 +609,17 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
             setattr(client, key, value)
     if "event_date" in values and "balance_due_date" not in values:
         refresh_wedding_payment_dates(db, item)
+    elif "balance_due_date" in values:
+        # Keep the older Edit booking route consistent with the dedicated
+        # invoice control. The Payments screen remains the clearer route.
+        agreed_due = values["balance_due_date"]
+        for invoice in db.scalars(select(Invoice).where(
+                Invoice.booking_id == item.id,
+                ~Invoice.status.in_(["paid", "void"]))).all():
+            invoice.due_date = agreed_due
+            if agreed_due:
+                replace_final_schedule_due_date(invoice, agreed_due)
+                replace_balance_note(invoice, agreed_due)
     auto_confirmed = confirm_when_paid(item)
     audit(db, "update", "booking", item.id,
           {"fields": list(payload.model_fields_set), "auto_confirmed": auto_confirmed})
@@ -765,6 +789,65 @@ def full_invoice(db: Session, invoice_id: str) -> Invoice:
     if not invoice:
         raise HTTPException(404, "Invoice not found")
     return invoice
+
+
+def replace_final_schedule_due_date(invoice: Invoice, due_date: date) -> None:
+    """Keep an imported instalment schedule consistent with an agreed final date."""
+    schedule = [dict(item) for item in (invoice.payment_schedule or [])]
+    if not schedule:
+        return
+    labelled = [index for index, item in enumerate(schedule)
+                if any(word in str(item.get("label") or "").lower()
+                       for word in ("balance", "final", "remaining"))]
+    candidates = labelled or list(range(len(schedule)))
+
+    def schedule_date(index: int) -> date:
+        raw = schedule[index].get("due_date")
+        try:
+            return date.fromisoformat(str(raw)) if raw else date.min
+        except ValueError:
+            return date.min
+
+    final_index = max(candidates, key=schedule_date)
+    schedule[final_index]["due_date"] = due_date.isoformat()
+    invoice.payment_schedule = schedule
+
+
+def replace_balance_note(invoice: Invoice, due_date: date) -> None:
+    """Prevent a generated invoice note from showing the superseded date."""
+    if invoice.notes:
+        invoice.notes = re.sub(
+            r"The remaining balance is due by [^.]+\.",
+            f"The remaining balance is due by {due_date.strftime('%d %B %Y')}.",
+            invoice.notes,
+        )
+
+
+@app.patch("/api/invoices/{invoice_id}/due-date")
+def change_invoice_due_date(invoice_id: str, payload: InvoiceDueDatePatch,
+                            _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    """Record a one-couple payment extension without changing the wedding date."""
+    invoice = full_invoice(db, invoice_id)
+    if invoice.status == "void":
+        raise HTTPException(409, "The payment date cannot be changed on a void invoice")
+    previous_due = effective_invoice_due_date(invoice)
+    invoice.due_date = payload.due_date
+    replace_final_schedule_due_date(invoice, payload.due_date)
+    replace_balance_note(invoice, payload.due_date)
+    if (invoice.booking and invoice.booking.brand == Brand.WBM
+            and invoice.booking.kind == RecordKind.WEDDING):
+        # Reminders are intentionally booking-scoped, so the agreed invoice
+        # date becomes this couple's reminder date without affecting anyone else.
+        invoice.booking.balance_due_date = payload.due_date
+    audit(db, "change_invoice_due_date", "booking", invoice.booking_id, {
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.number,
+        "previous_due_date": previous_due.isoformat() if previous_due else None,
+        "new_due_date": payload.due_date.isoformat(),
+        "reason": payload.reason,
+    })
+    db.commit()
+    return invoice_json(full_invoice(db, invoice.id))
 
 
 @app.post("/api/invoices/{invoice_id}/payments", status_code=201)

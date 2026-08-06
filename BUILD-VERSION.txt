@@ -1,7 +1,14 @@
-BookingSystem2026 - Full Booking Page
-Build: 2026.08.06-complete-archive-import-v8.9
+BookingSystem2026 - Agreed Payment Dates
+Build: 2026.08.06-agreed-payment-date-v8.9.2
 
-This build includes every V8.8.2 feature plus:
+This cumulative build includes every V8.9 feature plus:
+
+- A Change final payment date control on every outstanding invoice.
+- Per-couple payment extensions without changing the wedding date or anyone else's 45-day rule.
+- The agreed date is used consistently by the booking, invoice register, PDF and reminder schedule.
+- Invoice lists show due dates and remain ordered by the nearest payment date.
+- Optional private reasons are retained in the audit history.
+- Imported instalment schedules and generated invoice wording are kept consistent with an agreed date.
 
 - Protected complete Studio Ninja archive import support.
 - Multiple original invoices per historic booking.
