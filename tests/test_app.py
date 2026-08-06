@@ -97,7 +97,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.05-guided-booking-workspace-v8.7"}
+                                 "build": "2026.08.06-full-booking-page-v8.7.1"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -255,6 +255,27 @@ def test_phase_two_b_flow(monkeypatch):
 
         catalog = client.get("/api/catalog?brand=wbm").json()
         assert [row["price"] for row in catalog["packages"]] == [475, 699, 899, 1299, 1699]
+        temporary_package = client.post("/api/catalog/packages?brand=wbm", json={
+            "code": "duplicate_test", "name": "Duplicate test package",
+            "description": "Safe temporary package", "price": 1,
+            "deposit_amount": 0, "display_order": 99, "is_active": True,
+        })
+        assert temporary_package.status_code == 201
+        assert client.delete(
+            f"/api/catalog/packages/{temporary_package.json()['id']}"
+        ).status_code == 204
+        temporary_addon = client.post("/api/catalog/addons?brand=wbm", json={
+            "code": "duplicate_extra", "name": "Duplicate test extra",
+            "description": "Safe temporary add-on", "price": 1,
+            "eligible_package_codes": ["gold"], "display_order": 99, "is_active": True,
+        })
+        assert temporary_addon.status_code == 201
+        assert client.delete(
+            f"/api/catalog/addons/{temporary_addon.json()['id']}"
+        ).status_code == 204
+        refreshed_catalog = client.get("/api/catalog?brand=wbm&include_inactive=true").json()
+        assert not any(row["code"] == "duplicate_test" for row in refreshed_catalog["packages"])
+        assert not any(row["code"] == "duplicate_extra" for row in refreshed_catalog["addons"])
         album = next(row for row in catalog["addons"] if row["code"] == "album_offer")
         speeches = next(row for row in catalog["addons"] if row["code"] == "speeches")
         assert album["price"] == 120
@@ -266,6 +287,8 @@ def test_phase_two_b_flow(monkeypatch):
             "package_id": gold["id"], "addon_ids": [album["id"]], "confirmed": True
         })
         assert quote.status_code == 201
+        assert client.delete(f"/api/catalog/packages/{gold['id']}").status_code == 409
+        assert client.delete(f"/api/catalog/addons/{album['id']}").status_code == 409
         assert quote.json()["quote"]["total"] == 1019
         assert quote.json()["invoice"]["number"] == "WBM02002"
         assert quote.json()["acceptance_email_sent"] is False

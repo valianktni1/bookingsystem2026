@@ -14,7 +14,8 @@ from .services import create_default_tasks
 
 def bootstrap(db: Session) -> None:
     settings = get_settings()
-    if not db.scalar(select(Admin).limit(1)):
+    fresh_install = not db.scalar(select(Admin.id).limit(1))
+    if fresh_install:
         db.add(Admin(email=settings.admin_email.lower(), password_hash=hash_password(settings.admin_password)))
 
     profiles = {
@@ -124,9 +125,9 @@ A £150 deposit secures your date."""),
 
 A £150 deposit secures your date."""),
     ]
-    for order, (code, name, price, deposit, description) in enumerate(packages, start=1):
-        if not db.scalar(select(PackageOption).where(PackageOption.brand == Brand.WBM,
-                                                      PackageOption.code == code)):
+    has_wbm_packages = db.scalar(select(PackageOption.id).where(PackageOption.brand == Brand.WBM).limit(1))
+    if fresh_install and not has_wbm_packages:
+        for order, (code, name, price, deposit, description) in enumerate(packages, start=1):
             db.add(PackageOption(brand=Brand.WBM, code=code, name=name, description=description,
                                  price=Decimal(price), deposit_amount=Decimal(deposit), display_order=order))
 
@@ -144,9 +145,9 @@ A £150 deposit secures your date."""),
         ("speeches", "Speeches coverage", 55, ["bronze"],
          "Extend Bronze Package coverage until the speeches have finished."),
     ]
-    for order, (code, name, price, eligible, description) in enumerate(addons, start=1):
-        if not db.scalar(select(AddOnOption).where(AddOnOption.brand == Brand.WBM,
-                                                   AddOnOption.code == code)):
+    has_wbm_addons = db.scalar(select(AddOnOption.id).where(AddOnOption.brand == Brand.WBM).limit(1))
+    if fresh_install and not has_wbm_addons:
+        for order, (code, name, price, eligible, description) in enumerate(addons, start=1):
             db.add(AddOnOption(brand=Brand.WBM, code=code, name=name, description=description,
                                price=Decimal(price), eligible_package_codes=eligible, display_order=order))
     db.commit()

@@ -1,7 +1,12 @@
-BookingSystem2026 - Guided Booking Workspace
-Build: 2026.08.05-guided-booking-workspace-v8.7
+BookingSystem2026 - Full Booking Page
+Build: 2026.08.06-full-booking-page-v8.7.1
 
 This build includes:
+- Jobs now open as a full-screen, independently scrolling booking page
+- Clear Back to bookings control returns to the existing jobs list
+- No fixed right-hand drawer or trapped job-section scrolling
+- Package and add-on internal codes are generated automatically from their names
+- Unused packages and add-ons can be permanently deleted, with accepted financial records protected
 - Clear New enquiries and Wedding bookings workspaces
 - Five-stage wedding journey: Enquiry, Quote, Payment, Forms and Wedding
 - One plain-English next action shown at the top of every booking

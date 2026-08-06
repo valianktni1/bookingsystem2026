@@ -59,7 +59,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.7-guided-workspace", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.7.1-full-booking-page", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -234,7 +234,7 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.05-guided-booking-workspace-v8.7"}
+            "build": "2026.08.06-full-booking-page-v8.7.1"}
 
 
 @app.get("/api/public/config")
@@ -425,6 +425,40 @@ def patch_package(package_id: str, payload: PackageOptionPatch,
     return package_json(row)
 
 
+def catalog_item_is_used(db: Session, item_type: str, item_id: str, code: str) -> bool:
+    """Protect accepted quote and invoice snapshots from catalog deletion."""
+    for quote in db.scalars(select(Quote)).all():
+        if item_type == "package" and quote.package_id == item_id:
+            return True
+        if item_type == "addon" and item_id in (quote.selected_addon_ids or []):
+            return True
+        if any(line.get("type") == item_type and line.get("code") == code
+               for line in (quote.line_items or []) if isinstance(line, dict)):
+            return True
+    for invoice in db.scalars(select(Invoice)).all():
+        if any(line.get("type") == item_type and line.get("code") == code
+               for line in (invoice.line_items or []) if isinstance(line, dict)):
+            return True
+    return False
+
+
+@app.delete("/api/catalog/packages/{package_id}", status_code=204)
+def delete_package(package_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    row = db.get(PackageOption, package_id)
+    if not row:
+        raise HTTPException(404, "Package not found")
+    if catalog_item_is_used(db, "package", row.id, row.code):
+        raise HTTPException(409, "This package is already used by an accepted quote or invoice. Set it to Hidden instead so the client's records remain accurate.")
+    for addon in db.scalars(select(AddOnOption).where(AddOnOption.brand == row.brand)).all():
+        eligible = list(addon.eligible_package_codes or [])
+        if row.code in eligible:
+            addon.eligible_package_codes = [code for code in eligible if code != row.code]
+    audit(db, "delete_package", "package_option", row.id, {"name": row.name, "code": row.code})
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
+
+
 @app.post("/api/catalog/addons", status_code=201)
 def create_addon(payload: AddOnOptionIn, brand: Brand = Brand.WBM,
                  _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
@@ -449,6 +483,19 @@ def patch_addon(addon_id: str, payload: AddOnOptionPatch,
     audit(db, "update_addon", "addon_option", row.id, {"name": row.name})
     db.commit()
     return addon_json(row)
+
+
+@app.delete("/api/catalog/addons/{addon_id}", status_code=204)
+def delete_addon(addon_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    row = db.get(AddOnOption, addon_id)
+    if not row:
+        raise HTTPException(404, "Add-on not found")
+    if catalog_item_is_used(db, "addon", row.id, row.code):
+        raise HTTPException(409, "This add-on is already used by an accepted quote or invoice. Set it to Hidden instead so the client's records remain accurate.")
+    audit(db, "delete_addon", "addon_option", row.id, {"name": row.name, "code": row.code})
+    db.delete(row)
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.get("/api/dashboard")

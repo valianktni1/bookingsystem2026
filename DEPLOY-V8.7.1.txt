@@ -1,0 +1,26 @@
+BOOKINGSYSTEM2026 V8.7.1 - SAFE CUMULATIVE DEPLOYMENT
+
+This full cumulative release includes everything from V8.7 and earlier.
+It does not reset, seed or import database records.
+
+1. Replace the repository contents with this complete release and push to main.
+
+2. Run in the TrueNAS shell:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml down
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d
+
+3. Check the build:
+
+curl -fsS http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.06-full-booking-page-v8.7.1
+
+4. Fully close the old browser tab and reopen:
+https://booking.weddingsbymark.uk
+
+All existing and imported bookings remain in PostgreSQL.
