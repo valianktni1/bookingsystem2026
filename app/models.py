@@ -340,6 +340,32 @@ class EmailLog(Base):
     booking: Mapped[Booking] = relationship()
 
 
+class MailboxReply(Base):
+    """A durable audit copy of replies sent from the unified admin inbox.
+
+    Incoming email remains on Hostinger and is read live over IMAP. Only a
+    reply written by the administrator is retained here, so it remains visible
+    against the conversation even if the remote Sent folder is unavailable.
+    ``booking_id`` is intentionally not a foreign key: historic mail audit must
+    not prevent deletion of an empty test booking.
+    """
+
+    __tablename__ = "mailbox_replies"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    brand: Mapped[Brand] = mapped_column(Enum(Brand), index=True)
+    booking_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    recipient: Mapped[str] = mapped_column(String(254), index=True)
+    subject: Mapped[str] = mapped_column(String(500))
+    body: Mapped[str] = mapped_column(Text)
+    message_id: Mapped[str] = mapped_column(String(500), unique=True, index=True)
+    in_reply_to: Mapped[str | None] = mapped_column(String(500), nullable=True, index=True)
+    thread_references: Mapped[str | None] = mapped_column(Text, nullable=True)
+    copied_to_sent: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(30), default="sent", index=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+
+
 class ReminderLog(Base):
     __tablename__ = "reminder_logs"
     __table_args__ = (UniqueConstraint("booking_id", "reminder_key", "scheduled_for", name="uq_booking_reminder_day"),)

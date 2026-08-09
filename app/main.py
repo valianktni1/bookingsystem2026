@@ -24,6 +24,7 @@ from .email_service import preview_template_email, send_template_email, smtp_cre
 from .migrations import apply_safe_migrations
 from .legacy_archive_import import register_legacy_archive_import_routes
 from .legacy_import import register_legacy_import_routes
+from .mail_routes import register_mail_routes
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
                      EmailLog, EmailTemplate, FormSubmission, Invoice, PackageOption, Payment,
@@ -62,7 +63,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.5-clean-admin-workspace", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.6-unified-mail", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -289,7 +290,10 @@ def health():
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
-            "build": "2026.08.06-clean-admin-workspace-v8.9.5"}
+            "imap_configured": bool(settings.imap_host and (
+                settings.imap_wbm_password or settings.smtp_wbm_password or
+                settings.imap_ivory_password or settings.smtp_ivory_password)),
+            "build": "2026.08.06-unified-imap-smtp-mail-v8.9.6"}
 
 
 @app.get("/api/public/config")
@@ -1912,6 +1916,7 @@ async def reminder_loop():
 
 register_v82_routes(app)
 register_v84_routes(app)
+register_mail_routes(app)
 register_legacy_import_routes(app)
 register_legacy_archive_import_routes(app)
 

@@ -1,0 +1,43 @@
+BOOKINGSYSTEM2026 V8.9.6 — COMPLETE CUMULATIVE DEPLOYMENT
+
+Upload the complete ZIP contents to the main branch of:
+https://github.com/valianktni1/bookingsystem2026
+
+In Dockge add these values under the app service environment. Use the real
+individual Hostinger mailbox passwords where shown:
+
+  SMTP_HOST: smtp.hostinger.com
+  SMTP_PORT: "465"
+  SMTP_WBM_USERNAME: mark@perfectweddingsbymark.uk
+  SMTP_WBM_PASSWORD: YOUR_REAL_WBM_HOSTINGER_MAILBOX_PASSWORD
+  SMTP_IVORY_USERNAME: admin@ivorydigital.uk
+  SMTP_IVORY_PASSWORD: YOUR_REAL_IVORY_HOSTINGER_MAILBOX_PASSWORD
+  SMTP_USE_SSL: "true"
+  IMAP_HOST: imap.hostinger.com
+  IMAP_PORT: "993"
+  IMAP_WBM_USERNAME: mark@perfectweddingsbymark.uk
+  IMAP_WBM_PASSWORD: YOUR_REAL_WBM_HOSTINGER_MAILBOX_PASSWORD
+  IMAP_IVORY_USERNAME: admin@ivorydigital.uk
+  IMAP_IVORY_PASSWORD: YOUR_REAL_IVORY_HOSTINGER_MAILBOX_PASSWORD
+  IMAP_USE_SSL: "true"
+  MAIL_TIMEOUT_SECONDS: "20"
+  MAIL_LIST_LIMIT: "60"
+
+Do not put mailbox passwords into GitHub. They belong only in Dockge YAML.
+
+Rebuild:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml down
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d
+
+Check:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+curl http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.06-unified-imap-smtp-mail-v8.9.6
+
+Opening Inbox does not send anything. Imported Studio Ninja clients remain
+permanently excluded from automatic emails and reminders.

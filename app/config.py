@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     smtp_ivory_username: str | None = "admin@ivorydigital.uk"
     smtp_ivory_password: str | None = None
     smtp_use_ssl: bool = True
+    imap_host: str = "imap.hostinger.com"
+    imap_port: int = 993
+    imap_wbm_username: str | None = None
+    imap_wbm_password: str | None = None
+    imap_ivory_username: str | None = None
+    imap_ivory_password: str | None = None
+    imap_use_ssl: bool = True
+    mail_timeout_seconds: int = Field(default=20, ge=5, le=60)
+    mail_list_limit: int = Field(default=60, ge=10, le=200)
     reminder_scan_hours: int = 6
     reminders_enabled: bool = False
     google_maps_api_key: str | None = None

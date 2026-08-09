@@ -166,7 +166,8 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.status_code == 200
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
-                                 "build": "2026.08.06-clean-admin-workspace-v8.9.5"}
+                                 "imap_configured": False,
+                                 "build": "2026.08.06-unified-imap-smtp-mail-v8.9.6"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

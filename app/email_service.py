@@ -101,6 +101,26 @@ def smtp_ready(brand: Brand | None = None) -> bool:
     return bool(settings.smtp_host and username and password)
 
 
+def send_email_message(message: EmailMessage, brand: Brand) -> None:
+    """Send an already-built message through the selected business mailbox."""
+    settings = get_settings()
+    username, password = smtp_credentials(brand)
+    if not smtp_ready(brand):
+        raise RuntimeError("SMTP is not configured for this business mailbox")
+    context = ssl.create_default_context()
+    if settings.smtp_use_ssl:
+        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context,
+                              timeout=settings.mail_timeout_seconds) as server:
+            server.login(username, password)
+            server.send_message(message)
+    else:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port,
+                          timeout=settings.mail_timeout_seconds) as server:
+            server.starttls(context=context)
+            server.login(username, password)
+            server.send_message(message)
+
+
 def _body_html(body: str) -> str:
     """Safely turn the editable plain-text template into email-friendly HTML."""
     buttons: list[str] = []
@@ -220,8 +240,7 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
                         extra_values: dict[str, str] | None = None,
                         recipient: str | None = None,
                         reply_to: str | None = None) -> tuple[str, str]:
-    settings = get_settings()
-    username, password = smtp_credentials(booking.brand)
+    username, _ = smtp_credentials(booking.brand)
     if not smtp_ready(booking.brand):
         raise RuntimeError(
             f"SMTP is not configured for {profile.display_name}. "
@@ -234,16 +253,7 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
     )
     message = build_email_message(booking, profile, subject, body, username,
                                   recipient=recipient, reply_to=reply_to)
-    context = ssl.create_default_context()
-    if settings.smtp_use_ssl:
-        with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, context=context, timeout=30) as server:
-            server.login(username, password)
-            server.send_message(message)
-    else:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30) as server:
-            server.starttls(context=context)
-            server.login(username, password)
-            server.send_message(message)
+    send_email_message(message, booking.brand)
     return subject, body
 
 
