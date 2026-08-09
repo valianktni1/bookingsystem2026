@@ -284,6 +284,25 @@ class ContractTemplate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
+class FormTemplate(Base):
+    """Editable public/client form configuration.
+
+    A JSON snapshot keeps the builder flexible without requiring a database
+    migration whenever another question type is introduced.
+    """
+
+    __tablename__ = "form_templates"
+    __table_args__ = (UniqueConstraint("brand", "template_key", name="uq_form_template_brand_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    brand: Mapped[Brand] = mapped_column(Enum(Brand), index=True)
+    template_key: Mapped[str] = mapped_column(String(80), index=True)
+    display_name: Mapped[str] = mapped_column(String(140))
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class ClientPortalToken(Base):
     __tablename__ = "client_portal_tokens"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

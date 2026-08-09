@@ -11,6 +11,7 @@ header p { margin:0; color:#798789; font-size:14px; }
 .payment-note { display:grid; gap:11px; margin:25px 0; padding:17px 19px; border-left:4px solid #bca98f; border-radius:5px; background:#f7f2e9; }
 .payment-note>strong { color:var(--deep); font-size:14px; }
 .payment-note>div { display:grid; grid-template-columns:65px 1fr; gap:9px; padding-top:9px; border-top:1px solid #ded2bf; }
+.payment-note>div.payment-option { display:block; color:#5f6f70; font-size:12px; line-height:1.5; }
 .payment-note b { color:#806a4d; font-size:11px; }
 .payment-note span { font-size:12px; line-height:1.45; }
 .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:17px; }

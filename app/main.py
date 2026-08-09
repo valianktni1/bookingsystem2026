@@ -21,17 +21,19 @@ from .bootstrap import bootstrap
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .email_service import preview_template_email, send_template_email, smtp_credentials, smtp_ready
+from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
 from .migrations import apply_safe_migrations
 from .legacy_archive_import import register_legacy_archive_import_routes
 from .legacy_import import register_legacy_import_routes
 from .mail_routes import register_mail_routes
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
-                     EmailLog, EmailTemplate, FormSubmission, Invoice, PackageOption, Payment,
+                     EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, PackageOption, Payment,
                      Quote, RecordKind, RecordStatus, ReminderLog, Task)
 from .pdf import invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
+                      EnquiryFormTemplateIn,
                       InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       PublicFormIn, QuoteAcceptIn, QuotePreparationIn, SendEmailIn, TaskIn, TaskPatch,
@@ -63,7 +65,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.6-unified-mail", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.7-editable-enquiry-form", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -293,7 +295,7 @@ def health():
             "imap_configured": bool(settings.imap_host and (
                 settings.imap_wbm_password or settings.smtp_wbm_password or
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
-            "build": "2026.08.06-unified-imap-smtp-mail-v8.9.6"}
+            "build": "2026.08.09-editable-web-enquiry-form-v8.9.7"}
 
 
 @app.get("/api/public/config")
@@ -311,12 +313,63 @@ def public_catalog(db: Session = Depends(get_db)):
     return {"packages": [package_json(x) for x in packages]}
 
 
+def website_enquiry_template(db: Session) -> FormTemplate:
+    item = db.scalar(select(FormTemplate).where(
+        FormTemplate.brand == Brand.WBM,
+        FormTemplate.template_key == "website_enquiry",
+    ))
+    if not item:
+        raise HTTPException(503, "The website enquiry form is not configured yet")
+    return item
+
+
+@app.get("/api/public/enquiry-form")
+def public_website_enquiry_form(db: Session = Depends(get_db)):
+    item = website_enquiry_template(db)
+    if not item.is_active:
+        raise HTTPException(503, "The website enquiry form is temporarily unavailable")
+    return public_enquiry_form(item.config or {})
+
+
+@app.get("/api/forms/website-enquiry")
+def admin_website_enquiry_form(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    item = website_enquiry_template(db)
+    config = dict(item.config or {})
+    config.update({"id": item.id, "display_name": item.display_name,
+                   "is_active": item.is_active, "updated_at": item.updated_at.isoformat()})
+    return config
+
+
+@app.put("/api/forms/website-enquiry")
+def save_website_enquiry_form(payload: EnquiryFormTemplateIn,
+                              _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    item = website_enquiry_template(db)
+    config = validate_enquiry_form(payload.model_dump())
+    item.config = config
+    item.is_active = True
+    audit(db, "publish_website_enquiry_form", "form_template", item.id,
+          {"question_count": len(config["fields"])})
+    db.commit()
+    db.refresh(item)
+    result = dict(item.config)
+    result.update({"id": item.id, "display_name": item.display_name,
+                   "is_active": item.is_active, "updated_at": item.updated_at.isoformat()})
+    return result
+
+
 @app.post("/api/public/enquiries", status_code=201)
 def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = Depends(get_db)):
     if payload.website:
         return {"ok": True}
     if not payload.privacy_agreed:
         raise HTTPException(422, "Please agree to the privacy notice before submitting")
+    template = website_enquiry_template(db)
+    core_answers = payload.model_dump(exclude={"website", "privacy_agreed", "custom_answers"}, mode="json")
+    custom_answers, answer_snapshot = validate_enquiry_answers(
+        template.config or {},
+        {**core_answers, "privacy_agreed": payload.privacy_agreed},
+        payload.custom_answers,
+    )
     forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
     client_ip = forwarded or (request.client.host if request.client else "unknown")
     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
@@ -331,7 +384,9 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                     phone=payload.phone.strip() if payload.phone else None)
     db.add(client)
     db.flush()
-    form_data = payload.model_dump(exclude={"website", "privacy_agreed"}, mode="json")
+    form_data = {**core_answers, "custom_answers": custom_answers,
+                 "answer_snapshot": answer_snapshot,
+                 "form_template_updated_at": template.updated_at.isoformat()}
     title = f"{payload.primary_first_name.strip()} & {payload.partner_first_name.strip()}"
     booking = Booking(brand=Brand.WBM, kind=RecordKind.WEDDING, status=RecordStatus.ENQUIRY,
                       title=title, client_id=client.id, event_date=payload.event_date,

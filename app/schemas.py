@@ -247,6 +247,32 @@ class EnquiryIn(BaseModel):
     fun_answer: str | None = Field(default=None, max_length=200)
     privacy_agreed: bool
     website: str | None = Field(default=None, max_length=500)
+    custom_answers: dict[str, str | bool | list[str] | None] = Field(default_factory=dict)
+
+
+class EnquiryFormFieldIn(BaseModel):
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    key: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    label: str = Field(min_length=1, max_length=240)
+    field_type: str = Field(pattern=r"^(text|email|tel|date|select|textarea|checkbox|venue|package)$")
+    placeholder: str = Field(default="", max_length=240)
+    help_text: str = Field(default="", max_length=500)
+    required: bool = False
+    enabled: bool = True
+    width: str = Field(default="full", pattern=r"^(half|full)$")
+    options: list[str] = Field(default_factory=list, max_length=100)
+    custom: bool = False
+
+
+class EnquiryFormTemplateIn(BaseModel):
+    heading: str = Field(min_length=1, max_length=300)
+    introduction: str = Field(default="", max_length=1000)
+    payment_title: str = Field(default="", max_length=200)
+    payment_options: list[str] = Field(default_factory=list, max_length=10)
+    fields: list[EnquiryFormFieldIn] = Field(min_length=1, max_length=80)
+    submit_label: str = Field(default="Submit enquiry", min_length=1, max_length=80)
+    success_heading: str = Field(default="Thank you!", min_length=1, max_length=200)
+    success_message: str = Field(default="Your enquiry has landed safely.", min_length=1, max_length=1000)
 
 
 class ORMModel(BaseModel):

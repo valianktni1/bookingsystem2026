@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .content import WBM_CONTRACT_BODY, WBM_CONTRACT_TITLE, WBM_CONTRACT_VERSION
+from .enquiry_forms import default_enquiry_form
 from .models import (AddOnOption, Admin, Booking, Brand, BusinessProfile, Client, ContractTemplate,
-                     EmailTemplate, Invoice, InvoiceCounter, PackageOption, Quote, RecordKind, RecordStatus,
+                     EmailTemplate, FormTemplate, Invoice, InvoiceCounter, PackageOption, Quote, RecordKind, RecordStatus,
                      Task)
 from .security import hash_password
 from .services import create_default_tasks, sync_final_details_call_task
@@ -39,6 +40,20 @@ def bootstrap(db: Session) -> None:
     if not db.get(InvoiceCounter, "global"):
         db.add(InvoiceCounter(key="global", value=settings.invoice_start))
     db.commit()
+
+    enquiry_template = db.scalar(select(FormTemplate).where(
+        FormTemplate.brand == Brand.WBM,
+        FormTemplate.template_key == "website_enquiry",
+    ))
+    if not enquiry_template:
+        db.add(FormTemplate(
+            brand=Brand.WBM,
+            template_key="website_enquiry",
+            display_name="Website enquiry form",
+            config=default_enquiry_form(),
+            is_active=True,
+        ))
+        db.commit()
 
     packages = [
         ("bronze", "Bronze Package 1 2026/27/28", 475, 100, """Half Day Photography

@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,follow">
   <meta name="theme-color" content="#f8f5ef">
   <title>Wedding enquiry - Weddings By Mark</title>
-  <link rel="stylesheet" href="/static/enquiry.css?v=guided-payments-v8-7">
+  <link rel="stylesheet" href="/static/enquiry.css?v=editable-form-v8-9-7">
 </head>
 <body>
   <main>
@@ -14,54 +14,25 @@
       <header>
         <img class="enquiry-logo" src="/static/branding/weddings-by-mark-logo.png" alt="Weddings By Mark">
         <small>WEDDINGS BY MARK</small>
-        <h1>Please fill in your details and let the countdown to your best day ever begin!</h1>
-        <p>I’ll check your date and come back to you as soon as possible.</p>
+        <h1 id="enquiry-heading">Wedding enquiry</h1>
+        <p id="enquiry-introduction">Loading your enquiry form…</p>
       </header>
-      <aside class="payment-note">
-        <strong>We have payment options for you</strong>
-        <div><b>Option 1</b><span>£100 deposit on booking, with the balance due 45 days before your wedding.</span></div>
-        <div><b>Option 2</b><span>£100 deposit on booking, followed by two equal payments 90 days and 45 days before your wedding.</span></div>
-        <div><b>Option 3</b><span>25% deposit on booking, with the remaining 75% due 45 days before your wedding.</span></div>
-      </aside>
+      <aside id="payment-note" class="payment-note hidden"></aside>
       <form id="enquiry-form">
-        <div class="form-grid">
-          <label>Bride's/Groom's first name *<input name="primary_first_name" required maxlength="100" placeholder="Your first name" autocomplete="given-name"></label>
-          <label>Email address *<input name="email" type="email" required maxlength="254" placeholder="Enter your email" autocomplete="email"></label>
-          <label>Groom's/Bride's first name *<input name="partner_first_name" required maxlength="100" placeholder="Partner's first name"></label>
-          <label>Phone number<input name="phone" type="tel" maxlength="50" placeholder="Optional - sometimes replies go into spam" autocomplete="tel"></label>
-          <label>Wedding or event date *<input name="event_date" type="date" required></label>
-          <label class="full venue-label">Wedding/event venue *
-            <input id="enquiry-venue-name" name="location" type="hidden">
-            <input id="enquiry-venue-address" name="venue_address" type="hidden">
-            <input id="enquiry-venue-place-id" name="venue_place_id" type="hidden">
-            <input id="enquiry-venue-lat" name="venue_lat" type="hidden">
-            <input id="enquiry-venue-lng" name="venue_lng" type="hidden">
-            <div id="enquiry-venue-picker" class="venue-picker"></div>
-            <input id="enquiry-venue-manual" class="venue-manual" maxlength="240" placeholder="Enter your venue or location manually" hidden>
-            <div id="enquiry-venue-summary" class="venue-summary"><span>No venue selected yet</span></div>
-            <button id="enquiry-venue-manual-toggle" class="venue-manual-toggle" type="button">Can't find it? Enter the venue manually</button>
-          </label>
-          <label>Package<select name="package_interest" id="package-interest"><option value="">Any particular package caught your eye?</option></select></label>
-          <label>Interested in the Selfie Booth?<select name="selfie_booth_interest"><option value="">Please choose</option><option value="yes">Yes please</option><option value="maybe">Maybe - tell me more</option><option value="no">No thank you</option></select></label>
-          <label class="full">Tell me a little about your enquiry<textarea name="message" rows="5" maxlength="5000" placeholder="Enter your message"></textarea><small class="counter">Maximum 5,000 characters</small></label>
-          <label>Special offer code<input name="promo_code" maxlength="80" placeholder="Enter your code, if applicable"></label>
-          <label>How did you hear about Weddings By Mark? *<select name="heard_about_us" required><option value="">Choose an option</option><option>Google search</option><option>Facebook</option><option>Instagram</option><option>TikTok</option><option>Wedding venue</option><option>Recommendation</option><option>Previous wedding guest</option><option>Other</option></select></label>
-          <label class="full">Quick fun question: spaghetti hoops on toast or beans on toast?<input name="fun_answer" maxlength="200" placeholder="Answer here :) "></label>
-          <label class="honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
-          <label class="privacy full"><input name="privacy_agreed" type="checkbox" required><span>I agree that Weddings By Mark can use these details to respond to and manage my enquiry. *</span></label>
-        </div>
+        <div id="enquiry-fields" class="form-grid"><p class="loading-form">Loading questions…</p></div>
+        <label class="honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
         <p id="form-error" class="error" role="alert"></p>
-        <button id="submit-button" type="submit">Submit enquiry</button>
+        <button id="submit-button" type="submit" disabled>Submit enquiry</button>
       </form>
     </section>
     <section id="success" class="card success hidden">
       <span>✓</span>
-      <h1>Thank you!</h1>
-      <p>Your enquiry has landed safely. I’ll check your date and get back to you as soon as I can.</p>
+      <h1 id="success-heading">Thank you!</h1>
+      <p id="success-message">Your enquiry has landed safely.</p>
       <strong>Mark - Weddings By Mark</strong>
     </section>
   </main>
   <script src="/static/venue-autocomplete.js?v=client-experience-v8-1" defer></script>
-  <script src="/static/enquiry.js?v=client-experience-v8" defer></script>
+  <script src="/static/enquiry.js?v=editable-form-v8-9-7" defer></script>
 </body>
 </html>

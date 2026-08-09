@@ -1,7 +1,21 @@
-BookingSystem2026 - Unified Hostinger Inbox
-Build: 2026.08.06-unified-imap-smtp-mail-v8.9.6
+BookingSystem2026 - Editable Website Enquiry Form
+Build: 2026.08.09-editable-web-enquiry-form-v8.9.7
 
-This is a complete cumulative build containing every feature through V8.9.6.
+This is a complete cumulative build containing every feature through V8.9.7.
+
+V8.9.7 website form builder:
+
+- A dedicated Web enquiry form page now appears under Setup.
+- Mark can edit headings, introduction, payment wording and the thank-you message.
+- Questions can be reordered, renamed, shown or hidden and made optional or required.
+- Custom short-answer, long-answer, choice-list and tick-box questions can be added,
+  edited and deleted from desktop or mobile.
+- Essential name, email, date, venue, source and privacy questions are protected so
+  an accidental edit cannot stop enquiries creating the correct booking.
+- Saving publishes immediately to the existing /enquiry iframe; website code does
+  not need to be replaced.
+- Every enquiry stores the exact published question wording alongside its answers.
+- Original website-enquiry answers are visible inside Forms & agreement on the record.
 
 V8.9.6 mail workspace:
 

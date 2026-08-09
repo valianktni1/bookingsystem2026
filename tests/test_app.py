@@ -167,7 +167,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
                                  "imap_configured": False,
-                                 "build": "2026.08.06-unified-imap-smtp-mail-v8.9.6"}
+                                 "build": "2026.08.09-editable-web-enquiry-form-v8.9.7"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -551,7 +551,10 @@ def test_phase_two_b_flow(monkeypatch):
 
         enquiry_page = client.get("/enquiry")
         assert enquiry_page.status_code == 200
-        assert "let the countdown to your best day ever begin" in enquiry_page.text
+        assert 'id="enquiry-fields"' in enquiry_page.text
+        public_form = client.get("/api/public/enquiry-form")
+        assert public_form.status_code == 200
+        assert "let the countdown to your best day ever begin" in public_form.json()["heading"]
         assert client.get("/api/public/catalog").status_code == 200
         enquiry_payload = {
             "primary_first_name": "Rachel", "partner_first_name": "Thomas",
