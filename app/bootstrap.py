@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 from .config import get_settings
 from .content import WBM_CONTRACT_BODY, WBM_CONTRACT_TITLE, WBM_CONTRACT_VERSION
 from .enquiry_forms import default_enquiry_form
+from .booking_forms import default_booking_form
 from .models import (AddOnOption, Admin, Booking, Brand, BusinessProfile, Client, ContractTemplate,
                      EmailTemplate, FormTemplate, Invoice, InvoiceCounter, PackageOption, Quote, RecordKind, RecordStatus,
-                     Task)
+                     SystemSetting, Task)
 from .security import hash_password
 from .services import create_default_tasks, sync_final_details_call_task
 
@@ -54,6 +55,25 @@ def bootstrap(db: Session) -> None:
             is_active=True,
         ))
         db.commit()
+
+    booking_template = db.scalar(select(FormTemplate).where(
+        FormTemplate.brand == Brand.WBM,
+        FormTemplate.template_key == "wedding_booking_form",
+    ))
+    if not booking_template:
+        db.add(FormTemplate(
+            brand=Brand.WBM,
+            template_key="wedding_booking_form",
+            display_name="Wedding Booking Form",
+            config=default_booking_form(),
+            is_active=True,
+        ))
+    if not db.get(SystemSetting, "testing_mode"):
+        db.add(SystemSetting(key="testing_mode", value={
+            "enabled": False,
+            "email": settings.admin_email.lower(),
+        }))
+    db.commit()
 
     packages = [
         ("bronze", "Bronze Package 1 2026/27/28", 475, 100, """Half Day Photography

@@ -167,7 +167,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
                                  "imap_configured": False,
-                                 "build": "2026.08.09-editable-web-enquiry-form-v8.9.7"}
+                                     "build": "2026.08.09-booking-form-payment-plans-testing-v8.9.8"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -296,12 +296,16 @@ def test_phase_two_b_flow(monkeypatch):
         assert client.get(f"/api/client/{direct_quote_token}").status_code == 200
         form = client.post(f"/api/client/{token}/forms", json={
             "form_type": "booking_form", "data": {
-                "primary_full_name": "Sophie Taylor", "primary_phone": "07700 900123",
+                    "primary_full_name": "Sophie Taylor", "primary_phone": "07700 900123",
+                    "primary_email": "sophie@example.com",
                 "partner_full_name": "James Taylor", "street_address": "1 Test Road",
                 "town": "Knutsford", "county": "Cheshire", "postcode": "WA16 0AA",
-                "wedding_date": "2026-10-04", "ceremony_time": "13:00",
-                "package_selected": "Platinum Package 4 2026/27/28",
-                "payment_options": ["Booking fee due within one day of accepting the quote; remaining balance due 45 days before the wedding"],
+                    "wedding_date": "2026-10-04", "ceremony_time": "13:00",
+                    "ceremony_details": "Peckforton Castle ceremony",
+                    "reception_details": "Peckforton Castle reception",
+                    "package_selected": "Platinum Package 4 2026/27/28",
+                    "payment_plan": "standard", "wedding_party_size": "8",
+                    "unique_events": "None",
             }
         })
         assert form.status_code == 200
@@ -445,12 +449,12 @@ def test_phase_two_b_flow(monkeypatch):
         assert refreshed_public["quote"]["invoice_number"] == "WBM02002"
         assert refreshed_public["record"]["quoted_total"] == 1069
         assert refreshed_public["invoices"][0]["number"] == "WBM02002"
-        assert refreshed_public["invoices"][0]["payment_due_date"] == "2026-08-20"
+        assert refreshed_public["invoices"][0]["payment_due_date"] == expected_deposit_due.isoformat()
         assert refreshed_public["invoices"][0]["wedding_date"] == "2026-10-04"
         assert refreshed_public["invoices"][0]["deposit_due_date"] == expected_deposit_due.isoformat()
         ordered_invoices = client.get("/api/invoices").json()
         assert ordered_invoices[0]["number"] == "WBM02002"
-        assert ordered_invoices[0]["payment_due_date"] == "2026-08-20"
+        assert ordered_invoices[0]["payment_due_date"] == expected_deposit_due.isoformat()
         assert all(row["balance"] == 0 for row in ordered_invoices[1:])
         assert client.get(f"/api/bookings/{wedding_data['id']}").json()["balance_due_date"] == expected_balance_due.isoformat()
         public_invoice_pdf = client.get(
@@ -658,7 +662,15 @@ def test_phase_two_b_flow(monkeypatch):
 
             assert client.post(f"/api/client/{quote_token}/forms", json={
                 "form_type": "booking_form",
-                "data": {"primary_full_name": "Rachel Green", "primary_phone": "07700 900456"},
+                "data": {
+                    "primary_full_name": "Rachel Green", "primary_phone": "07700 900456",
+                    "primary_email": "rachel@example.com", "partner_full_name": "Ross Green",
+                    "street_address": "1 Test Road", "town": "Manchester", "county": "Greater Manchester",
+                    "postcode": "M1 1AA", "wedding_date": "2027-06-12", "ceremony_time": "13:00",
+                    "ceremony_details": "Main venue", "reception_details": "Main venue",
+                    "package_selected": "Bronze Package 1 2026/27/28", "payment_plan": "standard",
+                    "wedding_party_size": "8", "unique_events": "None",
+                },
             }).status_code == 200
             assert client.post(f"/api/client/{quote_token}/contract", json={
                 "accepted_name": "Rachel Green", "accepted_email": "rachel@example.com",

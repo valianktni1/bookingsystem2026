@@ -8,7 +8,7 @@ import uuid
 from contextlib import suppress
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, status
@@ -18,6 +18,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .bootstrap import bootstrap
+from .booking_forms import public_booking_form, validate_booking_answers, validate_booking_form
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .email_service import preview_template_email, send_template_email, smtp_credentials, smtp_ready
@@ -29,15 +30,15 @@ from .mail_routes import register_mail_routes
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
                      EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, PackageOption, Payment,
-                     Quote, RecordKind, RecordStatus, ReminderLog, Task)
+                     Quote, RecordKind, RecordStatus, ReminderLog, SystemSetting, Task)
 from .pdf import invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
-                      EnquiryFormTemplateIn,
+                      BookingFormTemplateIn, EnquiryFormTemplateIn,
                       InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       PublicFormIn, QuoteAcceptIn, QuotePreparationIn, SendEmailIn, TaskIn, TaskPatch,
-                      TemplateTestIn)
+                      TemplateTestIn, TestingModeIn)
 from .security import create_token, current_admin, verify_password
 from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
                        next_invoice_number, sync_final_details_call_task, visible_task_condition)
@@ -65,7 +66,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.7-editable-enquiry-form", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.8-payment-plans-testing", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -111,6 +112,118 @@ def confirm_when_paid(booking: Booking) -> bool:
     return False
 
 
+def testing_mode(db: Session) -> dict:
+    row = db.get(SystemSetting, "testing_mode")
+    value = dict(row.value or {}) if row else {}
+    return {"enabled": bool(value.get("enabled")),
+            "email": str(value.get("email") or settings.admin_email).lower()}
+
+
+def client_email_recipient(db: Session, booking: Booking) -> str:
+    """A test record can never send to the address entered as the client."""
+    if booking.is_test:
+        saved = (booking.workflow_state or {}).get("test_email")
+        return str(saved or testing_mode(db)["email"]).lower()
+    return booking.client.email
+
+
+def send_booking_template_email(db: Session, booking: Booking, profile: BusinessProfile,
+                                template: EmailTemplate, portal_url: str | None = None,
+                                **kwargs):
+    """Keep the ordinary call signature unchanged; add a recipient override only for TEST records."""
+    if booking.is_test:
+        kwargs["recipient"] = client_email_recipient(db, booking)
+    return send_template_email(booking, profile, template, portal_url, **kwargs)
+
+
+def payment_plan_code(booking: Booking) -> str:
+    code = str((booking.form_data or {}).get("payment_plan") or "standard")
+    return code if code in {"standard", "split", "quarter"} else "standard"
+
+
+def schedule_rows(total: Decimal, package_fee: Decimal, plan: str, accepted_on: date,
+                  event_date: date | None) -> tuple[Decimal, date | None, list[dict]]:
+    penny = Decimal("0.01")
+    total = Decimal(total or 0).quantize(penny, rounding=ROUND_HALF_UP)
+    package_fee = min(total, Decimal(package_fee or 0)).quantize(penny, rounding=ROUND_HALF_UP)
+    deposit_due = accepted_on + timedelta(days=1)
+    due_45 = max(event_date - timedelta(days=45), deposit_due) if event_date else None
+    due_90 = max(event_date - timedelta(days=90), deposit_due) if event_date else None
+    if plan == "quarter":
+        first = (total * Decimal("0.25")).quantize(penny, rounding=ROUND_HALF_UP)
+        rows = [
+            {"key": "booking_25", "label": "25% booking payment", "amount": money(first),
+             "due_date": deposit_due.isoformat(), "status": "scheduled"},
+            {"key": "final_75", "label": "Remaining 75% balance", "amount": money(total - first),
+             "due_date": due_45.isoformat() if due_45 else None, "status": "scheduled"},
+        ]
+        return first, due_45, rows
+    remaining = max(Decimal("0"), total - package_fee)
+    if plan == "split":
+        first_half = (remaining / Decimal("2")).quantize(penny, rounding=ROUND_HALF_UP)
+        second_half = remaining - first_half
+        rows = [
+            {"key": "booking_fee", "label": "Booking fee", "amount": money(package_fee),
+             "due_date": deposit_due.isoformat(), "status": "scheduled"},
+            {"key": "instalment_90", "label": "First balance instalment", "amount": money(first_half),
+             "due_date": due_90.isoformat() if due_90 else None, "status": "scheduled"},
+            {"key": "final_45", "label": "Final balance instalment", "amount": money(second_half),
+             "due_date": due_45.isoformat() if due_45 else None, "status": "scheduled"},
+        ]
+        return package_fee, due_45, rows
+    rows = [
+        {"key": "booking_fee", "label": "Booking fee", "amount": money(package_fee),
+         "due_date": deposit_due.isoformat(), "status": "scheduled"},
+        {"key": "final_45", "label": "Remaining balance", "amount": money(remaining),
+         "due_date": due_45.isoformat() if due_45 else None, "status": "scheduled"},
+    ]
+    return package_fee, due_45, rows
+
+
+def allocated_schedule(invoice: Invoice) -> list[dict]:
+    paid_left = Decimal(invoice.paid or 0)
+    result = []
+    for original in invoice.payment_schedule or []:
+        item = dict(original)
+        amount = Decimal(str(item.get("amount") or 0))
+        applied = min(amount, max(Decimal("0"), paid_left))
+        paid_left -= applied
+        item["paid"] = money(applied)
+        item["balance"] = money(max(Decimal("0"), amount - applied))
+        item["status"] = "paid" if applied >= amount else "part_paid" if applied > 0 else "scheduled"
+        result.append(item)
+    return result
+
+
+def apply_payment_plan(db: Session, booking: Booking, plan: str) -> None:
+    """Rebuild only native invoices; original Studio Ninja schedules remain untouched."""
+    if booking.legacy_source or booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING:
+        return
+    quote = db.scalar(select(Quote).where(Quote.booking_id == booking.id, Quote.status == "accepted")
+                      .order_by(Quote.accepted_at.desc()).limit(1))
+    if not quote or not quote.invoice_id:
+        return
+    invoice = db.get(Invoice, quote.invoice_id)
+    if not invoice or invoice.legacy_source or invoice.status == "void":
+        return
+    package = db.get(PackageOption, quote.package_id) if quote.package_id else None
+    accepted_on = quote.accepted_at.date() if quote.accepted_at else invoice.issue_date
+    fee, final_due, rows = schedule_rows(Decimal(invoice.total),
+                                         Decimal(package.deposit_amount if package else booking.deposit_amount),
+                                         plan, accepted_on, booking.event_date)
+    booking.deposit_amount = fee
+    booking.balance_due_date = final_due
+    quote.deposit_amount = fee
+    invoice.deposit_due_date = accepted_on + timedelta(days=1)
+    invoice.supply_date = booking.event_date
+    invoice.due_date = final_due
+    invoice.payment_schedule = rows
+    invoice.notes = (f"Payment plan: {plan}. First payment of £{money(fee):,.2f} is due by "
+                     f"{invoice.deposit_due_date.strftime('%d %B %Y')}. " +
+                     (f"The final payment is due by {final_due.strftime('%d %B %Y')}."
+                      if final_due else "Payment dates will be completed when the wedding date is set."))
+
+
 def refresh_wedding_payment_dates(db: Session, booking: Booking) -> None:
     """Keep the accepted quote invoice aligned if the wedding date changes."""
     if booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING or not booking.event_date:
@@ -120,16 +233,7 @@ def refresh_wedding_payment_dates(db: Session, booking: Booking) -> None:
                       .order_by(Quote.accepted_at.desc()).limit(1))
     if not quote:
         return
-    accepted_on = quote.accepted_at.date() if quote.accepted_at else date.today()
-    deposit_due = accepted_on + timedelta(days=1)
-    balance_due = max(booking.event_date - timedelta(days=45), deposit_due)
-    booking.balance_due_date = balance_due
-    if quote.invoice_id:
-        invoice = db.get(Invoice, quote.invoice_id)
-        if invoice:
-            invoice.deposit_due_date = invoice.deposit_due_date or deposit_due
-            invoice.supply_date = booking.event_date
-            invoice.due_date = balance_due
+    apply_payment_plan(db, booking, payment_plan_code(booking))
 
 
 def client_json(client: Client) -> dict:
@@ -162,7 +266,18 @@ def standard_wedding_due_date(item: Invoice) -> date | None:
 
 
 def effective_invoice_due_date(item: Invoice) -> date | None:
-    """Use the invoice's agreed date, falling back to the normal 45-day rule."""
+    """Return the next unpaid scheduled date, including an agreed final date."""
+    scheduled = allocated_schedule(item)
+    outstanding_dates = []
+    for row in scheduled:
+        raw = row.get("due_date")
+        if row.get("balance", 0) > 0 and raw:
+            try:
+                outstanding_dates.append(date.fromisoformat(str(raw)))
+            except ValueError:
+                pass
+    if outstanding_dates:
+        return min(outstanding_dates)
     if item.due_date:
         return item.due_date
     if item.booking and item.booking.balance_due_date:
@@ -177,20 +292,22 @@ def invoice_json(item: Invoice) -> dict:
     days_until_due = (due - date.today()).days if due and balance > 0 else None
     due_status = ("paid" if balance <= 0 else "no_date" if not due else
                   "overdue" if days_until_due < 0 else "due_today" if days_until_due == 0 else "upcoming")
+    schedule = allocated_schedule(item)
     return {"id": item.id, "booking_id": item.booking_id, "brand": item.brand.value,
             "sequence": item.sequence, "number": item.number, "issue_date": item.issue_date.isoformat(),
             "deposit_due_date": item.deposit_due_date.isoformat() if item.deposit_due_date else None,
             "supply_date": item.supply_date.isoformat() if item.supply_date else None,
-            "due_date": due.isoformat() if due else None,
+            "due_date": item.due_date.isoformat() if item.due_date else (due.isoformat() if due else None),
             "payment_due_date": due.isoformat() if due else None,
             "standard_due_date": standard_due.isoformat() if standard_due else None,
-            "due_date_overridden": bool(due and standard_due and due != standard_due),
+            "due_date_overridden": bool(item.due_date and standard_due and item.due_date != standard_due),
+            "final_due_date": item.due_date.isoformat() if item.due_date else None,
             "wedding_date": item.booking.event_date.isoformat() if item.booking and item.booking.event_date else None,
             "payment_due_status": due_status, "days_until_due": days_until_due,
             "description": item.description, "notes": item.notes, "total": money(item.total),
             "deposit_amount": money(item.booking.deposit_amount if item.booking else 0),
             "line_items": item.line_items or [],
-            "payment_schedule": item.payment_schedule or [],
+            "payment_schedule": schedule,
             "legacy_number": item.legacy_number,
             "legacy_quote_number": item.legacy_quote_number,
             "legacy_source": item.legacy_source,
@@ -198,6 +315,7 @@ def invoice_json(item: Invoice) -> dict:
             "balance": money(balance),
             "status": item.status,
             "client": item.booking.title if item.booking else None,
+            "is_test": bool(item.booking and item.booking.is_test),
             "payments": [payment_json(p) for p in sorted(item.payments, key=lambda x: x.paid_date, reverse=True)]}
 
 
@@ -252,6 +370,7 @@ def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | N
             "legacy_source": item.legacy_source, "legacy_id": item.legacy_id,
             "legacy_import_batch": item.legacy_import_batch,
             "automation_suppressed": item.automation_suppressed,
+            "is_test": item.is_test,
             "archived_at": item.archived_at.isoformat() if item.archived_at else None,
             "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat()}
     if full:
@@ -295,7 +414,7 @@ def health():
             "imap_configured": bool(settings.imap_host and (
                 settings.imap_wbm_password or settings.smtp_wbm_password or
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
-            "build": "2026.08.09-editable-web-enquiry-form-v8.9.7"}
+            "build": "2026.08.09-booking-form-payment-plans-testing-v8.9.8"}
 
 
 @app.get("/api/public/config")
@@ -357,6 +476,62 @@ def save_website_enquiry_form(payload: EnquiryFormTemplateIn,
     return result
 
 
+def wedding_booking_template(db: Session) -> FormTemplate:
+    item = db.scalar(select(FormTemplate).where(
+        FormTemplate.brand == Brand.WBM,
+        FormTemplate.template_key == "wedding_booking_form",
+    ))
+    if not item:
+        raise HTTPException(503, "The Wedding Booking Form is not configured yet")
+    return item
+
+
+@app.get("/api/forms/wedding-booking")
+def admin_wedding_booking_form(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    item = wedding_booking_template(db)
+    result = dict(item.config or {})
+    result.update({"id": item.id, "display_name": item.display_name,
+                   "is_active": item.is_active, "updated_at": item.updated_at.isoformat()})
+    return result
+
+
+@app.put("/api/forms/wedding-booking")
+def save_wedding_booking_form(payload: BookingFormTemplateIn,
+                              _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    item = wedding_booking_template(db)
+    item.config = validate_booking_form(payload.model_dump())
+    item.is_active = True
+    audit(db, "publish_wedding_booking_form", "form_template", item.id,
+          {"question_count": len(item.config["fields"])})
+    db.commit()
+    db.refresh(item)
+    result = dict(item.config)
+    result.update({"id": item.id, "display_name": item.display_name,
+                   "is_active": item.is_active, "updated_at": item.updated_at.isoformat()})
+    return result
+
+
+@app.get("/api/testing-mode")
+def get_testing_mode(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    mode = testing_mode(db)
+    mode["record_count"] = len(db.scalars(select(Booking.id).where(Booking.is_test.is_(True))).all())
+    return mode
+
+
+@app.put("/api/testing-mode")
+def save_testing_mode(payload: TestingModeIn, _: Admin = Depends(current_admin),
+                      db: Session = Depends(get_db)):
+    row = db.get(SystemSetting, "testing_mode")
+    value = {"enabled": payload.enabled, "email": str(payload.email).lower()}
+    if row:
+        row.value = value
+    else:
+        db.add(SystemSetting(key="testing_mode", value=value))
+    audit(db, "change_testing_mode", "system_setting", "testing_mode", value)
+    db.commit()
+    return {**value, "record_count": len(db.scalars(select(Booking.id).where(Booking.is_test.is_(True))).all())}
+
+
 @app.post("/api/public/enquiries", status_code=201)
 def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = Depends(get_db)):
     if payload.website:
@@ -388,14 +563,16 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                  "answer_snapshot": answer_snapshot,
                  "form_template_updated_at": template.updated_at.isoformat()}
     title = f"{payload.primary_first_name.strip()} & {payload.partner_first_name.strip()}"
+    test_mode = testing_mode(db)
     booking = Booking(brand=Brand.WBM, kind=RecordKind.WEDDING, status=RecordStatus.ENQUIRY,
                       title=title, client_id=client.id, event_date=payload.event_date,
                       venue_or_project=payload.location.strip(), venue_address=payload.venue_address,
                       venue_place_id=payload.venue_place_id, venue_lat=payload.venue_lat,
                       venue_lng=payload.venue_lng, package_name=payload.package_interest,
                       notes=payload.message.strip() if payload.message else None,
-                      form_data={"website_enquiry": form_data},
-                      workflow_state={"source": "website_enquiry", "received_at": datetime.now(timezone.utc).isoformat()})
+                      form_data={"website_enquiry": form_data}, is_test=test_mode["enabled"],
+                      workflow_state={"source": "website_enquiry", "received_at": datetime.now(timezone.utc).isoformat(),
+                                      **({"test_email": test_mode["email"]} if test_mode["enabled"] else {})})
     db.add(booking)
     db.flush()
     create_default_tasks(db, booking.id, booking.kind, booking.event_date)
@@ -419,14 +596,15 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
     if profile and smtp_ready(Brand.WBM):
         if acknowledgement:
             try:
-                subject, _ = send_template_email(
-                    booking, profile, acknowledgement, portal_url
+                recipient = client_email_recipient(db, booking)
+                subject, _ = send_booking_template_email(
+                    db, booking, profile, acknowledgement, portal_url
                 )
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
-                                recipient=client.email, subject=subject, status="sent"))
+                                recipient=recipient, subject=subject, status="sent"))
             except Exception as exc:
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
-                                recipient=client.email, subject=acknowledgement.subject,
+                                recipient=client_email_recipient(db, booking), subject=acknowledgement.subject,
                                 status="failed", error=str(exc)[:2000]))
         if admin_notification:
             notification_recipient = "mark@perfectweddingsbymark.uk"
@@ -443,7 +621,7 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                         "admin_url": settings.app_url.rstrip("/"),
                     },
                     recipient=notification_recipient,
-                    reply_to=client.email,
+                    reply_to=client_email_recipient(db, booking),
                 )
                 db.add(EmailLog(booking_id=booking.id, template_key=admin_notification.template_key,
                                 recipient=notification_recipient, subject=subject, status="sent"))
@@ -913,7 +1091,7 @@ def change_invoice_due_date(invoice_id: str, payload: InvoiceDueDatePatch,
     invoice = full_invoice(db, invoice_id)
     if invoice.status == "void":
         raise HTTPException(409, "The payment date cannot be changed on a void invoice")
-    previous_due = effective_invoice_due_date(invoice)
+    previous_due = invoice.due_date or standard_wedding_due_date(invoice)
     invoice.due_date = payload.due_date
     replace_final_schedule_due_date(invoice, payload.due_date)
     replace_balance_note(invoice, payload.due_date)
@@ -984,8 +1162,8 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
         outstanding = max(Decimal("0"), invoice.total - invoice.paid)
         deposit_remaining = max(Decimal("0"), booking.deposit_amount - invoice.paid)
         try:
-            subject, _ = send_template_email(
-                booking,
+            subject, _ = send_booking_template_email(
+                db, booking,
                 profile,
                 template,
                 portal_url,
@@ -1001,12 +1179,12 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
                 },
             )
             db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
-                            recipient=booking.client.email, subject=subject, status="sent"))
+                            recipient=client_email_recipient(db, booking), subject=subject, status="sent"))
             payment_email_sent = True
         except Exception as exc:
             payment_email_error = str(exc)
             db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
-                            recipient=booking.client.email, subject=template.subject,
+                            recipient=client_email_recipient(db, booking), subject=template.subject,
                             status="failed", error=payment_email_error[:2000]))
         db.commit()
 
@@ -1491,10 +1669,11 @@ def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
         email_error = "SMTP is not configured for Weddings By Mark"
     else:
         try:
-            subject, _ = send_template_email(booking, profile, template, quote_url)
+            recipient = client_email_recipient(db, booking)
+            subject, _ = send_booking_template_email(db, booking, profile, template, quote_url)
             email_sent = True
             db.add(EmailLog(booking_id=booking.id, template_key="quote",
-                            recipient=booking.client.email, subject=subject, status="sent"))
+                            recipient=recipient, subject=subject, status="sent"))
             if booking.status == RecordStatus.ENQUIRY:
                 booking.status = RecordStatus.QUOTED
             for task in db.scalars(select(Task).where(
@@ -1535,9 +1714,10 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
     try:
         portal_url = issue_client_email_url(db, booking, template.template_key)
-        subject, _ = send_template_email(booking, profile, template, portal_url)
+        recipient = client_email_recipient(db, booking)
+        subject, _ = send_booking_template_email(db, booking, profile, template, portal_url)
         log = EmailLog(booking_id=booking.id, template_key=template.template_key,
-                       recipient=booking.client.email, subject=subject, status="sent")
+                       recipient=recipient, subject=subject, status="sent")
         db.add(log)
         audit(
             db,
@@ -1559,7 +1739,7 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
         }
     except Exception as exc:
         db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
-                        recipient=booking.client.email, subject=template.subject,
+                        recipient=client_email_recipient(db, booking), subject=template.subject,
                         status="failed", error=str(exc)[:2000]))
         db.commit()
         raise HTTPException(503, str(exc))
@@ -1572,6 +1752,9 @@ def public_portal_data(token: str, db: Session = Depends(get_db)):
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
     contract = db.scalar(select(ContractTemplate).where(ContractTemplate.brand == booking.brand,
                                                         ContractTemplate.is_active.is_(True)))
+    booking_form_template = (wedding_booking_template(db)
+                             if booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
+                             and not booking.legacy_source else None)
     status_data = portal_status_json(db, booking)
     packages = db.scalars(select(PackageOption).where(PackageOption.brand == booking.brand,
                                                        PackageOption.is_active.is_(True))
@@ -1597,8 +1780,10 @@ def public_portal_data(token: str, db: Session = Depends(get_db)):
                        "venue_place_id": booking.venue_place_id, "venue_lat": booking.venue_lat,
                        "venue_lng": booking.venue_lng, "package_name": booking.package_name,
                        "quoted_total": money(booking.quoted_total), "deposit_amount": money(booking.deposit_amount),
-                       "legacy_source": booking.legacy_source,
+                       "legacy_source": booking.legacy_source, "is_test": booking.is_test,
                        "client": client_json(booking.client)},
+            "booking_form_template": (public_booking_form(booking_form_template.config or {})
+                                      if booking_form_template else None),
             "contract_template": ({"title": contract.title, "version": contract.version, "body": contract.body}
                                   if contract else None),
             "catalog": {"packages": [package_json(x) for x in packages],
@@ -1716,10 +1901,13 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
     normal_balance_due = booking.event_date - timedelta(days=45) if booking.event_date else None
     balance_due_date = (max(normal_balance_due, deposit_due_date)
                         if normal_balance_due else None)
+    initial_fee, balance_due_date, initial_schedule = schedule_rows(
+        Decimal(total), Decimal(package.deposit_amount), "standard", accepted_on, booking.event_date
+    )
     quote = Quote(booking_id=booking.id, status="accepted", package_id=package.id,
                   selected_addon_ids=required_ids + requested_ids + discount_ids,
                   line_items=line_items, total=total,
-                  deposit_amount=package.deposit_amount, accepted_at=datetime.now(timezone.utc))
+                  deposit_amount=initial_fee, accepted_at=datetime.now(timezone.utc))
     db.add(quote)
     db.flush()
     sequence, number = next_invoice_number(db, booking.brand)
@@ -1728,7 +1916,8 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
                       supply_date=booking.event_date, due_date=balance_due_date,
                       description=package.name, total=total,
                       paid=Decimal("0"), status="unpaid", line_items=line_items,
-                      notes=(f"Booking fee of £{money(package.deposit_amount):,.2f} is due by "
+                      payment_schedule=initial_schedule,
+                      notes=(f"Booking fee of £{money(initial_fee):,.2f} is due by "
                              f"{deposit_due_date.strftime('%d %B %Y')}. "
                              + (f"The remaining balance is due by {balance_due_date.strftime('%d %B %Y')}."
                                 if balance_due_date else "The final balance date will be confirmed once the wedding date is set.")))
@@ -1737,7 +1926,7 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
     quote.invoice_id = invoice.id
     booking.package_name = package.name
     booking.quoted_total = total
-    booking.deposit_amount = package.deposit_amount
+    booking.deposit_amount = initial_fee
     booking.balance_due_date = balance_due_date
     if booking.status == RecordStatus.ENQUIRY:
         booking.status = RecordStatus.QUOTED
@@ -1753,8 +1942,8 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
             and smtp_ready(booking.brand)):
         try:
             invoice_portal_url = f"{settings.app_url.rstrip('/')}/client/{token}"
-            subject, _ = send_template_email(
-                booking, profile, acceptance_template, invoice_portal_url,
+            subject, _ = send_booking_template_email(
+                db, booking, profile, acceptance_template, invoice_portal_url,
                 extra_values={
                     "deposit_due_date": deposit_due_date.strftime("%d %B %Y"),
                     "balance_due_date": (balance_due_date.strftime("%d %B %Y")
@@ -1762,11 +1951,11 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
                 },
             )
             db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
-                            recipient=booking.client.email, subject=subject, status="sent"))
+                            recipient=client_email_recipient(db, booking), subject=subject, status="sent"))
             acceptance_email_sent = True
         except Exception as exc:
             db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
-                            recipient=booking.client.email, subject=acceptance_template.subject,
+                            recipient=client_email_recipient(db, booking), subject=acceptance_template.subject,
                             status="failed", error=str(exc)[:2000]))
     audit(db, "accept_quote", "booking", booking.id,
           {"package": package.name, "addons": [x.name for x in addons],
@@ -1782,49 +1971,67 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
     portal = resolve_portal(db, token)
     booking = portal.booking
     require_booking_journey_unlocked(db, booking)
+    form_values = dict(payload.data)
+    form_snapshot = None
+    form_template_updated_at = None
+    if (payload.form_type == "booking_form" and booking.brand == Brand.WBM
+            and booking.kind == RecordKind.WEDDING and not booking.legacy_source):
+        template = wedding_booking_template(db)
+        accepted, snapshot = validate_booking_answers(template.config or {}, form_values)
+        form_values = accepted
+        form_snapshot = snapshot
+        form_template_updated_at = template.updated_at.isoformat()
     row = db.scalar(select(FormSubmission).where(FormSubmission.booking_id == booking.id,
                                                  FormSubmission.form_type == payload.form_type))
     if row:
-        row.data = payload.data
+        row.data = form_values
         row.updated_at = datetime.now(timezone.utc)
         row.submission_source = "client_portal_updated"
     else:
         row = FormSubmission(booking_id=booking.id, form_type=payload.form_type,
-                             data=payload.data, submission_source="client_portal")
+                             data=form_values, submission_source="client_portal")
         db.add(row)
     if payload.form_type == "booking_form":
-        booking.form_data = payload.data
-        if payload.data.get("primary_phone"):
-            booking.client.phone = str(payload.data["primary_phone"]).strip()
-        if payload.data.get("partner_full_name"):
-            booking.client.partner_name = str(payload.data["partner_full_name"]).strip()
-        address_parts = [payload.data.get(key) for key in ("street_address", "town", "county", "postcode")]
+        previous_plan = payment_plan_code(booking)
+        booking.form_data = {**form_values,
+                             **({"_answer_snapshot": form_snapshot,
+                                 "_form_template_updated_at": form_template_updated_at}
+                                if form_snapshot is not None else {})}
+        if form_values.get("primary_phone"):
+            booking.client.phone = str(form_values["primary_phone"]).strip()
+        if form_values.get("partner_full_name"):
+            booking.client.partner_name = str(form_values["partner_full_name"]).strip()
+        address_parts = [form_values.get(key) for key in ("street_address", "town", "county", "postcode")]
         address = ", ".join(str(value).strip() for value in address_parts if value)
         if address:
             booking.client.address = address
-        if payload.data.get("wedding_date"):
+        if form_values.get("wedding_date"):
             try:
-                booking.event_date = date.fromisoformat(str(payload.data["wedding_date"]))
-                refresh_wedding_payment_dates(db, booking)
+                booking.event_date = date.fromisoformat(str(form_values["wedding_date"]))
                 sync_final_details_call_task(db, booking)
             except ValueError:
                 pass
-        if payload.data.get("ceremony_details") and not booking.venue_or_project:
-            booking.venue_or_project = str(payload.data["ceremony_details"]).strip()[:240]
-        if payload.data.get("venue_name"):
-            booking.venue_or_project = str(payload.data["venue_name"]).strip()[:240]
-        if payload.data.get("venue_address"):
-            booking.venue_address = str(payload.data["venue_address"]).strip()[:1000]
-        if payload.data.get("venue_place_id"):
-            booking.venue_place_id = str(payload.data["venue_place_id"]).strip()[:255]
-        if payload.data.get("venue_lat") not in (None, ""):
-            booking.venue_lat = float(payload.data["venue_lat"])
-        if payload.data.get("venue_lng") not in (None, ""):
-            booking.venue_lng = float(payload.data["venue_lng"])
+        if form_values.get("ceremony_details") and not booking.venue_or_project:
+            booking.venue_or_project = str(form_values["ceremony_details"]).strip()[:240]
+        if form_values.get("venue_name"):
+            booking.venue_or_project = str(form_values["venue_name"]).strip()[:240]
+        if form_values.get("venue_address"):
+            booking.venue_address = str(form_values["venue_address"]).strip()[:1000]
+        if form_values.get("venue_place_id"):
+            booking.venue_place_id = str(form_values["venue_place_id"]).strip()[:255]
+        if form_values.get("venue_lat") not in (None, ""):
+            booking.venue_lat = float(form_values["venue_lat"])
+        if form_values.get("venue_lng") not in (None, ""):
+            booking.venue_lng = float(form_values["venue_lng"])
         accepted_quote = db.scalar(select(Quote).where(Quote.booking_id == booking.id,
                                                         Quote.status == "accepted"))
-        if payload.data.get("package_selected") and not accepted_quote:
-            booking.package_name = str(payload.data["package_selected"]).strip()[:160]
+        if form_values.get("package_selected") and not accepted_quote:
+            booking.package_name = str(form_values["package_selected"]).strip()[:160]
+        chosen_plan = payment_plan_code(booking)
+        apply_payment_plan(db, booking, chosen_plan)
+        if chosen_plan != previous_plan:
+            audit(db, "change_payment_plan", "booking", booking.id,
+                  {"previous": previous_plan, "new": chosen_plan})
         for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
                                                   Task.title.ilike("%booking form%"))).all():
             task.completed = True
@@ -1942,9 +2149,10 @@ def run_due_reminders(db: Session) -> dict:
                 portal_url = issue_client_email_url(
                     db, booking, template_key, max(365, expires_days)
                 )
-                subject, _ = send_template_email(booking, profile, template, portal_url)
+                recipient = client_email_recipient(db, booking)
+                subject, _ = send_booking_template_email(db, booking, profile, template, portal_url)
                 reminder.status, reminder.sent_at = "sent", datetime.now(timezone.utc)
-                db.add(EmailLog(booking_id=booking.id, template_key=template_key, recipient=booking.client.email,
+                db.add(EmailLog(booking_id=booking.id, template_key=template_key, recipient=recipient,
                                 subject=subject, status="sent"))
                 sent += 1
             except Exception as exc:

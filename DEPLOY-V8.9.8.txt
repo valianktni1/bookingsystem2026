@@ -1,0 +1,23 @@
+BOOKINGSYSTEM2026 V8.9.8 - TRUENAS / DOCKGE DEPLOYMENT
+
+1. Upload the complete contents of this ZIP to the main branch of:
+   https://github.com/valianktni1/bookingsystem2026
+
+2. Run these commands in the TrueNAS shell:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml down
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d
+
+3. Wait for healthy status, then check:
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+curl http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.09-booking-form-payment-plans-testing-v8.9.8
+
+4. Hard refresh the browser once after deployment.
+
+No YAML changes are required for this release.
+No invoice counters, imported records, portal links, emails or calendars are reset.

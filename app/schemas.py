@@ -275,5 +275,47 @@ class EnquiryFormTemplateIn(BaseModel):
     success_message: str = Field(default="Your enquiry has landed safely.", min_length=1, max_length=1000)
 
 
+class BookingFormStepIn(BaseModel):
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    title: str = Field(min_length=1, max_length=200)
+    introduction: str = Field(default="", max_length=500)
+
+
+class BookingFormFieldIn(BaseModel):
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    key: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    label: str = Field(min_length=1, max_length=240)
+    field_type: str = Field(pattern=r"^(text|email|tel|date|time|number|select|textarea|venue|package|payment_plan)$")
+    step: str = Field(min_length=1, max_length=80)
+    placeholder: str = Field(default="", max_length=240)
+    help_text: str = Field(default="", max_length=500)
+    required: bool = False
+    enabled: bool = True
+    width: str = Field(default="full", pattern=r"^(half|full)$")
+    options: list[str] = Field(default_factory=list, max_length=100)
+    custom: bool = False
+
+
+class PaymentPlanTemplateIn(BaseModel):
+    code: str = Field(pattern=r"^(standard|split|quarter)$")
+    label: str = Field(min_length=1, max_length=300)
+    description: str = Field(default="", max_length=500)
+
+
+class BookingFormTemplateIn(BaseModel):
+    heading: str = Field(min_length=1, max_length=300)
+    introduction: str = Field(default="", max_length=1000)
+    submit_label: str = Field(default="Save Wedding Booking Form", min_length=1, max_length=100)
+    success_message: str = Field(default="Your details have been saved.", min_length=1, max_length=1000)
+    steps: list[BookingFormStepIn] = Field(min_length=1, max_length=10)
+    payment_plans: list[PaymentPlanTemplateIn] = Field(min_length=3, max_length=3)
+    fields: list[BookingFormFieldIn] = Field(min_length=1, max_length=100)
+
+
+class TestingModeIn(BaseModel):
+    enabled: bool
+    email: EmailStr
+
+
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)

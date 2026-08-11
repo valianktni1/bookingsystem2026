@@ -386,7 +386,7 @@ def register_v82_routes(app: FastAPI) -> None:
                 db.scalar(select(Payment.id).where(Payment.invoice_id.in_(invoice_ids)).limit(1))
             )
         has_payments = has_payments or any(Decimal(invoice.paid or 0) > 0 for invoice in invoices)
-        if has_payments:
+        if has_payments and not booking.is_test:
             raise HTTPException(
                 409,
                 "This record has payment history and cannot be permanently deleted. Cancel and archive it instead.",
@@ -394,7 +394,8 @@ def register_v82_routes(app: FastAPI) -> None:
         # A deliberately confirmed test/duplicate may contain an accepted
         # quote and a voided zero-payment invoice. Its invoice number remains
         # consumed by the counter, but the false client record may be removed.
-        if any(invoice.status not in ("unpaid", "void") for invoice in invoices):
+        if (not booking.is_test
+                and any(invoice.status not in ("unpaid", "void") for invoice in invoices)):
             raise HTTPException(
                 409,
                 "This record contains a retained financial invoice and cannot be permanently deleted. Cancel and archive it instead.",

@@ -15,6 +15,7 @@ def apply_safe_migrations() -> None:
             "venue_lng": "DOUBLE PRECISION NULL" if engine.dialect.name == "postgresql" else "REAL NULL",
             "legacy_import_batch": "VARCHAR(120) NULL",
             "automation_suppressed": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
+            "is_test": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
         },
         "business_profiles": {
             "phone": "VARCHAR(50) NULL",

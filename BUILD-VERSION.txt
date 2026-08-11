@@ -1,7 +1,17 @@
-BookingSystem2026 - Editable Website Enquiry Form
-Build: 2026.08.09-editable-web-enquiry-form-v8.9.7
+BookingSystem2026 - Booking Form, Payment Plans and Safe Testing Mode
+Build: 2026.08.09-booking-form-payment-plans-testing-v8.9.8
 
-This is a complete cumulative build containing every feature through V8.9.7.
+This is a complete cumulative build containing every feature through V8.9.8.
+
+V8.9.8 booking form, payment plans and testing:
+
+- Editable Wedding Booking Form with protected workflow questions and custom questions.
+- Three mutually exclusive payment plans recalculate native accepted-quote invoices.
+- Payment schedule amounts, 90/45-day dates and next unpaid date update automatically.
+- Existing payments remain attached and are allocated against the new schedule.
+- Studio Ninja invoices, counters and communication suppression remain untouched.
+- Safe Testing Mode permanently labels test records and redirects their client emails.
+- Real paid bookings retain permanent-deletion protection; TEST journeys can be cleared.
 
 V8.9.7 website form builder:
 
