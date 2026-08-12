@@ -216,6 +216,15 @@
     );
   }
 
+  function showVoidReasonV82(invoice) {
+    const record = invoice.void_record || {};
+    const content = $("#modal-content");
+    content.innerHTML = `<div class="modal-head"><div><small>PERMANENT INVOICE RECORD</small><h2>${esc(invoice.number)} void reason</h2><p>This note is retained with the invoice and included on its PDF.</p></div><button type="button" id="close-modal">×</button></div><div class="v8982-void-reason-modal"><small>REASON RECORDED WHEN VOIDED</small><strong>${esc(record.reason || invoice.notes || "No reason was recorded")}</strong>${record.voided_at || record.voided_by ? `<span>${record.voided_at ? esc(record.voided_at) : ""}${record.voided_at && record.voided_by ? " · " : ""}${record.voided_by ? `by ${esc(record.voided_by)}` : ""}</span>` : ""}<a class="secondary" href="/api/invoices/${invoice.id}/pdf">Open retained invoice PDF</a></div><footer class="v8982-readonly-footer"><button class="primary" id="close-void-reason" type="button">Close</button></footer>`;
+    $("#modal").classList.remove("hidden");
+    $("#modal-overlay").classList.remove("hidden");
+    $("#close-modal").onclick = $("#close-void-reason").onclick = closeModal;
+  }
+
   renderFinance = function (r, body) {
     const activeInvoices = r.invoices.filter(i => i.status !== "void");
     const invoiced = activeInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
@@ -227,13 +236,13 @@
         const deletable = i.status === "unpaid" && Number(i.paid || 0) === 0 && !(i.payments || []).length;
         return `<article class="invoice-card ${isVoid ? "v82-void-invoice" : ""}" data-v82-invoice="${i.id}">
           <header><div><strong>${esc(i.number)}</strong><span class="status ${statusClass(i.status)} ${isVoid ? "v82-void-status" : ""}">${esc(statusText(i.status))}</span></div><div class="file-actions"><a href="/api/invoices/${i.id}/pdf">Invoice PDF</a>${i.paid > 0 ? `<a href="/api/invoices/${i.id}/receipt.pdf">Receipt</a>` : ""}</div></header>
-          ${isVoid ? `<div class="v82-void-strip"><strong>VOID</strong><span>This invoice is retained for the financial record and has no outstanding balance.</span></div>` : ""}
+          ${isVoid ? `<div class="v82-void-strip"><strong>VOID</strong><span>This invoice is retained for the financial record and has no outstanding balance.</span></div>${i.void_record ? `<div class="v8982-void-reason"><small>REASON RECORDED WHEN VOIDED</small><strong>${esc(i.void_record.reason)}</strong><span>${i.void_record.voided_at ? esc(i.void_record.voided_at) : "Date retained in the invoice audit history"}${i.void_record.voided_by ? ` · by ${esc(i.void_record.voided_by)}` : ""}</span></div>` : ""}` : ""}
           <dl><dt>Total</dt><dd>${money(i.total)}</dd><dt>Paid</dt><dd>${money(i.paid)}</dd><dt>Balance</dt><dd><strong>${money(isVoid ? 0 : i.balance)}</strong></dd><dt>Final payment due</dt><dd><strong>${isVoid ? "-" : i.due_date ? esc(fmtDate(i.due_date)) : "Not set"}</strong>${!isVoid && i.due_date_overridden ? ` <span class="agreed-date">Agreed date</span>` : ""}</dd></dl>
           ${!isVoid && Number(i.balance || 0) > 0 ? `<button class="change-due-date" data-due-invoice="${i.id}" data-due-date="${attr(i.due_date || "")}" data-standard-due="${attr(i.standard_due_date || "")}">Change final payment date</button>` : ""}
           ${i.description ? `<p>${esc(i.description)}</p>` : ""}
           <div class="payments">${(i.payments || []).map(p => `<div data-payment="${p.id}"><span><strong>${money(p.amount)}</strong><small>${esc(fmtDate(p.paid_date))} · ${esc(statusText(p.payment_type))}</small></span>${isVoid ? "" : `<button class="mini danger-text" data-action="delete-payment">Delete</button>`}</div>`).join("")}</div>
           ${!isVoid && i.balance > 0 ? `<button class="secondary full" data-payment-invoice="${i.id}" data-balance="${i.balance}">Record bank transfer</button>` : ""}
-          <div class="v82-invoice-actions">${!isVoid ? `<button class="mini danger-text" data-v82-void="${i.id}">Void invoice</button>` : ""}${deletable ? `<button class="mini danger-text" data-v82-delete-invoice="${i.id}">Delete mistaken invoice</button>` : ""}</div>
+          <div class="v82-invoice-actions">${isVoid ? `<button class="mini" data-v82-view-void="${i.id}">View void reason</button>` : `<button class="mini danger-text" data-v82-void="${i.id}">Void invoice</button>`}${deletable ? `<button class="mini danger-text" data-v82-delete-invoice="${i.id}">Delete mistaken invoice</button>` : ""}</div>
         </article>`;
       }).join("") || `<div class="empty small-empty"><strong>No invoices yet</strong>Create the first branded invoice above.</div>`}</div>`;
 
@@ -247,6 +256,7 @@
       openDrawer(r.id, "Finance");
     });
     $$('[data-v82-void]', body).forEach(button => button.onclick = () => voidInvoiceV82(r, r.invoices.find(i => i.id === button.dataset.v82Void)));
+    $$('[data-v82-view-void]', body).forEach(button => button.onclick = () => showVoidReasonV82(r.invoices.find(i => i.id === button.dataset.v82ViewVoid)));
     $$('[data-v82-delete-invoice]', body).forEach(button => button.onclick = () => deleteInvoiceV82(r, r.invoices.find(i => i.id === button.dataset.v82DeleteInvoice)));
   };
 
@@ -263,10 +273,11 @@
         const deletable = i.status === "unpaid" && Number(i.paid || 0) === 0 && !(i.payments || []).length;
         const paid = Number(i.balance || 0) <= 0 || isVoid;
         const dueDetail = paid ? (isVoid ? "Voided" : "Paid in full") : i.payment_due_status === "overdue" ? `${Math.abs(i.days_until_due)} day${Math.abs(i.days_until_due) === 1 ? "" : "s"} overdue` : i.payment_due_status === "due_today" ? "Due today" : i.due_date_overridden ? "Agreed date" : i.wedding_date ? "45 days before wedding" : "Invoice due date";
-        return `<div class="table-row ${isVoid ? "v82-void-row" : ""}"><strong>${esc(i.number)}</strong><button class="link-button" data-record="${i.booking_id}">${esc(i.client || "")}</button><span class="brand-badge ${i.brand}">${esc(labels[i.brand])}</span><span>${esc(fmtDate(i.issue_date))}</span><span class="v88-due-cell ${esc(i.payment_due_status || "no_date")}"><strong>${paid ? "-" : esc(fmtDate(i.payment_due_date))}</strong><small>${esc(dueDetail)}</small></span><strong>${money(isVoid ? 0 : i.balance)}</strong><span class="status ${statusClass(i.status)} ${isVoid ? "v82-void-status" : ""}">${esc(statusText(i.status))}</span><span class="file-actions"><a href="/api/invoices/${i.id}/pdf" title="Download invoice">PDF</a>${i.paid > 0 ? `<a href="/api/invoices/${i.id}/receipt.pdf" title="Download receipt">Receipt</a>` : ""}</span><span class="v82-register-actions">${!isVoid ? `<button class="mini danger-text" data-v82-register-void="${i.id}">Void</button>` : ""}${deletable ? `<button class="mini danger-text" data-v82-register-delete="${i.id}">Delete</button>` : ""}</span></div>`;
+        return `<div class="table-row ${isVoid ? "v82-void-row" : ""}"><strong>${esc(i.number)}</strong><button class="link-button" data-record="${i.booking_id}">${esc(i.client || "")}</button><span class="brand-badge ${i.brand}">${esc(labels[i.brand])}</span><span>${esc(fmtDate(i.issue_date))}</span><span class="v88-due-cell ${esc(i.payment_due_status || "no_date")}"><strong>${paid ? "-" : esc(fmtDate(i.payment_due_date))}</strong><small>${esc(dueDetail)}</small></span><strong>${money(isVoid ? 0 : i.balance)}</strong><span class="status ${statusClass(i.status)} ${isVoid ? "v82-void-status" : ""}">${esc(statusText(i.status))}</span><span class="file-actions"><a href="/api/invoices/${i.id}/pdf" title="Download invoice">PDF</a>${i.paid > 0 ? `<a href="/api/invoices/${i.id}/receipt.pdf" title="Download receipt">Receipt</a>` : ""}</span><span class="v82-register-actions">${isVoid ? `<button class="mini" data-v82-register-reason="${i.id}">Reason</button>` : `<button class="mini danger-text" data-v82-register-void="${i.id}">Void</button>`}${deletable ? `<button class="mini danger-text" data-v82-register-delete="${i.id}">Delete</button>` : ""}</span></div>`;
       }).join("")}</div>${rows.length ? "" : `<div class="empty"><strong>No invoices yet</strong>Create one from a record's Finance tab.</div>`}</div></article>`;
       wireRecords();
       $$('[data-v82-register-void]').forEach(button => button.onclick = () => voidInvoiceV82(null, rows.find(i => i.id === button.dataset.v82RegisterVoid)));
+      $$('[data-v82-register-reason]').forEach(button => button.onclick = () => showVoidReasonV82(rows.find(i => i.id === button.dataset.v82RegisterReason)));
       $$('[data-v82-register-delete]').forEach(button => button.onclick = () => deleteInvoiceV82(null, rows.find(i => i.id === button.dataset.v82RegisterDelete)));
     } catch (error) {
       showError(error);

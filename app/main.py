@@ -66,7 +66,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.8.1-clear-form-confirmation", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.8.2-visible-void-reasons", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -285,6 +285,29 @@ def effective_invoice_due_date(item: Invoice) -> date | None:
     return standard_wedding_due_date(item)
 
 
+def invoice_void_record(item: Invoice) -> dict | None:
+    """Recover the permanent void audit marker stored on current invoices.
+
+    V8.2 deliberately stored this in the existing invoice notes field so no
+    database migration was required. Exposing the structured parts here makes
+    the reason visible without changing or rewriting the retained record.
+    """
+    if item.status != "void" or not item.notes:
+        return None
+    marker = re.search(
+        r"VOIDED (?P<at>.+?) by (?P<by>.+?)\. Reason: (?P<reason>.*?)(?=\n\nVOIDED |\Z)",
+        item.notes,
+        flags=re.DOTALL,
+    )
+    if not marker:
+        return {"reason": item.notes.strip(), "voided_at": None, "voided_by": None}
+    return {
+        "reason": marker.group("reason").strip(),
+        "voided_at": marker.group("at").strip(),
+        "voided_by": marker.group("by").strip(),
+    }
+
+
 def invoice_json(item: Invoice) -> dict:
     due = effective_invoice_due_date(item)
     standard_due = standard_wedding_due_date(item)
@@ -304,7 +327,8 @@ def invoice_json(item: Invoice) -> dict:
             "final_due_date": item.due_date.isoformat() if item.due_date else None,
             "wedding_date": item.booking.event_date.isoformat() if item.booking and item.booking.event_date else None,
             "payment_due_status": due_status, "days_until_due": days_until_due,
-            "description": item.description, "notes": item.notes, "total": money(item.total),
+            "description": item.description, "notes": item.notes,
+            "void_record": invoice_void_record(item), "total": money(item.total),
             "deposit_amount": money(item.booking.deposit_amount if item.booking else 0),
             "line_items": item.line_items or [],
             "payment_schedule": schedule,
@@ -414,7 +438,7 @@ def health():
             "imap_configured": bool(settings.imap_host and (
                 settings.imap_wbm_password or settings.smtp_wbm_password or
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
-            "build": "2026.08.12-clear-booking-form-confirmation-v8.9.8.1"}
+            "build": "2026.08.12-visible-invoice-void-reasons-v8.9.8.2"}
 
 
 @app.get("/api/public/config")

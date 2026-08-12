@@ -1,7 +1,17 @@
-BookingSystem2026 - Clear Wedding Booking Form Confirmation
-Build: 2026.08.12-clear-booking-form-confirmation-v8.9.8.1
+BookingSystem2026 - Visible Invoice Void Reasons
+Build: 2026.08.12-visible-invoice-void-reasons-v8.9.8.2
 
-This is a complete cumulative build containing every feature through V8.9.8.1.
+This is a complete cumulative build containing every feature through V8.9.8.2.
+
+V8.9.8.2 permanent invoice audit visibility:
+
+- The reason entered when an invoice is voided is displayed directly on its
+  retained invoice card in Payments.
+- The void date and administrator are displayed with the reason.
+- The main Payments & invoices register has a Reason button for every void invoice.
+- Existing void reasons are recovered from their retained invoice notes; no
+  historical data or invoice numbers are rewritten.
+- The retained invoice PDF continues to include the permanent void audit note.
 
 V8.9.8.1 clear client submission:
 

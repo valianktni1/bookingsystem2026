@@ -132,6 +132,22 @@ def test_zero_payment_voided_test_booking_can_be_deleted_without_reusing_number(
         assert client.post(f"/api/invoices/{first_invoice.json()['id']}/void", json={
             "reason": "Test quote created while checking the workflow",
         }).status_code == 200
+        retained_invoice = next(
+            item for item in client.get(f"/api/bookings/{booking['id']}").json()["invoices"]
+            if item["id"] == first_invoice.json()["id"]
+        )
+        assert retained_invoice["status"] == "void"
+        assert retained_invoice["void_record"]["reason"] == (
+            "Test quote created while checking the workflow"
+        )
+        assert retained_invoice["void_record"]["voided_by"] == "mark@example.com"
+        assert retained_invoice["void_record"]["voided_at"]
+        register_invoice = next(
+            item for item in client.get("/api/invoices").json()
+            if item["id"] == first_invoice.json()["id"]
+        )
+        assert register_invoice["void_record"] == retained_invoice["void_record"]
+        assert "Test quote created while checking the workflow" in retained_invoice["notes"]
         deleted = client.post(f"/api/bookings/{booking['id']}/permanent-delete", json={
             "reason": "Remove completed test enquiry and booking",
             "confirmation": "DELETE Test Couple",
@@ -167,7 +183,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
                                  "imap_configured": False,
-                                     "build": "2026.08.12-clear-booking-form-confirmation-v8.9.8.1"}
+                                     "build": "2026.08.12-visible-invoice-void-reasons-v8.9.8.2"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
