@@ -176,16 +176,17 @@ async function prepareAndSendQuote(r,body,d){
     const catalog=await api("/api/catalog?brand=wbm"),prepared=d.quote_preparation||{required_addons:[],discounts:[]};
     const required=Object.fromEntries(prepared.required_addons.map(x=>[x.addon_id,x]));
     const discounts=Object.fromEntries(prepared.discounts.map(x=>[x.addon_id,x]));
-    const addOns=catalog.addons.filter(x=>!x.is_discount),privateDiscounts=catalog.addons.filter(x=>x.is_discount);
+    const isTravel=x=>`${x.code||""} ${x.name||""}`.toLowerCase().replaceAll("_"," ").replaceAll("-"," ").includes("travel");
+    const travelAddOns=catalog.addons.filter(x=>!x.is_discount&&isTravel(x)),privateDiscounts=catalog.addons.filter(x=>x.is_discount);
     const rows=(items,current,kind)=>items.map(item=>`<label class="quote-prep-row full"><input type="checkbox" name="${kind}" value="${item.id}" ${current[item.id]?"checked":""}><span><strong>${esc(item.name)}</strong><small>${kind==="required_quote_item"?"Required and locked for the couple":"Private code; the couple sees the applied deduction"}</small></span><span class="money-input">£<input type="number" min="0" step="0.01" data-price="${item.id}" value="${current[item.id]?.price??item.price}"></span></label>`).join("");
-    showModal("Prepare and send quote",`<div class="full quote-prep-note"><strong>Required items</strong><span>Use this for travel expenses or anything the couple must have. You can change the amount for this wedding.</span></div>${rows(addOns,required,"required_quote_item")||`<p class="full muted">No active add-ons available.</p>`}<div class="full quote-prep-note discount-note"><strong>Private discounts</strong><span>Only you can select these. The accepted quote and invoice show the deduction.</span></div>${rows(privateDiscounts,discounts,"discount_quote_item")||`<p class="full muted">Create a Private discount code in Packages & pricing when you need one.</p>`}`,async()=>{
+    showModal("Prepare and send quote",`<div class="full quote-prep-note"><strong>Optional add-ons</strong><span>Albums, extra hours, photographers and every other normal add-on are shown to the couple as optional choices automatically.</span></div><div class="full quote-prep-note"><strong>Locked travel charge only</strong><span>Tick travel only when you are adding a compulsory travel charge to this wedding. The couple cannot remove it.</span></div>${rows(travelAddOns,required,"required_quote_item")||`<p class="full muted">No Travel expenses add-on exists yet. Create it in Packages & pricing when needed.</p>`}<div class="full quote-prep-note discount-note"><strong>Private discounts</strong><span>Only you can select these. The accepted quote and invoice show the deduction.</span></div>${rows(privateDiscounts,discounts,"discount_quote_item")||`<p class="full muted">Create a Private discount code in Packages & pricing when you need one.</p>`}`,async()=>{
       const collect=name=>$$(`input[name="${name}"]:checked`,$("#modal")).map(input=>({addon_id:input.value,price:Number($(`[data-price="${input.value}"]`,$("#modal")).value)}));
       await api(`/api/bookings/${r.id}/quote/preparation`,{method:"PUT",body:JSON.stringify({required_addons:collect("required_quote_item"),discounts:collect("discount_quote_item")})});
       const result=await api(`/api/bookings/${r.id}/quote/send`,{method:"POST",body:JSON.stringify({expires_days:90})});
       state.portalLinks[r.id]=result.url;closeModal();
       if(result.email_sent)toast("Prepared quote email sent");else toast(`Quote link created, but email was not sent: ${result.email_error}`,"error");
       renderQuotePortal(r,body);
-    },"Check the required charges and private discounts, then send the couple their package choices.");
+    },"Normal add-ons always remain optional. Only travel can be locked, and only when you tick it for this quote.");
     $("#dynamic-form footer .primary").textContent="Save & send quote";
   }catch(e){toast(e.message,"error")}
 }

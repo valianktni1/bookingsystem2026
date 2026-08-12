@@ -158,11 +158,16 @@ function selectedPackage() {
   const id = document.querySelector('input[name="package_id"]:checked')?.value;
   return data.catalog.packages.find(item => item.id === id);
 }
+function isTravelQuoteItem(item) {
+  return `${item?.code||""} ${item?.name||""}`.toLowerCase().replaceAll("_"," ").replaceAll("-"," ").includes("travel");
+}
 function renderAddons() {
   const selected = selectedPackage();
-  const preparation=data.quote_preparation||{required_addons:[],discounts:[]},requiredIds=preparation.required_addons.map(x=>x.addon_id);
+  const rawPreparation=data.quote_preparation||{required_addons:[],discounts:[]};
+  const preparation={...rawPreparation,required_addons:(rawPreparation.required_addons||[]).filter(isTravelQuoteItem)};
+  const requiredIds=preparation.required_addons.map(x=>x.addon_id);
   const eligible = data.catalog.addons.filter(item => !requiredIds.includes(item.id) && (!item.eligible_package_codes.length || item.eligible_package_codes.includes(selected.code)));
-  const required=preparation.required_addons.map(item=>`<label class="addon-card required-addon"><input type="checkbox" checked disabled><span><strong>${esc(item.name)} <em>Required</em></strong><small>${esc(item.description)}</small></span><b>+${money(item.price)}</b></label>`).join("");
+  const required=preparation.required_addons.map(item=>`<label class="addon-card required-addon"><input type="checkbox" checked disabled><span><strong>${esc(item.name)} <em>Travel included</em></strong><small>${esc(item.description)} · This travel charge has been added to your quote and cannot be removed.</small></span><b>+${money(item.price)}</b></label>`).join("");
   const optional=eligible.map(item => `<label class="addon-card"><input type="checkbox" name="addon_id" value="${item.id}"><span><strong>${esc(item.name)}</strong><small>${esc(item.description)}</small></span><b>+${money(item.price)}</b></label>`).join("");
   const discounts=preparation.discounts.map(item=>`<div class="addon-card applied-discount"><span>−</span><span><strong>${esc(item.name)} <em>Applied</em></strong><small>${esc(item.description)}</small></span><b>−${money(item.price)}</b></div>`).join("");
   $("#addon-list").innerHTML = required+optional+discounts || `<p class="no-addons">No additional extras are needed or available for this package.</p>`;
@@ -172,7 +177,8 @@ function renderAddons() {
 function updateQuoteTotal() {
   const selected = selectedPackage();
   const selectedIds = [...document.querySelectorAll('input[name="addon_id"]:checked')].map(x => x.value);
-  const preparation=data.quote_preparation||{required_addons:[],discounts:[]};
+  const rawPreparation=data.quote_preparation||{required_addons:[],discounts:[]};
+  const preparation={...rawPreparation,required_addons:(rawPreparation.required_addons||[]).filter(isTravelQuoteItem)};
   const addonTotal = data.catalog.addons.filter(x => selectedIds.includes(x.id)).reduce((sum,x) => sum + Number(x.price),0)+preparation.required_addons.reduce((sum,x)=>sum+Number(x.price),0);
   const discountTotal=preparation.discounts.reduce((sum,x)=>sum+Number(x.price),0);
   $("#quote-total").textContent = money(Math.max(0,Number(selected.price) + addonTotal-discountTotal));

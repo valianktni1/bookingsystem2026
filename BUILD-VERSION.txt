@@ -1,7 +1,15 @@
-BookingSystem2026 - Booking Form, Payment Plans and Safe Testing Mode
-Build: 2026.08.09-booking-form-payment-plans-testing-v8.9.8
+BookingSystem2026 - Travel-only Required Add-on Correction
+Build: 2026.08.11-travel-only-required-addon-v8.9.8.1
 
-This is a complete cumulative build containing every feature through V8.9.8.
+This is a complete cumulative build containing every feature through V8.9.8.1.
+
+V8.9.8.1 required add-on correction:
+
+- Every ordinary add-on is optional and unticked for the couple.
+- Travel is the only add-on Mark can explicitly make required and locked per quote.
+- Previously prepared V8.9.8 test quotes automatically return ordinary extras to optional.
+- Server-side validation prevents a non-travel item from being made required again.
+- Existing data, counters, imported-booking protection and communications remain unchanged.
 
 V8.9.8 booking form, payment plans and testing:
 
