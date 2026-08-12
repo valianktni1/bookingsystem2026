@@ -305,8 +305,8 @@ class PaymentPlanTemplateIn(BaseModel):
 class BookingFormTemplateIn(BaseModel):
     heading: str = Field(min_length=1, max_length=300)
     introduction: str = Field(default="", max_length=1000)
-    submit_label: str = Field(default="Save Wedding Booking Form", min_length=1, max_length=100)
-    success_message: str = Field(default="Your details have been saved.", min_length=1, max_length=1000)
+    submit_label: str = Field(default="Submit Wedding Booking Form", min_length=1, max_length=100)
+    success_message: str = Field(default="Thank you. Your answers have been securely added to your wedding file and are now available to Mark.", min_length=1, max_length=1000)
     steps: list[BookingFormStepIn] = Field(min_length=1, max_length=10)
     payment_plans: list[PaymentPlanTemplateIn] = Field(min_length=3, max_length=3)
     fields: list[BookingFormFieldIn] = Field(min_length=1, max_length=100)

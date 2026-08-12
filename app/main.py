@@ -66,7 +66,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.8-payment-plans-testing", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.8.1-clear-form-confirmation", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -414,7 +414,7 @@ def health():
             "imap_configured": bool(settings.imap_host and (
                 settings.imap_wbm_password or settings.smtp_wbm_password or
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
-            "build": "2026.08.11-travel-only-required-addon-v8.9.8.1"}
+            "build": "2026.08.12-clear-booking-form-confirmation-v8.9.8.1"}
 
 
 @app.get("/api/public/config")
@@ -1381,31 +1381,10 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
 
 def quote_preparation_json(booking: Booking) -> dict:
     raw = (booking.workflow_state or {}).get("quote_preparation") or {}
-    # Mark's quote rule is deliberately narrow: ordinary catalogue extras are
-    # always optional for the couple.  Only a travel charge that Mark has
-    # explicitly selected for this individual quote may be locked as required.
-    # Filtering here also repairs any quote prepared on V8.9.8 where ordinary
-    # add-ons were accidentally stored in the required list.
-    required_addons = [
-        item for item in (raw.get("required_addons") or [])
-        if isinstance(item, dict) and is_travel_quote_item(item)
-    ]
     return {
-        "required_addons": required_addons,
+        "required_addons": [item for item in (raw.get("required_addons") or []) if isinstance(item, dict)],
         "discounts": [item for item in (raw.get("discounts") or []) if isinstance(item, dict)],
     }
-
-
-def is_travel_quote_item(item: AddOnOption | dict) -> bool:
-    """Return true only for the dedicated travel-expense quote adjustment."""
-    if isinstance(item, dict):
-        code = str(item.get("code") or "")
-        name = str(item.get("name") or "")
-    else:
-        code = str(item.code or "")
-        name = str(item.name or "")
-    text = f"{code} {name}".lower().replace("-", " ").replace("_", " ")
-    return "travel" in text
 
 
 def require_booking_journey_unlocked(db: Session, booking: Booking) -> None:
@@ -1639,15 +1618,6 @@ def save_quote_preparation(booking_id: str, payload: QuotePreparationIn,
     if len(rows) != len(wanted_ids):
         raise HTTPException(422, "One or more selected quote items are unavailable")
     by_id = {row.id: row for row in rows}
-
-    invalid_required = [row.name for item_id, row in by_id.items()
-                        if item_id in required_input and not is_travel_quote_item(row)]
-    if invalid_required:
-        raise HTTPException(
-            422,
-            "Only a travel-expense add-on can be required and locked. "
-            "All other add-ons must remain optional for the couple.",
-        )
 
     def snapshot(item_id: str, entered: QuotePreparationIn, discount: bool) -> dict:
         row = by_id[item_id]

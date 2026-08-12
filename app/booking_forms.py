@@ -51,8 +51,8 @@ def _field(key, label, field_type, step, required=False, width="half", placehold
 DEFAULT_BOOKING_FORM = {
     "heading": "Wedding Booking Form",
     "introduction": "Three short steps to securely save all the details I need for your wedding.",
-    "submit_label": "Save Wedding Booking Form",
-    "success_message": "Your Wedding Booking Form has been saved securely.",
+    "submit_label": "Submit Wedding Booking Form",
+    "success_message": "Thank you. Your answers have been securely added to your wedding file and are now available to Mark.",
     "steps": [
         {"id": "about", "title": "About you both", "introduction": "Your names and contact details."},
         {"id": "wedding", "title": "Your wedding day", "introduction": "Confirm the date, venue and ceremony details."},

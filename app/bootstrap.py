@@ -68,6 +68,22 @@ def bootstrap(db: Session) -> None:
             config=default_booking_form(),
             is_active=True,
         ))
+    else:
+        # Upgrade only the original V8.9.8 wording. Any wording Mark has
+        # deliberately customised in the form editor remains untouched.
+        booking_config = dict(booking_template.config or {})
+        booking_wording_changed = False
+        if booking_config.get("submit_label") == "Save Wedding Booking Form":
+            booking_config["submit_label"] = "Submit Wedding Booking Form"
+            booking_wording_changed = True
+        if booking_config.get("success_message") == "Your Wedding Booking Form has been saved securely.":
+            booking_config["success_message"] = (
+                "Thank you. Your answers have been securely added to your wedding file "
+                "and are now available to Mark."
+            )
+            booking_wording_changed = True
+        if booking_wording_changed:
+            booking_template.config = booking_config
     if not db.get(SystemSetting, "testing_mode"):
         db.add(SystemSetting(key="testing_mode", value={
             "enabled": False,

@@ -15,12 +15,9 @@ docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
 curl http://127.0.0.1:30049/api/health
 
 Expected build:
-2026.08.11-travel-only-required-addon-v8.9.8.1
+2026.08.12-clear-booking-form-confirmation-v8.9.8.1
 
 4. Hard refresh the browser once after deployment.
 
 No YAML changes are required for this release.
-No database clearing, migration script or quote resending is required.
-The already-sent test quote repairs itself when opened after deployment.
 No invoice counters, imported records, portal links, emails or calendars are reset.
-

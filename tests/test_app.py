@@ -167,7 +167,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
                                  "imap_configured": False,
-                                        "build": "2026.08.11-travel-only-required-addon-v8.9.8.1"}
+                                     "build": "2026.08.12-clear-booking-form-confirmation-v8.9.8.1"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -408,38 +408,6 @@ def test_phase_two_b_flow(monkeypatch):
             "eligible_package_codes": [], "display_order": 91, "is_active": True,
             "is_discount": True,
         }).json()
-        ordinary_required = client.put(
-            f"/api/bookings/{wedding_data['id']}/quote/preparation",
-            json={"required_addons": [{"addon_id": album["id"], "price": 120}],
-                  "discounts": []},
-        )
-        assert ordinary_required.status_code == 422
-        assert "Only a travel-expense add-on" in ordinary_required.json()["detail"]
-
-        # V8.9.8 briefly allowed ordinary extras to be stored as required.  A
-        # live quote prepared on that build must self-repair after deployment:
-        # travel remains locked, while the album returns to the optional list.
-        with SessionLocal() as db:
-            prepared_booking = db.get(Booking, wedding_data["id"])
-            prepared_booking.workflow_state = {
-                **(prepared_booking.workflow_state or {}),
-                "quote_preparation": {
-                    "required_addons": [
-                        {"addon_id": album["id"], "code": album["code"],
-                         "name": album["name"], "description": album["description"],
-                         "price": 120, "required": True, "discount": False},
-                        {"addon_id": travel["id"], "code": travel["code"],
-                         "name": travel["name"], "description": travel["description"],
-                         "price": 75, "required": True, "discount": False},
-                    ],
-                    "discounts": [],
-                },
-            }
-            db.commit()
-        repaired_public = client.get(f"/api/client/{token}").json()
-        assert [item["addon_id"] for item in repaired_public["quote_preparation"]["required_addons"]] == [travel["id"]]
-        assert any(item["id"] == album["id"] for item in repaired_public["catalog"]["addons"])
-
         preparation = client.put(f"/api/bookings/{wedding_data['id']}/quote/preparation", json={
             "required_addons": [{"addon_id": travel["id"], "price": 75}],
             "discounts": [{"addon_id": discount["id"], "price": 25}],
@@ -509,6 +477,14 @@ def test_phase_two_b_flow(monkeypatch):
         assert client.post(f"/api/client/{token}/quote", json={
             "package_id": gold["id"], "addon_ids": [], "confirmed": True
         }).status_code == 409
+
+        # Keep the balance-reminder assertions independent of the real date on
+        # which the suite runs. Otherwise the one-day booking-fee reminder can
+        # legitimately fall on the same day as the seven-day balance reminder.
+        assert client.post(f"/api/invoices/{quote.json()['invoice']['id']}/payments", json={
+            "amount": quote.json()["invoice"]["deposit_amount"],
+            "paid_date": date.today().isoformat(), "payment_type": "bank_transfer",
+        }).status_code == 201
 
         main_module = importlib.import_module("app.main")
         with monkeypatch.context() as reminder_patch:

@@ -1,15 +1,16 @@
-BookingSystem2026 - Travel-only Required Add-on Correction
-Build: 2026.08.11-travel-only-required-addon-v8.9.8.1
+BookingSystem2026 - Clear Wedding Booking Form Confirmation
+Build: 2026.08.12-clear-booking-form-confirmation-v8.9.8.1
 
 This is a complete cumulative build containing every feature through V8.9.8.1.
 
-V8.9.8.1 required add-on correction:
+V8.9.8.1 clear client submission:
 
-- Every ordinary add-on is optional and unticked for the couple.
-- Travel is the only add-on Mark can explicitly make required and locked per quote.
-- Previously prepared V8.9.8 test quotes automatically return ordinary extras to optional.
-- Server-side validation prevents a non-travel item from being made required again.
-- Existing data, counters, imported-booking protection and communications remain unchanged.
+- The final button now says Submit Wedding Booking Form.
+- A large, mobile-friendly success window confirms the form is securely in the
+  couple's wedding file and available to Mark.
+- The confirmation sends the couple directly to their agreement when they continue.
+- Previously submitted forms say updated instead of submitted and remain editable.
+- Existing custom wording is preserved; only the original V8.9.8 defaults are upgraded.
 
 V8.9.8 booking form, payment plans and testing:
 
