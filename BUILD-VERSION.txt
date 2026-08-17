@@ -1,7 +1,19 @@
-BookingSystem2026 - Cancellation & Closed-Balance Accounting
-Build: 2026.08.15-cancel-close-balance-v8.9.9
+BookingSystem2026 - Safe Accounts 2026 Integration
+Build: 2026.08.17-booking-accounts-integration-v8.10
 
-This is a complete cumulative build containing every feature through V8.9.9.
+This is a complete cumulative build containing every feature through V8.10.
+
+V8.10 protected accounts integration:
+
+- One-way transfer to Accounts 2026; booking records remain the source of truth.
+- Exact invoice numbers, line items, signed payments, cancellations and refunds are retained.
+- Idempotent revision hashes prevent duplicates when a sync is repeated or retried.
+- Weddings By Mark wedding jobs are included from 6 April 2025; test records,
+  enquiries, Ivory Digital work and earlier out-of-scope records are excluded.
+- Failed accounting connections never block normal booking work and retry safely.
+- First sync is a deliberate confirmed action in Business settings.
+- Automatic background synchronisation remains separately controlled by YAML.
+- No client emails, reminders, links or calendar actions are performed.
 
 V8.9.9 cancellation and refund controls:
 

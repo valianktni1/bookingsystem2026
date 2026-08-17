@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .bootstrap import bootstrap
 from .booking_forms import public_booking_form, validate_booking_answers, validate_booking_form
+from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .email_service import preview_template_email, send_template_email, smtp_credentials, smtp_ready
@@ -60,13 +61,17 @@ async def lifespan(_: FastAPI):
     with SessionLocal() as db:
         bootstrap(db)
     reminder_task = asyncio.create_task(reminder_loop())
+    accounts_task = asyncio.create_task(accounts_sync_loop())
     yield
     reminder_task.cancel()
+    accounts_task.cancel()
     with suppress(asyncio.CancelledError):
         await reminder_task
+    with suppress(asyncio.CancelledError):
+        await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.9-cancel-close-balance", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.10-accounts-integration", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -473,7 +478,9 @@ def health():
             "imap_configured": bool(settings.imap_host and (
                 settings.imap_wbm_password or settings.smtp_wbm_password or
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
-            "build": "2026.08.15-cancel-close-balance-v8.9.9"}
+            "accounts_integration_enabled": settings.accounts_integration_enabled,
+            "accounts_auto_sync": settings.accounts_integration_auto_sync,
+            "build": "2026.08.17-booking-accounts-integration-v8.10"}
 
 
 @app.get("/api/public/config")
@@ -2243,6 +2250,7 @@ register_v84_routes(app)
 register_mail_routes(app)
 register_legacy_import_routes(app)
 register_legacy_archive_import_routes(app)
+register_accounts_integration_routes(app)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

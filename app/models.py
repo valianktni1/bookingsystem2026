@@ -223,6 +223,18 @@ class Payment(Base):
     invoice: Mapped[Invoice] = relationship(back_populates="payments")
 
 
+class AccountsSyncState(Base):
+    """Last successfully mirrored revision of a booking-system invoice."""
+    __tablename__ = "accounts_sync_states"
+    invoice_id: Mapped[str] = mapped_column(ForeignKey("invoices.id"), primary_key=True)
+    payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class BookingNote(Base):
     __tablename__ = "booking_notes"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     reminder_scan_hours: int = 6
     reminders_enabled: bool = False
     google_maps_api_key: str | None = None
+    accounts_integration_enabled: bool = False
+    accounts_integration_auto_sync: bool = False
+    accounts_api_url: str | None = None
+    accounts_integration_key: str | None = None
+    accounts_sync_minutes: int = Field(default=10, ge=2, le=1440)
 
     @model_validator(mode="after")
     def reject_placeholder_production_secrets(self):
@@ -52,6 +57,11 @@ class Settings(BaseSettings):
                 raise ValueError("ADMIN_PASSWORD must be replaced with a strong unique password")
             if "replace" in self.database_url.lower():
                 raise ValueError("DATABASE_URL must contain the real database password")
+            if self.accounts_integration_enabled:
+                if not self.accounts_api_url or not self.accounts_api_url.startswith(("http://", "https://")):
+                    raise ValueError("ACCOUNTS_API_URL must be a complete http:// or https:// address")
+                if not self.accounts_integration_key or len(self.accounts_integration_key) < 32:
+                    raise ValueError("ACCOUNTS_INTEGRATION_KEY must contain at least 32 characters")
         return self
 
 
