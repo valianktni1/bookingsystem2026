@@ -98,7 +98,7 @@ def dashboard_counts(db: Session) -> dict:
     confirmed = db.scalar(select(func.count()).select_from(Booking).where(Booking.archived_at.is_(None), Booking.status == RecordStatus.CONFIRMED)) or 0
     open_enquiries = db.scalar(select(func.count()).select_from(Booking).where(Booking.archived_at.is_(None), Booking.status.in_([RecordStatus.ENQUIRY, RecordStatus.QUOTED]))) or 0
     outstanding = db.scalar(select(func.coalesce(func.sum(Invoice.total - Invoice.paid), 0))
-                            .where(~Invoice.status.in_(["paid", "void"]))) or 0
+                            .where(~Invoice.status.in_(["paid", "void", "cancelled"]))) or 0
     due_tasks = db.scalar(select(func.count()).select_from(Task).join(Booking).where(
         Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED,
         Task.completed.is_(False), visible_task_condition())) or 0

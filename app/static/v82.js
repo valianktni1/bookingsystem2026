@@ -36,22 +36,37 @@
     setModalActionLabel("Permanently delete");
   }
 
+  function localTodayV899() {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+  }
+
   async function cancelRecordV82(r) {
-    reasonModal(
+    const invoices = (r.invoices || []).filter(invoice => !["void", "cancelled"].includes(invoice.status));
+    const unpaid = invoices.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
+    const retained = (r.invoices || []).reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
+    showModal(
       `Cancel ${r.kind === "wedding" ? "booking" : "project"}`,
-      "This moves the record to Cancelled, completes its open tasks and revokes existing client links. Invoices and accepted agreements are retained. Invoices can be voided separately.",
-      "Cancel record",
+      `<div class="full v899-cancel-summary"><strong>This closes the booking without deleting its financial history.</strong><dl><dt>Unpaid balance being closed</dt><dd>${money(unpaid)}</dd><dt>Payments currently retained</dt><dd>${money(retained)}</dd><dt>Client email</dt><dd>None will be sent</dd></dl></div>
+       <label class="full">Cancellation date<input id="v899-cancellation-date" type="date" value="${localTodayV899()}" max="${localTodayV899()}" required></label>
+       <label class="full">Cancellation reason<textarea id="v82-reason" rows="4" required minlength="3" placeholder="For example: couple cancelled their September wedding"></textarea></label>`,
       async () => {
         const result = await api(`/api/bookings/${r.id}/cancel`, {
           method: "POST",
-          body: JSON.stringify({ reason: value("#v82-reason").trim() })
+          body: JSON.stringify({
+            reason: value("#v82-reason").trim(),
+            cancellation_date: value("#v899-cancellation-date")
+          })
         });
         closeModal();
         await refresh();
         toast(result.message || "Record cancelled");
         await openDrawer(r.id, "Overview");
-      }
+      },
+      "All invoice numbers, payments, documents and signed records are retained permanently. Open tasks, reminders and portal access stop immediately."
     );
+    setModalActionLabel(`Cancel & close ${money(unpaid)}`);
   }
 
   async function reopenRecordV82(r) {
@@ -103,7 +118,7 @@
       if (r.status === "cancelled") {
         primary.innerHTML = `<button class="secondary v82-reopen" type="button">Reopen record</button>`;
       } else {
-        primary.innerHTML = `<button class="secondary danger-button v82-cancel" type="button">Cancel ${r.kind === "wedding" ? "booking" : "project"}</button>`;
+        primary.innerHTML = `<button class="secondary danger-button v82-cancel" type="button">Cancel & close balance</button>`;
       }
       safetyMenu.innerHTML = `<button class="v82-delete-record" type="button">Delete test / duplicate</button>`;
       primary.querySelector(".v82-cancel")?.addEventListener("click", () => cancelRecordV82(r));
@@ -118,7 +133,7 @@
     actions.innerHTML = r.status === "cancelled"
       ? `<button class="secondary v82-reopen" type="button">Reopen record</button>
          <button class="secondary danger-button v82-delete-record" type="button">Permanently delete</button>`
-      : `<button class="secondary danger-button v82-cancel" type="button">Cancel ${r.kind === "wedding" ? "booking" : "project"}</button>
+      : `<button class="secondary danger-button v82-cancel" type="button">Cancel & close balance</button>
          <button class="secondary v82-delete-record" type="button">Permanently delete</button>`;
     footer.prepend(actions);
     const cancel = actions.querySelector(".v82-cancel");
@@ -140,7 +155,7 @@
     if (!cancellation) return;
     const banner = document.createElement("section");
     banner.className = "v82-cancelled-banner";
-    banner.innerHTML = `<div><small>CANCELLED RECORD</small><strong>${esc(cancellation.reason || "No cancellation reason recorded")}</strong><span>${esc(fmtDateTime(cancellation.cancelled_at))}${cancellation.cancelled_by ? ` · ${esc(cancellation.cancelled_by)}` : ""}</span></div><b>Cancelled</b>`;
+    banner.innerHTML = `<div><small>CANCELLED BOOKING · NO FURTHER PAYMENT DUE</small><strong>${esc(cancellation.reason || "No cancellation reason recorded")}</strong><span>${cancellation.cancellation_date ? `Cancelled ${esc(fmtDate(cancellation.cancellation_date))}` : esc(fmtDateTime(cancellation.cancelled_at))}${cancellation.cancelled_by ? ` · ${esc(cancellation.cancelled_by)}` : ""}</span><span>Unpaid balance closed: ${money(cancellation.unpaid_balance_closed || 0)} · Payment retained: ${money(cancellation.payments_retained || 0)} · No client email sent</span></div><b>Cancelled</b>`;
     body.prepend(banner);
   };
 
@@ -225,24 +240,65 @@
     $("#close-modal").onclick = $("#close-void-reason").onclick = closeModal;
   }
 
+  function showCancellationReasonV899(invoice) {
+    const record = invoice.cancellation_record || {};
+    const content = $("#modal-content");
+    content.innerHTML = `<div class="modal-head"><div><small>PERMANENT CANCELLATION RECORD</small><h2>${esc(invoice.number)} cancellation</h2><p>The invoice and all payments remain retained, while no further balance is due.</p></div><button type="button" id="close-modal">×</button></div><div class="v899-cancellation-reason"><small>REASON RECORDED</small><strong>${esc(record.reason || "No reason was recorded")}</strong><dl><dt>Cancellation date</dt><dd>${record.cancellation_date ? esc(fmtDate(record.cancellation_date)) : "Not recorded"}</dd><dt>Unpaid balance closed</dt><dd>${money(record.closed_balance || 0)}</dd><dt>Recorded by</dt><dd>${esc(record.cancelled_by || "Administrator")}</dd></dl><a class="secondary" href="/api/invoices/${invoice.id}/pdf">Open retained invoice PDF</a></div><footer class="v8982-readonly-footer"><button class="primary" id="close-cancellation-reason" type="button">Close</button></footer>`;
+    $("#modal").classList.remove("hidden");
+    $("#modal-overlay").classList.remove("hidden");
+    $("#close-modal").onclick = $("#close-cancellation-reason").onclick = closeModal;
+  }
+
+  function recordRefundV899(r, invoice) {
+    showModal(
+      `Record refund for ${invoice.number}`,
+      `<div class="full v899-refund-summary"><strong>Payment currently retained: ${money(invoice.paid)}</strong><span>This records money actually returned to the couple. It does not reopen the cancelled balance and it sends no email.</span></div>
+       <label>Refund amount<input id="v899-refund-amount" type="number" min="0.01" max="${attr(invoice.paid)}" step="0.01" value="${attr(invoice.paid)}" required></label>
+       <label>Refund date<input id="v899-refund-date" type="date" value="${localTodayV899()}" max="${localTodayV899()}" required></label>
+       <label class="full">Reference (optional)<input id="v899-refund-reference" maxlength="120" placeholder="Bank reference or transfer note"></label>
+       <label class="full">Reason<textarea id="v899-refund-reason" rows="3" required minlength="3" placeholder="Why this payment was refunded"></textarea></label>`,
+      async () => {
+        const result = await api(`/api/invoices/${invoice.id}/refunds`, {
+          method: "POST",
+          body: JSON.stringify({
+            amount: Number(value("#v899-refund-amount")),
+            refund_date: value("#v899-refund-date"),
+            reference: value("#v899-refund-reference").trim() || null,
+            reason: value("#v899-refund-reason").trim()
+          })
+        });
+        closeModal();
+        await refresh();
+        toast(result.message || "Refund recorded");
+        await openDrawer(r.id, "Finance");
+      },
+      "Refund entries are permanent accounting history and cannot be deleted from a cancelled invoice."
+    );
+    setModalActionLabel("Record refund");
+  }
+
   renderFinance = function (r, body) {
-    const activeInvoices = r.invoices.filter(i => i.status !== "void");
+    const activeInvoices = r.invoices.filter(i => !["void", "cancelled"].includes(i.status));
     const invoiced = activeInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
     const paid = r.invoices.reduce((sum, invoice) => sum + Number(invoice.paid || 0), 0);
     body.innerHTML = `<section class="summary"><div><small>QUOTED</small><strong>${money(r.quoted_total)}</strong></div><div><small>ACTIVE INVOICES</small><strong>${money(invoiced)}</strong></div><div><small>PAYMENTS RECORDED</small><strong>${money(paid)}</strong></div></section>
       <div class="section-actions"><div><h3>Invoices & bank transfers</h3><p>Invoice numbers remain chronological—even when voided</p></div><button id="new-invoice" class="primary">＋ New invoice</button></div>
       <div class="invoice-cards">${r.invoices.map(i => {
         const isVoid = i.status === "void";
+        const isCancelled = i.status === "cancelled";
+        const isClosed = isVoid || isCancelled;
         const deletable = i.status === "unpaid" && Number(i.paid || 0) === 0 && !(i.payments || []).length;
-        return `<article class="invoice-card ${isVoid ? "v82-void-invoice" : ""}" data-v82-invoice="${i.id}">
+        return `<article class="invoice-card ${isVoid ? "v82-void-invoice" : isCancelled ? "v899-cancelled-invoice" : ""}" data-v82-invoice="${i.id}">
           <header><div><strong>${esc(i.number)}</strong><span class="status ${statusClass(i.status)} ${isVoid ? "v82-void-status" : ""}">${esc(statusText(i.status))}</span></div><div class="file-actions"><a href="/api/invoices/${i.id}/pdf">Invoice PDF</a>${i.paid > 0 ? `<a href="/api/invoices/${i.id}/receipt.pdf">Receipt</a>` : ""}</div></header>
           ${isVoid ? `<div class="v82-void-strip"><strong>VOID</strong><span>This invoice is retained for the financial record and has no outstanding balance.</span></div>${i.void_record ? `<div class="v8982-void-reason"><small>REASON RECORDED WHEN VOIDED</small><strong>${esc(i.void_record.reason)}</strong><span>${i.void_record.voided_at ? esc(i.void_record.voided_at) : "Date retained in the invoice audit history"}${i.void_record.voided_by ? ` · by ${esc(i.void_record.voided_by)}` : ""}</span></div>` : ""}` : ""}
-          <dl><dt>Total</dt><dd>${money(i.total)}</dd><dt>Paid</dt><dd>${money(i.paid)}</dd><dt>Balance</dt><dd><strong>${money(isVoid ? 0 : i.balance)}</strong></dd><dt>Final payment due</dt><dd><strong>${isVoid ? "-" : i.due_date ? esc(fmtDate(i.due_date)) : "Not set"}</strong>${!isVoid && i.due_date_overridden ? ` <span class="agreed-date">Agreed date</span>` : ""}</dd></dl>
-          ${!isVoid && Number(i.balance || 0) > 0 ? `<button class="change-due-date" data-due-invoice="${i.id}" data-due-date="${attr(i.due_date || "")}" data-standard-due="${attr(i.standard_due_date || "")}">Change final payment date</button>` : ""}
+          ${isCancelled ? `<div class="v899-cancelled-strip"><strong>BOOKING CANCELLED</strong><span>No further payment is due. The invoice and payment history remain retained.</span></div>${i.cancellation_record ? `<div class="v899-cancellation-card"><small>CANCELLATION REASON</small><strong>${esc(i.cancellation_record.reason)}</strong><span>${i.cancellation_record.cancellation_date ? esc(fmtDate(i.cancellation_record.cancellation_date)) : "Date retained in audit history"} · ${money(i.cancellation_record.closed_balance || 0)} unpaid balance closed</span></div>` : ""}` : ""}
+          <dl><dt>Total</dt><dd>${money(i.total)}</dd>${Number(i.refunded || 0) > 0 ? `<dt>Originally received</dt><dd>${money(i.gross_paid)}</dd><dt>Refunded</dt><dd>-${money(i.refunded)}</dd><dt>Payment retained</dt><dd>${money(i.paid)}</dd>` : `<dt>${isCancelled ? "Payment retained" : "Paid"}</dt><dd>${money(i.paid)}</dd>`}<dt>Balance due</dt><dd><strong>${money(isClosed ? 0 : i.balance)}</strong></dd><dt>Final payment due</dt><dd><strong>${isClosed ? "-" : i.due_date ? esc(fmtDate(i.due_date)) : "Not set"}</strong>${!isClosed && i.due_date_overridden ? ` <span class="agreed-date">Agreed date</span>` : ""}</dd></dl>
+          ${!isClosed && Number(i.balance || 0) > 0 ? `<button class="change-due-date" data-due-invoice="${i.id}" data-due-date="${attr(i.due_date || "")}" data-standard-due="${attr(i.standard_due_date || "")}">Change final payment date</button>` : ""}
           ${i.description ? `<p>${esc(i.description)}</p>` : ""}
-          <div class="payments">${(i.payments || []).map(p => `<div data-payment="${p.id}"><span><strong>${money(p.amount)}</strong><small>${esc(fmtDate(p.paid_date))} · ${esc(statusText(p.payment_type))}</small></span>${isVoid ? "" : `<button class="mini danger-text" data-action="delete-payment">Delete</button>`}</div>`).join("")}</div>
-          ${!isVoid && i.balance > 0 ? `<button class="secondary full" data-payment-invoice="${i.id}" data-balance="${i.balance}">Record bank transfer</button>` : ""}
-          <div class="v82-invoice-actions">${isVoid ? `<button class="mini" data-v82-view-void="${i.id}">View void reason</button>` : `<button class="mini danger-text" data-v82-void="${i.id}">Void invoice</button>`}${deletable ? `<button class="mini danger-text" data-v82-delete-invoice="${i.id}">Delete mistaken invoice</button>` : ""}</div>
+          <div class="payments">${(i.payments || []).map(p => `<div data-payment="${p.id}" class="${p.payment_type === "refund" ? "v899-refund-row" : ""}"><span><strong>${p.payment_type === "refund" ? `-${money(Math.abs(Number(p.amount)))}` : money(p.amount)}</strong><small>${esc(fmtDate(p.paid_date))} · ${esc(statusText(p.payment_type))}${p.notes ? ` · ${esc(p.notes)}` : ""}</small></span>${isClosed || p.payment_type === "refund" ? "" : `<button class="mini danger-text" data-action="delete-payment">Delete</button>`}</div>`).join("")}</div>
+          ${!isClosed && i.balance > 0 ? `<button class="secondary full" data-payment-invoice="${i.id}" data-balance="${i.balance}">Record bank transfer</button>` : ""}
+          ${isCancelled && Number(i.paid || 0) > 0 ? `<button class="secondary full v899-refund-button" data-v899-refund="${i.id}">Record refund</button>` : ""}
+          <div class="v82-invoice-actions">${isVoid ? `<button class="mini" data-v82-view-void="${i.id}">View void reason</button>` : isCancelled ? `<button class="mini" data-v899-view-cancellation="${i.id}">View cancellation record</button>` : `<button class="mini danger-text" data-v82-void="${i.id}">Void invoice</button>`}${deletable ? `<button class="mini danger-text" data-v82-delete-invoice="${i.id}">Delete mistaken invoice</button>` : ""}</div>
         </article>`;
       }).join("") || `<div class="empty small-empty"><strong>No invoices yet</strong>Create the first branded invoice above.</div>`}</div>`;
 
@@ -257,6 +313,8 @@
     });
     $$('[data-v82-void]', body).forEach(button => button.onclick = () => voidInvoiceV82(r, r.invoices.find(i => i.id === button.dataset.v82Void)));
     $$('[data-v82-view-void]', body).forEach(button => button.onclick = () => showVoidReasonV82(r.invoices.find(i => i.id === button.dataset.v82ViewVoid)));
+    $$('[data-v899-view-cancellation]', body).forEach(button => button.onclick = () => showCancellationReasonV899(r.invoices.find(i => i.id === button.dataset.v899ViewCancellation)));
+    $$('[data-v899-refund]', body).forEach(button => button.onclick = () => recordRefundV899(r, r.invoices.find(i => i.id === button.dataset.v899Refund)));
     $$('[data-v82-delete-invoice]', body).forEach(button => button.onclick = () => deleteInvoiceV82(r, r.invoices.find(i => i.id === button.dataset.v82DeleteInvoice)));
   };
 
@@ -270,14 +328,16 @@
       if (state.view !== view) return;
       $("#content").innerHTML = `<article class="panel"><div class="panel-title"><div><h2>Payments & invoices</h2><p>${rows.length} invoice${rows.length === 1 ? "" : "s"} · outstanding balances are ordered by the nearest due date</p></div></div><div class="table-wrap"><div class="table invoices v82-invoice-register"><div class="table-head"><span>Invoice</span><span>Client</span><span>Brand</span><span>Issued</span><span>Final balance due</span><span>Balance</span><span>Status</span><span>Files</span><span>Actions</span></div>${rows.map(i => {
         const isVoid = i.status === "void";
+        const isCancelled = i.status === "cancelled";
         const deletable = i.status === "unpaid" && Number(i.paid || 0) === 0 && !(i.payments || []).length;
-        const paid = Number(i.balance || 0) <= 0 || isVoid;
-        const dueDetail = paid ? (isVoid ? "Voided" : "Paid in full") : i.payment_due_status === "overdue" ? `${Math.abs(i.days_until_due)} day${Math.abs(i.days_until_due) === 1 ? "" : "s"} overdue` : i.payment_due_status === "due_today" ? "Due today" : i.due_date_overridden ? "Agreed date" : i.wedding_date ? "45 days before wedding" : "Invoice due date";
-        return `<div class="table-row ${isVoid ? "v82-void-row" : ""}"><strong>${esc(i.number)}</strong><button class="link-button" data-record="${i.booking_id}">${esc(i.client || "")}</button><span class="brand-badge ${i.brand}">${esc(labels[i.brand])}</span><span>${esc(fmtDate(i.issue_date))}</span><span class="v88-due-cell ${esc(i.payment_due_status || "no_date")}"><strong>${paid ? "-" : esc(fmtDate(i.payment_due_date))}</strong><small>${esc(dueDetail)}</small></span><strong>${money(isVoid ? 0 : i.balance)}</strong><span class="status ${statusClass(i.status)} ${isVoid ? "v82-void-status" : ""}">${esc(statusText(i.status))}</span><span class="file-actions"><a href="/api/invoices/${i.id}/pdf" title="Download invoice">PDF</a>${i.paid > 0 ? `<a href="/api/invoices/${i.id}/receipt.pdf" title="Download receipt">Receipt</a>` : ""}</span><span class="v82-register-actions">${isVoid ? `<button class="mini" data-v82-register-reason="${i.id}">Reason</button>` : `<button class="mini danger-text" data-v82-register-void="${i.id}">Void</button>`}${deletable ? `<button class="mini danger-text" data-v82-register-delete="${i.id}">Delete</button>` : ""}</span></div>`;
+        const paid = Number(i.balance || 0) <= 0 || isVoid || isCancelled;
+        const dueDetail = paid ? (isVoid ? "Voided" : isCancelled ? "Cancelled · balance closed" : "Paid in full") : i.payment_due_status === "overdue" ? `${Math.abs(i.days_until_due)} day${Math.abs(i.days_until_due) === 1 ? "" : "s"} overdue` : i.payment_due_status === "due_today" ? "Due today" : i.due_date_overridden ? "Agreed date" : i.wedding_date ? "45 days before wedding" : "Invoice due date";
+        return `<div class="table-row ${isVoid ? "v82-void-row" : isCancelled ? "v899-cancelled-row" : ""}"><strong>${esc(i.number)}</strong><button class="link-button" data-record="${i.booking_id}">${esc(i.client || "")}</button><span class="brand-badge ${i.brand}">${esc(labels[i.brand])}</span><span>${esc(fmtDate(i.issue_date))}</span><span class="v88-due-cell ${esc(i.payment_due_status || "no_date")}"><strong>${paid ? "-" : esc(fmtDate(i.payment_due_date))}</strong><small>${esc(dueDetail)}</small></span><strong>${money(isVoid || isCancelled ? 0 : i.balance)}</strong><span class="status ${statusClass(i.status)} ${isVoid ? "v82-void-status" : ""}">${esc(statusText(i.status))}</span><span class="file-actions"><a href="/api/invoices/${i.id}/pdf" title="Download invoice">PDF</a>${i.paid > 0 ? `<a href="/api/invoices/${i.id}/receipt.pdf" title="Download receipt">Receipt</a>` : ""}</span><span class="v82-register-actions">${isVoid ? `<button class="mini" data-v82-register-reason="${i.id}">Reason</button>` : isCancelled ? `<button class="mini" data-v899-register-cancellation="${i.id}">Cancellation</button>` : `<button class="mini danger-text" data-v82-register-void="${i.id}">Void</button>`}${deletable ? `<button class="mini danger-text" data-v82-register-delete="${i.id}">Delete</button>` : ""}</span></div>`;
       }).join("")}</div>${rows.length ? "" : `<div class="empty"><strong>No invoices yet</strong>Create one from a record's Finance tab.</div>`}</div></article>`;
       wireRecords();
       $$('[data-v82-register-void]').forEach(button => button.onclick = () => voidInvoiceV82(null, rows.find(i => i.id === button.dataset.v82RegisterVoid)));
       $$('[data-v82-register-reason]').forEach(button => button.onclick = () => showVoidReasonV82(rows.find(i => i.id === button.dataset.v82RegisterReason)));
+      $$('[data-v899-register-cancellation]').forEach(button => button.onclick = () => showCancellationReasonV899(rows.find(i => i.id === button.dataset.v899RegisterCancellation)));
       $$('[data-v82-register-delete]').forEach(button => button.onclick = () => deleteInvoiceV82(null, rows.find(i => i.id === button.dataset.v82RegisterDelete)));
     } catch (error) {
       showError(error);

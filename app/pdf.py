@@ -78,10 +78,11 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     if not identity:
         identity = [Paragraph(f"<b>{profile.display_name}</b>", normal)]
     identity.append(Paragraph(f"<font color='#65767c'>{contact}</font>", small))
-    header = Table([
-        [identity,
-         Paragraph("RECEIPT" if receipt else ("VOID INVOICE" if invoice.status == "void" else "INVOICE"), heading)]
-    ], colWidths=[105 * mm, 51 * mm])
+    document_title = ("RECEIPT" if receipt else
+                      "VOID INVOICE" if invoice.status == "void" else
+                      "CANCELLED INVOICE" if invoice.status == "cancelled" else
+                      "INVOICE")
+    header = Table([[identity, Paragraph(document_title, heading)]], colWidths=[105 * mm, 51 * mm])
     header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                 ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story += [header, Spacer(1, 6 * mm), HRFlowable(color=accent, thickness=2), Spacer(1, 7 * mm)]
@@ -148,11 +149,28 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
                        ("BOTTOMPADDING", (0, row_index), (-1, row_index), 1)]
     lines.setStyle(TableStyle(line_style))
     story += [lines, Spacer(1, 6 * mm)]
-    outstanding = Decimal("0") if invoice.status == "void" else invoice.total - invoice.paid
-    totals = Table([
-        ["Subtotal", pounds(invoice.total)], ["VAT", "£0.00"], ["Paid", pounds(invoice.paid)],
-        [Paragraph("<b>TOTAL OUTSTANDING</b>", normal), Paragraph(f"<b>{pounds(outstanding)}</b>", right)]
-    ], colWidths=[48 * mm, 31 * mm], hAlign="RIGHT")
+    closed = invoice.status in ("void", "cancelled")
+    outstanding = Decimal("0") if closed else invoice.total - invoice.paid
+    refunded = sum(
+        -Decimal(payment.amount)
+        for payment in invoice.payments
+        if payment.payment_type == "refund" and Decimal(payment.amount) < 0
+    )
+    gross_received = Decimal(invoice.paid or 0) + refunded
+    total_rows = [["Subtotal", pounds(invoice.total)], ["VAT", "£0.00"]]
+    if refunded > 0:
+        total_rows.extend([
+            ["Payments received", pounds(gross_received)],
+            ["Refunded", f"-{pounds(refunded)}"],
+            ["Payment retained", pounds(invoice.paid)],
+        ])
+    else:
+        total_rows.append(["Paid", pounds(invoice.paid)])
+    total_rows.append([
+        Paragraph("<b>TOTAL OUTSTANDING</b>", normal),
+        Paragraph(f"<b>{pounds(outstanding)}</b>", right),
+    ])
+    totals = Table(total_rows, colWidths=[48 * mm, 31 * mm], hAlign="RIGHT")
     totals.setStyle(TableStyle([("ALIGN", (1, 0), (1, -1), "RIGHT"), ("TEXTCOLOR", (0, 0), (-1, 2), MUTED),
                                 ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"), ("LINEABOVE", (0, -1), (-1, -1), 1, accent),
                                 ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
@@ -160,7 +178,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
 
     expected_deposit = min(invoice.total, invoice.booking.deposit_amount or Decimal("0"))
     schedule_rows = []
-    if invoice.status != "void" and invoice.payment_schedule:
+    if not closed and invoice.payment_schedule:
         for item in invoice.payment_schedule:
             due = item.get("due_date") or "To be confirmed"
             if hasattr(due, "strftime"):
@@ -177,7 +195,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
                 Paragraph(escape(str(item.get("status") or "Due")).replace("_", " ").title(), small),
                 Paragraph(escape(str(due)), right),
             ])
-    elif (invoice.status != "void" and invoice.brand == Brand.WBM
+    elif (not closed and invoice.brand == Brand.WBM
           and invoice.deposit_due_date and expected_deposit > 0):
         schedule_rows = [
             [Paragraph("Booking fee", normal), Paragraph(f"<b>{pounds(expected_deposit)}</b>", right),
@@ -211,6 +229,10 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     if invoice.status == "void" and not receipt:
         note_parts = ["<b>VOID INVOICE — no payment is due.</b>",
                       "This invoice number has been retained in the financial record and has not been reused.",
+                      "No VAT has been charged on this invoice."]
+    elif invoice.status == "cancelled" and not receipt:
+        note_parts = ["<b>CANCELLED BOOKING — no further payment is due.</b>",
+                      "The unpaid balance has been closed. The invoice number and all payment/refund history have been retained.",
                       "No VAT has been charged on this invoice."]
     else:
         note_parts = ["No VAT has been charged on this invoice."]

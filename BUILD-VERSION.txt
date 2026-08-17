@@ -1,7 +1,24 @@
-BookingSystem2026 - Visible Invoice Void Reasons
-Build: 2026.08.12-visible-invoice-void-reasons-v8.9.8.2
+BookingSystem2026 - Cancellation & Closed-Balance Accounting
+Build: 2026.08.15-cancel-close-balance-v8.9.9
 
-This is a complete cumulative build containing every feature through V8.9.8.2.
+This is a complete cumulative build containing every feature through V8.9.9.
+
+V8.9.9 cancellation and refund controls:
+
+- Cancel booking & close balance replaces the older status-only cancellation.
+- The unpaid part of every retained invoice becomes £0 due without deleting or
+  rewriting the original invoice total, number or payment history.
+- Payments already received remain recorded as retained income.
+- Cancellation date, reason, administrator, retained payment and closed balance
+  are visible in the booking, invoice card, invoice register, PDF and audit trail.
+- Open tasks are completed, existing portal links are revoked and all automated
+  reminders/client emails stop immediately. Cancellation sends no email.
+- Record refund creates a permanent negative payment entry and reduces the amount
+  retained; it cannot exceed the money currently retained.
+- Cancelled invoices are excluded from outstanding-income totals and due-date lists.
+- Reopening safely restores the previous live invoice states and automation setting,
+  while revoked client links remain revoked for security.
+- Twenty cumulative automated tests pass.
 
 V8.9.8.2 permanent invoice audit visibility:
 

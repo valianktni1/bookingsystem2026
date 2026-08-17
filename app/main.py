@@ -66,7 +66,7 @@ async def lifespan(_: FastAPI):
         await reminder_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.9.8.2-visible-void-reasons", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.9.9-cancel-close-balance", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -204,7 +204,7 @@ def apply_payment_plan(db: Session, booking: Booking, plan: str) -> None:
     if not quote or not quote.invoice_id:
         return
     invoice = db.get(Invoice, quote.invoice_id)
-    if not invoice or invoice.legacy_source or invoice.status == "void":
+    if not invoice or invoice.legacy_source or invoice.status in ("void", "cancelled"):
         return
     package = db.get(PackageOption, quote.package_id) if quote.package_id else None
     accepted_on = quote.accepted_at.date() if quote.accepted_at else invoice.issue_date
@@ -308,10 +308,41 @@ def invoice_void_record(item: Invoice) -> dict | None:
     }
 
 
+def invoice_cancellation_record(item: Invoice) -> dict | None:
+    """Return the latest permanent cancellation adjustment stored with an invoice."""
+    if not item.notes:
+        return None
+    matches = list(re.finditer(
+        r"CANCELLED (?P<at>\S+) by (?P<by>.+?)\. "
+        r"Cancellation date: (?P<date>\d{4}-\d{2}-\d{2})\. "
+        r"Unpaid balance closed: £(?P<closed>[0-9,.]+)\. "
+        r"Reason: (?P<reason>.*?)(?=\n\n(?:CANCELLED|VOIDED) |\Z)",
+        item.notes,
+        flags=re.DOTALL,
+    ))
+    if not matches:
+        return None
+    marker = matches[-1]
+    return {
+        "reason": marker.group("reason").strip(),
+        "cancelled_at": marker.group("at").strip(),
+        "cancelled_by": marker.group("by").strip(),
+        "cancellation_date": marker.group("date"),
+        "closed_balance": float(marker.group("closed").replace(",", "")),
+    }
+
+
 def invoice_json(item: Invoice) -> dict:
     due = effective_invoice_due_date(item)
     standard_due = standard_wedding_due_date(item)
-    balance = Decimal("0") if item.status == "void" else item.total - item.paid
+    closed = item.status in ("void", "cancelled")
+    balance = Decimal("0") if closed else item.total - item.paid
+    refunded = sum(
+        -Decimal(payment.amount)
+        for payment in item.payments
+        if payment.payment_type == "refund" and Decimal(payment.amount) < 0
+    )
+    gross_paid = Decimal(item.paid or 0) + refunded
     days_until_due = (due - date.today()).days if due and balance > 0 else None
     due_status = ("paid" if balance <= 0 else "no_date" if not due else
                   "overdue" if days_until_due < 0 else "due_today" if days_until_due == 0 else "upcoming")
@@ -328,7 +359,9 @@ def invoice_json(item: Invoice) -> dict:
             "wedding_date": item.booking.event_date.isoformat() if item.booking and item.booking.event_date else None,
             "payment_due_status": due_status, "days_until_due": days_until_due,
             "description": item.description, "notes": item.notes,
-            "void_record": invoice_void_record(item), "total": money(item.total),
+            "void_record": invoice_void_record(item),
+            "cancellation_record": invoice_cancellation_record(item),
+            "total": money(item.total),
             "deposit_amount": money(item.booking.deposit_amount if item.booking else 0),
             "line_items": item.line_items or [],
             "payment_schedule": schedule,
@@ -336,6 +369,8 @@ def invoice_json(item: Invoice) -> dict:
             "legacy_quote_number": item.legacy_quote_number,
             "legacy_source": item.legacy_source,
             "paid": money(item.paid),
+            "gross_paid": money(gross_paid),
+            "refunded": money(refunded),
             "balance": money(balance),
             "status": item.status,
             "client": item.booking.title if item.booking else None,
@@ -438,7 +473,7 @@ def health():
             "imap_configured": bool(settings.imap_host and (
                 settings.imap_wbm_password or settings.smtp_wbm_password or
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
-            "build": "2026.08.12-visible-invoice-void-reasons-v8.9.8.2"}
+            "build": "2026.08.15-cancel-close-balance-v8.9.9"}
 
 
 @app.get("/api/public/config")
@@ -898,7 +933,7 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
         agreed_due = values["balance_due_date"]
         for invoice in db.scalars(select(Invoice).where(
                 Invoice.booking_id == item.id,
-                ~Invoice.status.in_(["paid", "void"]))).all():
+                ~Invoice.status.in_(["paid", "void", "cancelled"]))).all():
             invoice.due_date = agreed_due
             if agreed_due:
                 replace_final_schedule_due_date(invoice, agreed_due)
@@ -1024,7 +1059,7 @@ def list_invoices(brand: Brand | None = None, archived: bool = False,
     rows = list(db.scalars(stmt).all())
 
     def due_order(item: Invoice) -> tuple:
-        balance = Decimal("0") if item.status == "void" else item.total - item.paid
+        balance = Decimal("0") if item.status in ("void", "cancelled") else item.total - item.paid
         due = effective_invoice_due_date(item)
         if balance <= 0:
             return (3, date.max, -item.sequence)
@@ -1113,8 +1148,8 @@ def change_invoice_due_date(invoice_id: str, payload: InvoiceDueDatePatch,
                             _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     """Record a one-couple payment extension without changing the wedding date."""
     invoice = full_invoice(db, invoice_id)
-    if invoice.status == "void":
-        raise HTTPException(409, "The payment date cannot be changed on a void invoice")
+    if invoice.status in ("void", "cancelled"):
+        raise HTTPException(409, "The payment date cannot be changed on a closed invoice")
     previous_due = invoice.due_date or standard_wedding_due_date(invoice)
     invoice.due_date = payload.due_date
     replace_final_schedule_due_date(invoice, payload.due_date)
@@ -1138,8 +1173,8 @@ def change_invoice_due_date(invoice_id: str, payload: InvoiceDueDatePatch,
 @app.post("/api/invoices/{invoice_id}/payments", status_code=201)
 def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     invoice = full_invoice(db, invoice_id)
-    if invoice.status == "void":
-        raise HTTPException(409, "A payment cannot be added to a void invoice")
+    if invoice.status in ("void", "cancelled"):
+        raise HTTPException(409, "A payment cannot be added to a closed invoice")
     if payload.amount > invoice.total - invoice.paid:
         raise HTTPException(422, "Payment cannot exceed the outstanding balance")
     payment = Payment(invoice_id=invoice.id, **payload.model_dump())
@@ -1227,8 +1262,8 @@ def delete_payment(payment_id: str, _: Admin = Depends(current_admin), db: Sessi
     if payment.legacy_source == "studio_ninja":
         raise HTTPException(409, "Imported Studio Ninja payment history is retained and cannot be deleted")
     invoice = db.get(Invoice, payment.invoice_id)
-    if invoice.status == "void":
-        raise HTTPException(409, "Payment history on a void invoice is retained")
+    if invoice.status in ("void", "cancelled"):
+        raise HTTPException(409, "Payment history on a closed invoice is retained")
     invoice.paid = max(Decimal("0"), invoice.paid - payment.amount)
     invoice.status = invoice_status(invoice.total, invoice.paid)
     db.delete(payment)
@@ -1722,6 +1757,8 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
     booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(Booking.id == booking_id))
     if not booking:
         raise HTTPException(404, "Record not found")
+    if booking.status == RecordStatus.CANCELLED:
+        raise HTTPException(409, "Reopen the cancelled booking before sending a client email")
     manual_only = not automations_allowed(booking)
     if manual_only:
         if booking.legacy_source != "studio_ninja":
@@ -2108,7 +2145,7 @@ def run_due_reminders(db: Session) -> dict:
         if not automations_allowed(booking):
             continue
         reminders: list[tuple[str, str, str | None, int]] = []
-        has_balance = any(invoice.status != "void" and invoice.paid < invoice.total
+        has_balance = any(invoice.status not in ("void", "cancelled") and invoice.paid < invoice.total
                           for invoice in booking.invoices)
         is_wbm_wedding = booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
         accepted_quote = next((quote for quote in booking.quotes if quote.status == "accepted"), None)
@@ -2134,7 +2171,7 @@ def run_due_reminders(db: Session) -> dict:
                 (invoice for invoice in booking.invoices if invoice.id == accepted_quote.invoice_id),
                 None,
             )
-            if (accepted_invoice and accepted_invoice.status != "void"
+            if (accepted_invoice and accepted_invoice.status not in ("void", "cancelled")
                     and money(accepted_invoice.paid) <= 0
                     and accepted_invoice.deposit_due_date == today):
                 reminders.append(("deposit_due_1", "deposit_due_1", "invoices", 365))

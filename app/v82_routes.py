@@ -7,7 +7,7 @@ without restructuring the existing application.
 from __future__ import annotations
 
 import shutil
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -45,6 +45,16 @@ class ReasonIn(BaseModel):
     reason: str = Field(min_length=3, max_length=2000)
 
 
+class CancelBookingIn(ReasonIn):
+    cancellation_date: date = Field(default_factory=date.today)
+
+
+class RefundIn(ReasonIn):
+    amount: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    refund_date: date = Field(default_factory=date.today)
+    reference: str | None = Field(default=None, max_length=120)
+
+
 class ConfirmedDeleteIn(ReasonIn):
     confirmation: str = Field(min_length=3, max_length=300)
 
@@ -70,17 +80,41 @@ def _invoice(db: Session, invoice_id: str) -> Invoice:
     return row
 
 
+def _append_invoice_cancellation_note(invoice: Invoice, *, now: datetime,
+                                      cancellation_date: date, admin_email: str,
+                                      reason: str, closed_balance: Decimal) -> None:
+    marker = (
+        f"CANCELLED {now.isoformat()} by {admin_email}. "
+        f"Cancellation date: {cancellation_date.isoformat()}. "
+        f"Unpaid balance closed: £{closed_balance.quantize(Decimal('0.01'))}. "
+        f"Reason: {reason}"
+    )
+    invoice.notes = f"{invoice.notes.rstrip()}\n\n{marker}" if invoice.notes else marker
+
+
+def _live_invoice_status(invoice: Invoice) -> str:
+    paid = Decimal(invoice.paid or 0)
+    total = Decimal(invoice.total or 0)
+    if paid >= total:
+        return "paid"
+    if paid > 0:
+        return "part_paid"
+    return "unpaid"
+
+
 def register_v82_routes(app: FastAPI) -> None:
     @app.post("/api/bookings/{booking_id}/cancel")
     def cancel_booking(
         booking_id: str,
-        payload: ReasonIn,
+        payload: CancelBookingIn,
         admin: Admin = Depends(current_admin),
         db: Session = Depends(get_db),
     ):
         booking = _booking(db, booking_id)
         if booking.status == RecordStatus.CANCELLED:
             raise HTTPException(409, "This record is already cancelled")
+        if payload.cancellation_date > date.today():
+            raise HTTPException(422, "The cancellation date cannot be in the future")
 
         reason = _reason(payload)
         now = datetime.now(timezone.utc)
@@ -100,30 +134,88 @@ def register_v82_routes(app: FastAPI) -> None:
         for token in tokens:
             token.revoked_at = now
 
+        invoices = db.scalars(
+            select(Invoice).where(Invoice.booking_id == booking.id)
+        ).all()
+        invoice_states = []
+        total_closed = Decimal("0")
+        total_retained = Decimal("0")
+        for invoice in invoices:
+            paid = Decimal(invoice.paid or 0)
+            total_retained += paid
+            if invoice.status == "void":
+                invoice_states.append({
+                    "invoice_id": invoice.id,
+                    "number": invoice.number,
+                    "previous_status": "void",
+                    "closed_balance": 0,
+                })
+                continue
+            closed_balance = max(Decimal("0"), Decimal(invoice.total or 0) - paid)
+            total_closed += closed_balance
+            invoice_states.append({
+                "invoice_id": invoice.id,
+                "number": invoice.number,
+                "previous_status": invoice.status,
+                "closed_balance": float(closed_balance),
+                "retained_paid": float(paid),
+            })
+            invoice.status = "cancelled"
+            _append_invoice_cancellation_note(
+                invoice,
+                now=now,
+                cancellation_date=payload.cancellation_date,
+                admin_email=admin.email,
+                reason=reason,
+                closed_balance=closed_balance,
+            )
+
         workflow = dict(booking.workflow_state or {})
         workflow["cancellation"] = {
             "cancelled_at": now.isoformat(),
+            "cancellation_date": payload.cancellation_date.isoformat(),
             "reason": reason,
             "cancelled_by": admin.email,
             "previous_status": booking.status.value,
+            "previous_automation_suppressed": booking.automation_suppressed,
             "open_task_ids": open_task_ids,
             "revoked_portal_links": len(tokens),
+            "invoice_states": invoice_states,
+            "unpaid_balance_closed": float(total_closed),
+            "payments_retained": float(total_retained),
+            "emails_sent": 0,
         }
         booking.workflow_state = workflow
         booking.status = RecordStatus.CANCELLED
+        booking.automation_suppressed = True
+        db.add(BookingNote(
+            booking_id=booking.id,
+            body=(f"Booking cancelled on {payload.cancellation_date.strftime('%d %B %Y')}. "
+                  f"Unpaid balance closed: £{total_closed:,.2f}. "
+                  f"Payments retained: £{total_retained:,.2f}. Reason: {reason}"),
+        ))
         audit(
             db,
             "cancel_booking",
             "booking",
             booking.id,
-            {"reason": reason, "revoked_portal_links": len(tokens)},
+            {"reason": reason,
+             "cancellation_date": payload.cancellation_date.isoformat(),
+             "revoked_portal_links": len(tokens),
+             "unpaid_balance_closed": float(total_closed),
+             "payments_retained": float(total_retained),
+             "emails_sent": 0},
         )
         db.commit()
         return {
             "ok": True,
             "status": booking.status.value,
             "revoked_portal_links": len(tokens),
-            "message": "Record cancelled. Existing invoices were retained and can be voided separately.",
+            "unpaid_balance_closed": float(total_closed),
+            "payments_retained": float(total_retained),
+            "emails_sent": 0,
+            "message": ("Booking cancelled and the unpaid balance was closed. "
+                        "All invoice numbers and recorded payments were retained. No client email was sent."),
         }
 
     @app.post("/api/bookings/{booking_id}/reopen")
@@ -156,6 +248,20 @@ def register_v82_routes(app: FastAPI) -> None:
             for task in tasks:
                 task.completed = False
 
+        invoice_states = {
+            row.get("invoice_id"): row
+            for row in (cancellation.get("invoice_states") or [])
+            if isinstance(row, dict) and row.get("invoice_id")
+        }
+        for invoice in db.scalars(select(Invoice).where(Invoice.booking_id == booking.id)).all():
+            state = invoice_states.get(invoice.id)
+            if invoice.status != "cancelled" or not state:
+                continue
+            if state.get("previous_status") == "void":
+                invoice.status = "void"
+            else:
+                invoice.status = _live_invoice_status(invoice)
+
         cancellation.update(
             {
                 "reopened_at": datetime.now(timezone.utc).isoformat(),
@@ -169,12 +275,89 @@ def register_v82_routes(app: FastAPI) -> None:
         workflow.pop("cancellation", None)
         booking.workflow_state = workflow
         booking.status = previous_status
+        booking.automation_suppressed = bool(
+            cancellation.get("previous_automation_suppressed", booking.legacy_source == "studio_ninja")
+        )
         audit(db, "reopen_booking", "booking", booking.id, {"reason": reason})
         db.commit()
         return {
             "ok": True,
             "status": booking.status.value,
             "message": "Record reopened. Create a new client portal link if one is needed.",
+        }
+
+    @app.post("/api/invoices/{invoice_id}/refunds", status_code=201)
+    def record_cancelled_invoice_refund(
+        invoice_id: str,
+        payload: RefundIn,
+        admin: Admin = Depends(current_admin),
+        db: Session = Depends(get_db),
+    ):
+        invoice = _invoice(db, invoice_id)
+        booking = _booking(db, invoice.booking_id)
+        if booking.status != RecordStatus.CANCELLED or invoice.status != "cancelled":
+            raise HTTPException(409, "Refunds here are only for a cancelled booking invoice")
+        if payload.refund_date > date.today():
+            raise HTTPException(422, "The refund date cannot be in the future")
+        available = Decimal(invoice.paid or 0)
+        if payload.amount > available:
+            raise HTTPException(422, "Refund cannot exceed the payment currently retained")
+
+        reason = _reason(payload)
+        refund = Payment(
+            invoice_id=invoice.id,
+            amount=-payload.amount,
+            paid_date=payload.refund_date,
+            payment_type="refund",
+            reference=payload.reference or f"Refund {invoice.number}",
+            notes=reason,
+        )
+        db.add(refund)
+        invoice.paid = available - payload.amount
+
+        workflow = dict(booking.workflow_state or {})
+        cancellation = dict(workflow.get("cancellation") or {})
+        refunds = list(cancellation.get("refunds") or [])
+        refunds.append({
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.number,
+            "amount": float(payload.amount),
+            "refund_date": payload.refund_date.isoformat(),
+            "reason": reason,
+            "reference": refund.reference,
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "recorded_by": admin.email,
+        })
+        cancellation["refunds"] = refunds[-100:]
+        cancellation["payments_retained"] = float(sum(
+            Decimal(row.paid or 0)
+            for row in db.scalars(select(Invoice).where(Invoice.booking_id == booking.id)).all()
+        ))
+        workflow["cancellation"] = cancellation
+        booking.workflow_state = workflow
+        db.add(BookingNote(
+            booking_id=booking.id,
+            body=(f"Refund of £{payload.amount:,.2f} recorded against {invoice.number} "
+                  f"on {payload.refund_date.strftime('%d %B %Y')}. Reason: {reason}"),
+        ))
+        audit(db, "record_cancellation_refund", "booking", booking.id, {
+            "invoice_id": invoice.id,
+            "invoice_number": invoice.number,
+            "amount": float(payload.amount),
+            "refund_date": payload.refund_date.isoformat(),
+            "reason": reason,
+            "reference": refund.reference,
+            "emails_sent": 0,
+        })
+        db.commit()
+        return {
+            "ok": True,
+            "invoice_id": invoice.id,
+            "refund_id": refund.id,
+            "refund_amount": float(payload.amount),
+            "payments_retained": float(invoice.paid),
+            "emails_sent": 0,
+            "message": "Refund recorded. The cancelled booking remains closed and no client email was sent.",
         }
 
     @app.post("/api/bookings/{booking_id}/contract/reset")
@@ -286,6 +469,8 @@ def register_v82_routes(app: FastAPI) -> None:
         invoice = _invoice(db, invoice_id)
         if invoice.status == "void":
             raise HTTPException(409, "This invoice is already void")
+        if invoice.status == "cancelled":
+            raise HTTPException(409, "This invoice is already closed by the booking cancellation")
 
         reason = _reason(payload)
         old_status = invoice.status
