@@ -50,6 +50,8 @@ def linked_invoice(wedding_date=date(2026, 9, 12)):
 def test_payload_preserves_number_cancellation_and_signed_refund():
     payload, digest = build_invoice_payload(linked_invoice())
     assert payload["invoice_number"] == "WBM02059"
+    assert payload["issue_date"] == "2026-08-14"
+    assert payload["legacy_invoice_number"] is None
     assert payload["brand"] == "wbm"
     assert payload["record_kind"] == "wedding"
     assert payload["cancellation_date"] == "2026-08-17"
@@ -88,3 +90,37 @@ def test_admin_interface_exposes_controlled_first_sync():
     assert "SYNC ELIGIBLE WEDDING INVOICES" in script
     assert "No client emails" in script
     assert "Check connection" in script
+
+
+def test_chronological_plan_uses_first_positive_payment_then_issue_date():
+    from app.invoice_renumber import build_plan, plan_digest
+
+    paid_later = linked_invoice(date(2027, 9, 12))
+    paid_later.id = "invoice-paid-later"
+    paid_later.number = "WBM01001"
+    paid_later.issue_date = date(2024, 1, 1)
+    paid_later.payments[0].paid_date = date(2025, 5, 2)
+    paid_later.payments[1].paid_date = date(2025, 5, 3)
+
+    paid_earlier = linked_invoice(date(2027, 9, 13))
+    paid_earlier.id = "invoice-paid-earlier"
+    paid_earlier.number = "WBM01999"
+    paid_earlier.issue_date = date(2025, 4, 20)
+    paid_earlier.payments[0].paid_date = date(2025, 4, 25)
+    paid_earlier.payments[1].amount = Decimal("-100")
+    paid_earlier.payments[1].paid_date = date(2025, 4, 1)
+
+    unpaid = linked_invoice(date(2027, 9, 14))
+    unpaid.id = "invoice-unpaid"
+    unpaid.number = "WBM01888"
+    unpaid.issue_date = date(2025, 4, 26)
+    unpaid.payments = []
+
+    plan = build_plan([paid_later, unpaid, paid_earlier])
+    assert [row["invoice_id"] for row in plan] == [
+        "invoice-paid-earlier", "invoice-unpaid", "invoice-paid-later"
+    ]
+    assert [row["new_number"] for row in plan] == ["WBM02001", "WBM02002", "WBM02003"]
+    assert plan[0]["ordering_source"] == "first_positive_payment"
+    assert plan[1]["ordering_source"] == "issue_date_fallback"
+    assert plan_digest(plan) == plan_digest(plan)

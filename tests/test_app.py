@@ -185,7 +185,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "imap_configured": False,
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
-                                 "build": "2026.08.17-booking-accounts-integration-v8.10"}
+                                 "build": "2026.08.17-chronological-invoices-v8.10.1"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

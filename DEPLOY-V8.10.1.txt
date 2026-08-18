@@ -1,0 +1,81 @@
+BOOKINGSYSTEM2026 V8.10.1 - CONTROLLED CHRONOLOGICAL INVOICE MIGRATION
+=====================================================================
+
+IMPORTANT
+---------
+Deploy Accounts V1.3.2 first. Keep ACCOUNTS_INTEGRATION_AUTO_SYNC: "false".
+Do not run the apply command without both fresh database backups.
+This migration sends no client emails and does not contact Accounts or calendars.
+
+1. BACK UP BOTH DATABASES IN TRUENAS SHELL
+-------------------------------------------
+BOOKING_RENUMBER_BACKUP=/mnt/temp-tntermediate/bookingapp2026data/migration-backups/bookingapp-before-chronological-renumber-2026-08-17.dump
+
+if [ -e "$BOOKING_RENUMBER_BACKUP" ]; then
+  echo "STOP: Booking backup already exists - nothing was overwritten"
+else
+  docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > "$BOOKING_RENUMBER_BACKUP"
+fi
+
+docker exec -i bookingsystem2026-db pg_restore -l < "$BOOKING_RENUMBER_BACKUP" | head
+ls -lh "$BOOKING_RENUMBER_BACKUP"
+
+ACCOUNTS_RENUMBER_BACKUP=/mnt/nextcloud/accounts-2026-saved-data/backups/accounts-before-chronological-renumber-2026-08-17.archive.gz
+
+if [ -e "$ACCOUNTS_RENUMBER_BACKUP" ]; then
+  echo "STOP: Accounts backup already exists - nothing was overwritten"
+else
+  docker exec accounts-2026-db sh -lc 'mongodump --quiet --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --db weddings_by_mark_accounts_2026 --archive --gzip' > "$ACCOUNTS_RENUMBER_BACKUP"
+fi
+
+ls -lh "$ACCOUNTS_RENUMBER_BACKUP"
+
+2. BUILD THE NEW BOOKING IMAGE, THEN STOP THE WEB APP
+-----------------------------------------------------
+BOOKING_COMPOSE=/mnt/apps/dockge/data/bookingsystem2026/compose.yaml
+
+docker compose -f "$BOOKING_COMPOSE" build --no-cache app
+docker compose -f "$BOOKING_COMPOSE" stop app
+
+3. RUN THE READ-ONLY PREVIEW
+----------------------------
+docker compose -f "$BOOKING_COMPOSE" run --rm app python -m app.invoice_renumber --dry-run
+
+The result prints the invoice count, number changing, first/last new number,
+SHA-256 digest and persistent CSV/JSON audit paths. Nothing has changed yet.
+
+Inspect the CSV under:
+/mnt/temp-tntermediate/bookingapp2026data/data/migrations/invoice-renumber/
+
+4. APPLY THE EXACT PREVIEW
+--------------------------
+Copy the digest printed by the dry run into this command:
+
+docker compose -f "$BOOKING_COMPOSE" run --rm app python -m app.invoice_renumber --apply \
+  --expected-digest PASTE_THE_DRY_RUN_DIGEST_HERE \
+  --confirmation "RENUMBER ALL WBM INVOICES"
+
+If the database changed after preview, the command stops safely and asks for a new
+dry run. Do not alter or shorten the confirmation phrase.
+
+5. START AND VERIFY BOOKING
+---------------------------
+docker compose -f "$BOOKING_COMPOSE" up -d app
+curl -fsS http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.17-chronological-invoices-v8.10.1
+
+Check the earliest, middle and latest invoices in Booking before continuing.
+
+6. UPDATE ACCOUNTS IN PLACE
+---------------------------
+Open Booking > Business settings > Accounts integration.
+Press the confirmed manual sync button. This updates each matching Accounts record
+by its permanent source invoice ID, so it does not create duplicate invoices.
+
+After the waiting count reaches zero, check several Accounts invoices. They should
+show the new WBM number, original issue date and, where applicable, a private
+Previous Studio Ninja reference. Old generated PDF filenames are removed safely.
+
+Leave automatic sync off until these checks are complete.

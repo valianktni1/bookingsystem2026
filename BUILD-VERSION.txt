@@ -1,7 +1,23 @@
-BookingSystem2026 - Safe Accounts 2026 Integration
-Build: 2026.08.17-booking-accounts-integration-v8.10
+BookingSystem2026 - Chronological Invoice Migration
+Build: 2026.08.17-chronological-invoices-v8.10.1
 
-This is a complete cumulative build containing every feature through V8.10.
+This is a complete cumulative build containing every feature through V8.10.1.
+
+V8.10.1 controlled invoice renumbering:
+
+- A guarded dry-run and apply command puts every Weddings By Mark invoice into
+  one genuine chronological WBM sequence beginning at WBM02001.
+- Ordering uses the earliest positive payment/deposit date. Refunds are ignored
+  for ordering; an original invoice issue date is used only when no payment exists.
+- Existing WBM numbers are safely vacated before assignment, avoiding collisions.
+- Original Studio Ninja numbers remain as private legacy references.
+- Issue dates, payment rows, totals, wedding dates, statuses and cancellations are
+  preserved; the WBM live counter advances to the final assigned number.
+- JSON and CSV audit maps are written to persistent storage.
+- A database digest and exact confirmation phrase prevent applying a stale plan.
+- The command sends no emails, runs no reminders and contacts neither Accounts nor
+  Google Calendar.
+- Accounts payloads now carry the original issue date and legacy invoice reference.
 
 V8.10 protected accounts integration:
 

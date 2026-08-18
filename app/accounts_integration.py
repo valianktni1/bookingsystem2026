@@ -90,6 +90,8 @@ def build_invoice_payload(invoice: Invoice) -> tuple[dict, str]:
         "source_invoice_id": invoice.id,
         "source_booking_id": booking.id,
         "invoice_number": invoice.number,
+        "legacy_invoice_number": invoice.legacy_number,
+        "issue_date": _iso(invoice.issue_date),
         "brand": booking.brand.value,
         "record_kind": booking.kind.value,
         "is_test": bool(booking.is_test),
