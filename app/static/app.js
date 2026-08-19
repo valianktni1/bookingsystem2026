@@ -23,9 +23,9 @@ function toast(text,type=""){const el=$("#toast");el.textContent=text;el.classNa
 function showLogin(){$("#app").classList.add("hidden");$("#login").classList.remove("hidden")}
 function showApp(){$("#login").classList.add("hidden");$("#app").classList.remove("hidden")}
 
-async function init(){bind();try{const me=await api("/api/auth/me");$("#login-email").value=me.email;showApp();await loadAll()}catch(e){showLogin()}}
+async function init(){bind();try{const me=await api("/api/auth/me");$("#login-email").value=me.email;showApp();await loadAll();if(window.WBMRouter)await window.WBMRouter.applyCurrentRoute({replace:true})}catch(e){showLogin()}}
 function bind(){
-  $("#login-form").onsubmit=async e=>{e.preventDefault();$("#login-error").textContent="";try{await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:value("#login-email"),password:value("#login-password")})});showApp();await loadAll()}catch(err){$("#login-error").textContent=err.message}};
+  $("#login-form").onsubmit=async e=>{e.preventDefault();$("#login-error").textContent="";try{await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:value("#login-email"),password:value("#login-password")})});showApp();await loadAll();if(window.WBMRouter)await window.WBMRouter.applyCurrentRoute({replace:true})}catch(err){$("#login-error").textContent=err.message}};
   $("#logout").onclick=async()=>{await api("/api/auth/logout",{method:"POST"});showLogin()};
   $("#brand-toggle").onclick=()=>$("#brand-menu").classList.toggle("hidden");
   $$("#brand-menu button").forEach(b=>b.onclick=()=>{state.brand=b.dataset.brand;$("#brand-label").textContent=labels[state.brand];$("#brand-dot").className=`dot ${state.brand}`;$("#brand-menu").classList.add("hidden");render()});

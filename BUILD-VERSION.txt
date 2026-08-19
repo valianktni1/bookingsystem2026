@@ -172,3 +172,25 @@ friendly quote wording and branded quote button.
 - Cancelled bookings cannot be emailed until they are deliberately reopened.
 - Deployment sends no messages and changes no invoices, payments or counters.
 - Thirty-one cumulative automated tests pass.
+
+2026.08.19-navigation-workflow-v8.11
+
+- Added real browser Back and Forward navigation with refresh-safe URLs for
+  every workspace, booking and client section.
+- Search text, business filter, record status, archived selection and scroll
+  position are retained in browser history.
+- Rebuilt the dashboard as a practical Today screen with read-only queues for
+  enquiries, quotes, first payments, forms, agreements, due/overdue payments
+  and final-detail telephone calls.
+- Every Today item opens the correct client section and, where safe, the exact
+  preparation or recording dialog. No action is automatically confirmed.
+- Simplified the client workspace to Overview, Journey, Payments, Files and
+  Activity without removing quote, email, form, agreement, note or file tools.
+- Added one chronological activity timeline containing email delivery results,
+  payments, forms, agreements, notes and booking changes.
+- Added global client/invoice search across active and archived records, with
+  recently updated clients shown when search is first opened.
+- Existing Studio Ninja locks, Testing Mode, invoice numbering, Accounts sync,
+  cancellation controls and email confirmations are unchanged.
+- Deployment performs no data migration and sends no email.
+- Thirty-three cumulative automated tests pass.

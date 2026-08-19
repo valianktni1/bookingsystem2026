@@ -72,7 +72,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.10.5-client-email-centre", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.11-navigation-workflow", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -482,7 +482,7 @@ def health():
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
             "accounts_integration_enabled": settings.accounts_integration_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
-            "build": "2026.08.19-client-email-centre-v8.10.5"}
+            "build": "2026.08.19-navigation-workflow-v8.11"}
 
 
 @app.get("/api/public/config")
@@ -876,6 +876,134 @@ def dashboard(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     return counts
 
 
+@app.get("/api/workflow-queues")
+def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    """Return the practical, read-only queues used by the V8.11 Today screen.
+
+    The endpoint deliberately performs no workflow mutations. Imported Studio
+    Ninja bookings remain excluded from the new-system quote/form/agreement
+    chase queues, while their genuine payment and private phone tasks stay
+    visible to Mark.
+    """
+    bookings = list(db.scalars(
+        select(Booking).options(
+            selectinload(Booking.client),
+            selectinload(Booking.quotes),
+            selectinload(Booking.tasks),
+            selectinload(Booking.invoices).selectinload(Invoice.payments),
+        ).where(
+            Booking.archived_at.is_(None),
+            Booking.status != RecordStatus.CANCELLED,
+        ).order_by(Booking.created_at.desc())
+    ).unique().all())
+    booking_ids = [booking.id for booking in bookings]
+    submissions = set(db.scalars(select(FormSubmission.booking_id).where(
+        FormSubmission.booking_id.in_(booking_ids),
+        FormSubmission.form_type == "booking_form",
+    )).all()) if booking_ids else set()
+    contracts = {
+        row.booking_id: row for row in db.scalars(select(ContractAcceptance).where(
+            ContractAcceptance.booking_id.in_(booking_ids)
+        )).all()
+    } if booking_ids else {}
+
+    queues: dict[str, list[dict]] = {
+        "new_enquiries": [],
+        "quotes_waiting": [],
+        "accepted_payment": [],
+        "forms_waiting": [],
+        "agreements_waiting": [],
+        "payments_due": [],
+        "overdue_payments": [],
+        "final_calls": [],
+    }
+    today = date.today()
+    due_soon = today + timedelta(days=14)
+
+    def item(booking: Booking, detail: str, section: str, action: str,
+             *, due: date | None = None, amount: Decimal | float | None = None) -> dict:
+        return {
+            "booking_id": booking.id,
+            "title": booking.title,
+            "detail": detail,
+            "section": section,
+            "action": action,
+            "brand": booking.brand.value,
+            "event_date": booking.event_date.isoformat() if booking.event_date else None,
+            "due_date": due.isoformat() if due else None,
+            "amount": money(amount) if amount is not None else None,
+        }
+
+    for booking in bookings:
+        accepted_quote = next((quote for quote in booking.quotes if quote.status == "accepted"), None)
+        paid = sum(Decimal(invoice.paid or 0) for invoice in booking.invoices)
+        has_payment = paid > 0 or booking.deposit_paid_date is not None
+        booking_form_complete = booking.id in submissions
+        contract = contracts.get(booking.id)
+        agreement_complete = bool(contract and (
+            contract.is_legacy_import or contract.supplier_signed_at
+        ))
+        native_workflow = booking.legacy_source != "studio_ninja" and booking.kind == RecordKind.WEDDING
+
+        if native_workflow and booking.status == RecordStatus.ENQUIRY and not accepted_quote:
+            queues["new_enquiries"].append(item(
+                booking, booking.venue_or_project or booking.client.email,
+                "Journey", "send_quote",
+            ))
+        elif native_workflow and booking.status == RecordStatus.QUOTED and not accepted_quote:
+            queues["quotes_waiting"].append(item(
+                booking, "Quote sent · waiting for the couple's package choice",
+                "Journey", "view_quote",
+            ))
+        elif native_workflow and accepted_quote and not has_payment:
+            queues["accepted_payment"].append(item(
+                booking, f"{booking.package_name or 'Package'} accepted · first payment not recorded",
+                "Payments", "record_payment",
+                amount=booking.deposit_amount,
+            ))
+        elif native_workflow and has_payment and not booking_form_complete:
+            queues["forms_waiting"].append(item(
+                booking, "Wedding Booking Form has not been submitted",
+                "Journey", "review_forms",
+            ))
+        elif native_workflow and booking_form_complete and not agreement_complete:
+            queues["agreements_waiting"].append(item(
+                booking,
+                "Couple signed · your countersignature is needed" if contract else "Agreement has not been signed",
+                "Journey", "countersign" if contract else "review_forms",
+            ))
+
+        for invoice in booking.invoices:
+            if invoice.status in ("paid", "void", "cancelled"):
+                continue
+            balance = Decimal(invoice.total or 0) - Decimal(invoice.paid or 0)
+            due = effective_invoice_due_date(invoice)
+            if balance <= 0 or not due:
+                continue
+            detail = f"{invoice.number} · {money(balance):,.2f} remaining"
+            target = "overdue_payments" if due < today else "payments_due" if due <= due_soon else None
+            if target:
+                queues[target].append(item(
+                    booking, detail, "Payments", "record_payment", due=due, amount=balance,
+                ))
+
+        for task in booking.tasks:
+            if (task.workflow_key == "wbm_final_details_call" and not task.completed
+                    and task.due_at and task.due_at.date() <= due_soon):
+                queues["final_calls"].append(item(
+                    booking, "Private 30-day final-details telephone call",
+                    "Overview", "open_task", due=task.due_at.date(),
+                ))
+
+    for key in ("overdue_payments", "payments_due", "final_calls"):
+        queues[key].sort(key=lambda row: row["due_date"] or "9999-12-31")
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "queues": queues,
+        "counts": {key: len(rows) for key, rows in queues.items()},
+    }
+
+
 @app.get("/api/bookings")
 def list_bookings(brand: Brand | None = None, kind: RecordKind | None = None,
                   archived: bool = False, q: str | None = Query(default=None, max_length=100),
@@ -911,7 +1039,7 @@ def create_booking(payload: BookingIn, _: Admin = Depends(current_admin), db: Se
 def get_booking(booking_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     item = full_booking(db, booking_id)
     activity = db.scalars(select(AuditLog).where(AuditLog.entity_id == booking_id)
-                          .order_by(AuditLog.created_at.desc()).limit(50)).all()
+                          .order_by(AuditLog.created_at.desc())).all()
     return booking_json(item, full=True, activity=activity)
 
 
@@ -2568,3 +2696,25 @@ def client_portal_page(token: str):
 @app.get("/enquiry", include_in_schema=False)
 def public_enquiry_page():
     return FileResponse(STATIC_DIR / "enquiry.html")
+
+
+@app.get("/bookings/{booking_id}/{section}", include_in_schema=False)
+def admin_booking_page(booking_id: str, section: str):
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/bookings/{booking_id}", include_in_schema=False)
+def admin_booking_overview_page(booking_id: str):
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/{view}", include_in_schema=False)
+def admin_workspace_page(view: str):
+    allowed = {
+        "dashboard", "enquiries", "weddings", "projects", "calendar",
+        "workflows", "mail", "invoices", "documents", "forms",
+        "bookingforms", "packages", "communications", "settings",
+    }
+    if view not in allowed:
+        raise HTTPException(404, "Page not found")
+    return FileResponse(STATIC_DIR / "index.html")

@@ -1,0 +1,41 @@
+BOOKINGSYSTEM2026 V8.11 - TRUENAS DEPLOYMENT
+============================================
+
+Keep the complete V8.10.5 ZIP untouched until V8.11 has been verified.
+
+Run these commands in the TrueNAS shell only after the complete V8.11
+repository has been uploaded to GitHub main.
+
+BOOKING_COMPOSE=/mnt/apps/dockge/data/bookingsystem2026/compose.yaml
+
+docker compose -f "$BOOKING_COMPOSE" build --no-cache app
+docker compose -f "$BOOKING_COMPOSE" stop app
+docker compose -f "$BOOKING_COMPOSE" up -d app
+
+for ATTEMPT in $(seq 1 30); do
+  HEALTH=$(curl -sS http://127.0.0.1:30049/api/health 2>/dev/null || true)
+  if printf '%s' "$HEALTH" | grep -q 'navigation-workflow-v8.11'; then
+    printf '%s\n' "$HEALTH"
+    break
+  fi
+  printf 'Waiting for BookingSystem2026 — attempt %s/30\n' "$ATTEMPT"
+  sleep 2
+done
+
+docker compose -f "$BOOKING_COMPOSE" ps
+
+Expected build:
+2026.08.19-navigation-workflow-v8.11
+
+After deployment:
+
+1. Hard-refresh the browser once.
+2. Open Weddings, then a client, then Payments.
+3. Use browser Back and Forward and confirm the exact screens return.
+4. Refresh a client Payments URL and confirm it reopens in Payments.
+5. Open the Today dashboard and confirm its counts look sensible.
+6. Select global search and check a client name and an invoice number.
+7. Open Email client but do not press Send; confirm the V8.10.5 composer remains.
+
+Deployment sends no email, creates no client link and changes no invoice,
+payment, counter, booking, contract or Accounts integration setting.

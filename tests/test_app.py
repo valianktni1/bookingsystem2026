@@ -213,7 +213,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "imap_configured": False,
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
-                                     "build": "2026.08.19-client-email-centre-v8.10.5"}
+                                     "build": "2026.08.19-navigation-workflow-v8.11"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
