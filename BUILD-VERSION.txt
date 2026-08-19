@@ -156,3 +156,19 @@ friendly quote wording and branded quote button.
 - Deployment sends no emails and changes no invoices, payments, links or counters.
 - Twenty-eight cumulative automated tests pass and the five-page agreement PDF
   has been rendered and visually checked.
+
+2026.08.19-client-email-centre-v8.10.5
+
+- Added a prominent Email client action to every booking and project record on
+  desktop and mobile.
+- Mark can choose any active client template or write a one-off manual message,
+  edit the subject and wording, verify the recipient and send from one place.
+- A fresh secure link to the correct client account is included automatically in
+  every email sent from the composer.
+- The composer recommends Contract reminder whenever a completed booking form is
+  present but the agreement has been reset or remains unsigned.
+- Imported Studio Ninja bookings retain their manual-only safety lock and require
+  the exact one-email confirmation and a reason; automation remains suppressed.
+- Cancelled bookings cannot be emailed until they are deliberately reopened.
+- Deployment sends no messages and changes no invoices, payments or counters.
+- Thirty-one cumulative automated tests pass.

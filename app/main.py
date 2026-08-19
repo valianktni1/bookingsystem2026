@@ -38,7 +38,8 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       BookingFormTemplateIn, EnquiryFormTemplateIn,
                       InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
-                      PublicFormIn, QuoteAcceptIn, QuotePreparationIn, SendEmailIn, TaskIn, TaskPatch,
+                      ClientEmailComposeIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn,
+                      SendEmailIn, TaskIn, TaskPatch,
                       TemplateTestIn, TestingModeIn)
 from .security import create_token, current_admin, verify_password
 from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
@@ -71,7 +72,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.10.4-full-contract", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.10.5-client-email-centre", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -481,7 +482,7 @@ def health():
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
             "accounts_integration_enabled": settings.accounts_integration_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
-            "build": "2026.08.19-full-contract-v8.10.4"}
+            "build": "2026.08.19-client-email-centre-v8.10.5"}
 
 
 @app.get("/api/public/config")
@@ -1825,6 +1826,151 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
         db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
                         recipient=client_email_recipient(db, booking), subject=template.subject,
                         status="failed", error=str(exc)[:2000]))
+        db.commit()
+        raise HTTPException(503, str(exc))
+
+
+@app.get("/api/bookings/{booking_id}/email-centre")
+def client_email_centre(booking_id: str, _: Admin = Depends(current_admin),
+                        db: Session = Depends(get_db)):
+    """Return everything needed by the one-record email composer."""
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(
+        Booking.id == booking_id
+    ))
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    templates = list(db.scalars(select(EmailTemplate).where(
+        EmailTemplate.brand == booking.brand,
+        EmailTemplate.is_active.is_(True),
+        EmailTemplate.template_key != "new_enquiry_admin",
+    ).order_by(EmailTemplate.display_name)).all())
+    available_keys = {item.template_key for item in templates}
+    has_booking_form = bool(db.scalar(select(FormSubmission.id).where(
+        FormSubmission.booking_id == booking.id,
+        FormSubmission.form_type == "booking_form",
+    ).limit(1)))
+    has_contract = bool(db.scalar(select(ContractAcceptance.id).where(
+        ContractAcceptance.booking_id == booking.id
+    ).limit(1)))
+    accepted_quote = db.scalar(select(Quote).where(
+        Quote.booking_id == booking.id,
+        Quote.status == "accepted",
+    ).order_by(Quote.accepted_at.desc()).limit(1))
+    if has_booking_form and not has_contract and "contract_reminder" in available_keys:
+        recommended = "contract_reminder"
+    elif accepted_quote and not booking.deposit_paid_date and "deposit_due_1" in available_keys:
+        recommended = "deposit_due_1"
+    elif not accepted_quote and "quote" in available_keys:
+        recommended = "quote"
+    elif "booking_link" in available_keys:
+        recommended = "booking_link"
+    else:
+        recommended = templates[0].template_key if templates else None
+    return {
+        "booking_id": booking.id,
+        "client_name": booking.title,
+        "recipient": client_email_recipient(db, booking),
+        "original_recipient": booking.client.email,
+        "is_test": booking.is_test,
+        "cancelled": booking.status == RecordStatus.CANCELLED,
+        "manual_only": not automations_allowed(booking),
+        "automation_suppressed": booking.automation_suppressed,
+        "recommended_template_key": recommended,
+        "account_link_included": True,
+        "templates": [{
+            "template_key": item.template_key,
+            "display_name": item.display_name,
+            "subject": item.subject,
+            "body": item.body,
+        } for item in templates],
+    }
+
+
+@app.post("/api/bookings/{booking_id}/email-centre/send")
+def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
+                               _: Admin = Depends(current_admin),
+                               db: Session = Depends(get_db)):
+    """Send one deliberate template-based or free-written client email."""
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(
+        Booking.id == booking_id
+    ))
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    if booking.status == RecordStatus.CANCELLED:
+        raise HTTPException(409, "Reopen the cancelled booking before sending a client email")
+    manual_only = not automations_allowed(booking)
+    if manual_only:
+        if booking.legacy_source != "studio_ninja":
+            raise HTTPException(409, "Client communication is paused for this booking")
+        if payload.manual_confirmation != "SEND ONE MANUAL EMAIL":
+            raise HTTPException(422, "Type SEND ONE MANUAL EMAIL exactly to confirm")
+        if not payload.manual_reason or len(payload.manual_reason.strip()) < 3:
+            raise HTTPException(422, "Add a short reason for this one-off email")
+
+    source_template = None
+    if payload.mode == "template":
+        if not payload.template_key:
+            raise HTTPException(422, "Choose an email template")
+        source_template = db.scalar(select(EmailTemplate).where(
+            EmailTemplate.brand == booking.brand,
+            EmailTemplate.template_key == payload.template_key,
+            EmailTemplate.is_active.is_(True),
+            EmailTemplate.template_key != "new_enquiry_admin",
+        ))
+        if not source_template:
+            raise HTTPException(404, "Active client email template not found")
+
+    template_key = source_template.template_key if source_template else "manual_client_email"
+    composed = EmailTemplate(
+        brand=booking.brand,
+        template_key=template_key,
+        display_name=(source_template.display_name if source_template else "Manual client email"),
+        subject=payload.subject.strip(),
+        body=payload.body.strip(),
+        is_active=True,
+    )
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    if not profile:
+        raise HTTPException(404, "Business profile not found")
+    recipient = client_email_recipient(db, booking)
+    try:
+        portal_url = issue_client_email_url(db, booking, template_key)
+        subject, _ = send_booking_template_email(db, booking, profile, composed, portal_url)
+        db.add(EmailLog(
+            booking_id=booking.id,
+            template_key=template_key,
+            recipient=recipient,
+            subject=subject,
+            status="sent",
+        ))
+        audit(db, "send_manual_email" if manual_only else "send_client_email",
+              "booking", booking.id, {
+                  "mode": payload.mode,
+                  "template": template_key,
+                  "subject": subject,
+                  "account_link_included": True,
+                  "manual_only": manual_only,
+                  "reason": payload.manual_reason.strip() if manual_only else None,
+              })
+        db.commit()
+        return {
+            "ok": True,
+            "recipient": recipient,
+            "subject": subject,
+            "template_key": template_key,
+            "account_link_included": True,
+            "manual_only": manual_only,
+            "automation_suppressed": booking.automation_suppressed,
+        }
+    except Exception as exc:
+        db.add(EmailLog(
+            booking_id=booking.id,
+            template_key=template_key,
+            recipient=recipient,
+            subject=payload.subject.strip(),
+            status="failed",
+            error=str(exc)[:2000],
+        ))
         db.commit()
         raise HTTPException(503, str(exc))
 

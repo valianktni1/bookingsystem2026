@@ -86,6 +86,73 @@
     </section>`;
   }
 
+  async function openClientEmailCentre(r) {
+    try {
+      const centre = await api(`/api/bookings/${r.id}/email-centre`);
+      if (centre.cancelled) {
+        toast("Reopen this cancelled booking before emailing the client", "error");
+        return;
+      }
+      const templates = centre.templates || [];
+      const recommended = centre.recommended_template_key || templates[0]?.template_key || "";
+      const importedSafety = centre.manual_only ? `<div class="client-email-safety full"><strong>Imported Studio Ninja client · deliberate manual email only</strong><span>Automatic messages remain paused. This sends only the email you confirm below.</span></div><label class="full">Reason for this one-off email<input id="client-email-reason" value="One-off email deliberately sent by Mark" required></label><label class="full">Type SEND ONE MANUAL EMAIL<input id="client-email-confirm" autocomplete="off" required></label>` : "";
+      showModal("Email client", `<div class="client-email-recipient full"><small>TO</small><strong>${esc(centre.recipient)}</strong>${centre.is_test ? `<span>Testing Mode redirected this away from ${esc(centre.original_recipient)}</span>` : ""}</div><label class="full">How would you like to write it?<select id="client-email-mode"><option value="template" ${templates.length ? "" : "disabled"}>Use one of my templates</option><option value="manual" ${templates.length ? "" : "selected"}>Write a manual email</option></select></label><label id="client-email-template-row" class="full">Email template<select id="client-email-template">${templates.map(item => `<option value="${attr(item.template_key)}" ${item.template_key === recommended ? "selected" : ""}>${esc(item.display_name)}${item.template_key === recommended ? " · Recommended" : ""}</option>`).join("")}</select></label><div class="client-email-link-note full"><i>↗</i><span><strong>Their secure account link is included automatically</strong><small>It opens the right booking and lets them see their forms, agreement, invoices and balance.</small></span></div><label class="full">Subject<input id="client-email-subject" maxlength="240" required></label><label class="full">Message<textarea id="client-email-body" rows="15" maxlength="20000" required></textarea><small class="field-help">You can edit this one email without changing the saved template. Placeholders such as {client_first_name} are filled automatically.</small></label>${importedSafety}`, async () => {
+        const sendButton = $("#dynamic-form button[type='submit']");
+        sendButton.disabled = true;
+        sendButton.textContent = "Sending…";
+        try {
+          const mode = value("#client-email-mode");
+          const result = await api(`/api/bookings/${r.id}/email-centre/send`, {
+            method: "POST",
+            body: JSON.stringify({
+              mode,
+              template_key: mode === "template" ? value("#client-email-template") : null,
+              subject: value("#client-email-subject").trim(),
+              body: value("#client-email-body").trim(),
+              manual_reason: centre.manual_only ? value("#client-email-reason").trim() : null,
+              manual_confirmation: centre.manual_only ? value("#client-email-confirm").trim() : null,
+            })
+          });
+          closeModal();
+          toast(`Email sent to ${result.recipient} with their secure account link`);
+          await openDrawer(r.id, state.currentTab || "Overview");
+        } catch (error) {
+          sendButton.disabled = false;
+          sendButton.textContent = "Send email";
+          throw error;
+        }
+      }, `Send a template or write a one-off message to ${centre.client_name}. Nothing is sent until you press Send email.`);
+      const mode = $("#client-email-mode");
+      const templateSelect = $("#client-email-template");
+      const templateRow = $("#client-email-template-row");
+      const subject = $("#client-email-subject");
+      const body = $("#client-email-body");
+      const sendButton = $("#dynamic-form button[type='submit']");
+      sendButton.textContent = "Send email";
+      const templateByKey = key => templates.find(item => item.template_key === key);
+      const useTemplate = () => {
+        const template = templateByKey(templateSelect.value);
+        if (!template) return;
+        subject.value = template.subject;
+        body.value = template.body;
+      };
+      const setMode = () => {
+        const usingTemplate = mode.value === "template";
+        templateRow.classList.toggle("hidden", !usingTemplate);
+        if (usingTemplate) useTemplate();
+        else {
+          subject.value = "";
+          body.value = "Hi {client_first_name},\n\n\n\nKind regards,\nMark";
+        }
+      };
+      templateSelect.onchange = useTemplate;
+      mode.onchange = setMode;
+      setMode();
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  }
+
   openDrawer = async function (id, tab = "Overview") {
     try {
       const [r, portal] = await Promise.all([
@@ -104,6 +171,7 @@
           <button id="close-drawer" class="record-back" type="button"><span>←</span> Back to bookings</button>
           <div class="record-command-actions">
             <div class="record-primary-actions"></div>
+            <button id="record-email-client-top" class="primary email-client-primary" type="button">✉ Email client</button>
             <button id="edit-record" class="secondary" type="button">Edit details</button>
             <div class="record-more-wrap">
               <button id="record-more" class="secondary" type="button">More actions <span>⌄</span></button>
@@ -122,7 +190,8 @@
             <div class="record-title-line"><h1>${esc(r.title)}</h1><span class="status ${statusClass(r.status)}">${esc(statusText(r.status))}</span></div>
             <p>${esc(r.venue_or_project || "Venue or project not set")} · ${esc(fmtDate(r.event_date))}</p>
             <nav class="record-contact-actions">
-              <a href="mailto:${attr(r.client.email)}">✉ Email</a>
+              <button id="record-email-client" type="button">✉ Email client</button>
+              <a href="mailto:${attr(r.client.email)}">✉ Inbox</a>
               ${r.client.phone ? `<a href="tel:${attr(r.client.phone)}">☎ Call</a>` : ""}
               ${directions ? `<a href="${attr(directions)}" target="_blank" rel="noopener">⌖ Directions</a>` : ""}
               <button id="record-portal-shortcut" type="button">↗ Client area</button>
@@ -139,6 +208,7 @@
       drawer.classList.remove("hidden");
       $("#drawer-overlay").classList.remove("hidden");
       $("#close-drawer").onclick = closeDrawer;
+      $("#record-email-client-top").onclick = $("#record-email-client").onclick = () => openClientEmailCentre(r);
       $("#edit-record").onclick = () => openRecordModal(r);
       $("#archive-record").onclick = () => toggleArchive(r);
       $("#record-client-area").onclick = $("#record-portal-shortcut").onclick = () => selectRecordTab(r, "Quote", true);

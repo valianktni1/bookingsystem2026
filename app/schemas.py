@@ -169,6 +169,15 @@ class SendEmailIn(BaseModel):
     manual_reason: str | None = Field(default=None, max_length=1000)
 
 
+class ClientEmailComposeIn(BaseModel):
+    mode: Literal["template", "manual"]
+    template_key: str | None = Field(default=None, min_length=2, max_length=80)
+    subject: str = Field(min_length=1, max_length=240)
+    body: str = Field(min_length=1, max_length=20000)
+    manual_confirmation: str | None = Field(default=None, max_length=100)
+    manual_reason: str | None = Field(default=None, max_length=1000)
+
+
 class TemplateTestIn(BaseModel):
     recipient: EmailStr
 

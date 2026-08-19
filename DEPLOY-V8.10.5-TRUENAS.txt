@@ -1,0 +1,29 @@
+BOOKINGSYSTEM2026 V8.10.5 - TRUENAS DEPLOYMENT
+================================================
+
+Run these commands in the TrueNAS shell after the complete V8.10.5 repository
+has been uploaded to GitHub main.
+
+BOOKING_COMPOSE=/mnt/apps/dockge/data/bookingsystem2026/compose.yaml
+
+docker compose -f "$BOOKING_COMPOSE" build --no-cache app
+docker compose -f "$BOOKING_COMPOSE" stop app
+docker compose -f "$BOOKING_COMPOSE" up -d app
+
+for ATTEMPT in $(seq 1 30); do
+  HEALTH=$(curl -sS http://127.0.0.1:30049/api/health 2>/dev/null || true)
+  if printf '%s' "$HEALTH" | grep -q 'client-email-centre-v8.10.5'; then
+    printf '%s\n' "$HEALTH"
+    break
+  fi
+  printf 'Waiting for BookingSystem2026 — attempt %s/30\n' "$ATTEMPT"
+  sleep 2
+done
+
+docker compose -f "$BOOKING_COMPOSE" ps
+
+Expected build:
+2026.08.19-client-email-centre-v8.10.5
+
+After deployment, hard-refresh the browser once. Open any booking and press
+Email client. Opening the composer sends nothing; only Send email sends.

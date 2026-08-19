@@ -213,7 +213,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "imap_configured": False,
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
-                                     "build": "2026.08.19-full-contract-v8.10.4"}
+                                     "build": "2026.08.19-client-email-centre-v8.10.5"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -223,6 +223,9 @@ def test_phase_two_b_flow(monkeypatch):
         assert "Mark's Business Studio" in homepage.text
         admin_javascript = client.get("/static/app.js").text
         assert 'id="record-inline-back"' in admin_javascript
+        email_centre_javascript = client.get("/static/v895.js").text
+        assert 'id="record-email-client-top"' in email_centre_javascript
+        assert "Email client" in email_centre_javascript
         assert "function renderQuestionnaires" in admin_javascript
         compatibility_javascript = client.get("/static/v82.js").text
         assert "Change final payment date" in compatibility_javascript
