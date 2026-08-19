@@ -1,5 +1,5 @@
 BookingSystem2026 - Complete Backup
-Build: 2026.08.19-complete-backup-v8.14
+Build: 2026.08.19-couple-payment-reference-v8.15
 
 V8.14 complete one-click backup:
 
@@ -236,3 +236,12 @@ friendly quote wording and branded quote button.
 - OAuth refresh tokens are encrypted at rest using the existing session secret.
 - Testing Mode records and imported Studio Ninja weddings are excluded.
 - No database schema migration is required; thirty-seven automated tests pass.
+
+2026.08.19-couple-payment-reference-v8.15
+
+- Native Weddings By Mark payments now use both first names plus DDMMYY, for
+  example BETHSTUART150527, instead of the invoice number.
+- The same bold reference appears throughout the quote, invoice, client portal
+  and relevant payment emails.
+- Invoice numbering, existing data, imported Studio Ninja records, Ivory
+  Digital records, Calendar, availability, Accounts sync and backups are unchanged.

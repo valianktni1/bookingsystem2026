@@ -214,7 +214,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
                                  "google_calendar_configured": False,
-                                 "build": "2026.08.19-complete-backup-v8.14"}
+                                 "build": "2026.08.19-couple-payment-reference-v8.15"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

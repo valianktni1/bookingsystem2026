@@ -1,0 +1,35 @@
+BookingSystem2026 V8.15 - TrueNAS deployment
+============================================
+
+This release is cumulative and includes V8.14 complete backup, V8.13 live
+availability and V8.12 Google Calendar integration.
+
+1. Upload/commit the complete V8.15 project to the GitHub main branch.
+
+2. In the TrueNAS shell, make a database safety backup first:
+
+   cd /mnt/apps/dockge/data/bookingsystem2026
+   docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc \
+     > bookingapp-before-v815-2026-08-19.dump
+
+3. Confirm that the dump is not empty:
+
+   ls -lh bookingapp-before-v815-2026-08-19.dump
+
+4. Build the application directly from GitHub:
+
+   docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+5. Start only the application container:
+
+   docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+6. Confirm the exact build:
+
+   curl -sS http://127.0.0.1:30049/api/health
+
+   Expected build value:
+   2026.08.19-couple-payment-reference-v8.15
+
+No YAML, .env or database migration change is required. Deployment sends no
+emails and makes no Google Calendar or Accounts sync changes.

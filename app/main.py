@@ -47,7 +47,8 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       TemplateTestIn, TestingModeIn)
 from .security import create_token, current_admin, verify_password
 from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
-                       next_invoice_number, sync_final_details_call_task, visible_task_condition)
+                       next_invoice_number, payment_reference, sync_final_details_call_task,
+                       visible_task_condition)
 from .v82_routes import register_v82_routes
 from .v84_routes import automations_allowed, final_details_unlocked, register_v84_routes
 
@@ -384,6 +385,7 @@ def invoice_json(item: Invoice) -> dict:
             "refunded": money(refunded),
             "balance": money(balance),
             "status": item.status,
+            "payment_reference": payment_reference(item.booking, item.number) if item.booking else item.number,
             "client": item.booking.title if item.booking else None,
             "is_test": bool(item.booking and item.booking.is_test),
             "payments": [payment_json(p) for p in sorted(item.payments, key=lambda x: x.paid_date, reverse=True)]}
@@ -434,6 +436,7 @@ def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | N
             "venue_place_id": item.venue_place_id, "venue_lat": item.venue_lat, "venue_lng": item.venue_lng,
             "package_name": item.package_name,
             "quoted_total": money(item.quoted_total), "deposit_amount": money(item.deposit_amount),
+            "payment_reference": payment_reference(item),
             "deposit_paid_date": item.deposit_paid_date.isoformat() if item.deposit_paid_date else None,
             "balance_due_date": item.balance_due_date.isoformat() if item.balance_due_date else None,
             "client": client_json(item.client), "archived": item.archived_at is not None,
@@ -2216,6 +2219,7 @@ def public_portal_data(token: str, db: Session = Depends(get_db)):
                        "venue_place_id": booking.venue_place_id, "venue_lat": booking.venue_lat,
                        "venue_lng": booking.venue_lng, "package_name": booking.package_name,
                        "quoted_total": money(booking.quoted_total), "deposit_amount": money(booking.deposit_amount),
+                       "payment_reference": payment_reference(booking),
                        "legacy_source": booking.legacy_source, "is_test": booking.is_test,
                        "client": client_json(booking.client)},
             "booking_form_template": (public_booking_form(booking_form_template.config or {})

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .config import get_settings
 from .models import Booking, Brand, BusinessProfile, EmailTemplate
+from .services import payment_reference
 
 
 BRANDING_DIR = Path(__file__).parent / "static" / "branding"
@@ -50,6 +51,9 @@ def template_values(booking: Booking, profile: BusinessProfile, portal_url: str 
         "payment_amount": "£100.00",
         "payment_date": "today",
         "invoice_number": "WBM02001" if booking.brand == Brand.WBM else "ID02001",
+        "payment_reference": payment_reference(
+            booking, "shown on your invoice" if booking.brand == Brand.WBM else "ID02001"
+        ),
         "total_paid": "£100.00",
         "deposit_remaining": "£0.00",
         "outstanding_balance": f"£{max(0, float(booking.quoted_total or 0) - 100):,.2f}",
@@ -140,6 +144,14 @@ def _body_html(body: str) -> str:
     prepared = re.sub(r"\[([^\]\n]{1,100})\]\((https?://[^\s)]+)\)", button, body)
     rendered = html.escape(prepared)
 
+    # Allow editable templates to highlight a short, trusted value with
+    # **bold wording** while every character remains HTML-escaped first.
+    rendered = re.sub(
+        r"\*\*([^*\n]{1,160})\*\*",
+        r'<strong style="font-weight:800;color:#5f461a">\1</strong>',
+        rendered,
+    )
+
     def link(match: re.Match) -> str:
         url = match.group(1)
         if "/client/" in url:
@@ -160,8 +172,9 @@ def _body_html(body: str) -> str:
 
 def _plain_body(body: str) -> str:
     """Keep accessible URLs in the plain-text alternative to the HTML email."""
-    return re.sub(r"\[([^\]\n]{1,100})\]\((https?://[^\s)]+)\)",
-                  lambda match: f"{match.group(1)}: {match.group(2)}", body)
+    plain = re.sub(r"\[([^\]\n]{1,100})\]\((https?://[^\s)]+)\)",
+                   lambda match: f"{match.group(1)}: {match.group(2)}", body)
+    return re.sub(r"\*\*([^*\n]{1,160})\*\*", r"\1", plain)
 
 
 def _email_html(body: str, booking: Booking, profile: BusinessProfile) -> str:

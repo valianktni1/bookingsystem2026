@@ -1,11 +1,56 @@
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+import re
+import unicodedata
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .models import AuditLog, Booking, Brand, BusinessProfile, Invoice, InvoiceCounter, RecordKind, RecordStatus, Task
+
+
+def _reference_name(value: str | None) -> str:
+    """Return the first bank-safe name component in uppercase ASCII."""
+    first = re.split(r"\s+", str(value or "").strip(), maxsplit=1)[0]
+    ascii_name = unicodedata.normalize("NFKD", first).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^A-Za-z0-9]", "", ascii_name).upper()
+
+
+def payment_reference(booking: Booking, fallback: str = "") -> str:
+    """Build Mark's recognisable UK bank reference from both first names and the wedding date.
+
+    The result is capped at 18 characters (twelve name characters plus DDMMYY),
+    which fits the common UK bank-transfer reference limit. Imported records,
+    non-wedding work and records without a wedding date retain their invoice-number fallback.
+    """
+    if (booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING
+            or booking.legacy_source or not booking.event_date):
+        return fallback
+
+    title_parts = [part.strip() for part in re.split(r"\s*(?:&|\band\b)\s*", booking.title or "", maxsplit=1,
+                                                    flags=re.IGNORECASE)]
+    primary = _reference_name(getattr(booking.client, "first_name", None))
+    partner = _reference_name(getattr(booking.client, "partner_name", None))
+    if not primary and title_parts:
+        primary = _reference_name(title_parts[0])
+    if not partner and len(title_parts) > 1:
+        partner = _reference_name(title_parts[1])
+
+    if not primary or not partner:
+        return fallback
+
+    first_length = min(len(primary), 6)
+    partner_length = min(len(partner), 6)
+    remaining = 12 - first_length - partner_length
+    if remaining:
+        extra = min(remaining, len(primary) - first_length)
+        first_length += extra
+        remaining -= extra
+    if remaining:
+        partner_length += min(remaining, len(partner) - partner_length)
+    names = primary[:first_length] + partner[:partner_length]
+    return f"{names}{booking.event_date.strftime('%d%m%y')}"
 
 
 def audit(db: Session, action: str, entity_type: str, entity_id: str | None = None, details: dict | None = None) -> None:

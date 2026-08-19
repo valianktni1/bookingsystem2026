@@ -14,6 +14,7 @@ from reportlab.platypus import (HRFlowable, Image, KeepTogether, Paragraph, Simp
                                 Spacer, Table, TableStyle)
 
 from .models import Brand, BusinessProfile, ContractAcceptance, Invoice
+from .services import payment_reference
 
 
 BRANDING_DIR = Path(__file__).parent / "static" / "branding"
@@ -340,7 +341,12 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     else:
         note_parts = ["No VAT has been charged on this invoice."]
         if not receipt:
-            note_parts.insert(0, f"Please use <b>{invoice.number}</b> as your bank-transfer reference.")
+            reference = payment_reference(invoice.booking, invoice.number)
+            note_parts.insert(
+                0,
+                f"<b>PAYMENT REFERENCE: {escape(reference)}</b><br/>"
+                f"Please use <b>{escape(reference)}</b> for every bank transfer for this wedding.",
+            )
         if bank_lines and not receipt:
             note_parts.append("<br/>".join(bank_lines))
     if invoice.notes:
