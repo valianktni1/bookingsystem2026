@@ -1,0 +1,18 @@
+/* V8.14 complete backup */
+.v814-backup-card{margin-bottom:18px;overflow:hidden;border-color:#c7d9d6;background:linear-gradient(135deg,#fff 0%,#f3faf8 100%)}
+.v814-backup-copy{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:16px;padding:22px 22px 17px}
+.v814-backup-icon{width:58px;height:58px;display:grid;place-items:center;border-radius:15px;color:#fff;background:linear-gradient(135deg,#0f6b63,#123943);font-size:30px;font-weight:800;box-shadow:0 10px 25px #0f6b6330}
+.v814-backup-copy small{color:var(--teal);font-size:8px;font-weight:900;letter-spacing:.14em}
+.v814-backup-copy h2{margin:4px 0 5px;font-size:21px}
+.v814-backup-copy p{max-width:780px;margin:0;color:var(--muted);font-size:10px;line-height:1.6}
+.v814-backup-includes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 22px 17px}
+.v814-backup-includes span{padding:9px 10px;border:1px solid #d5e5e2;border-radius:9px;color:#315c57;background:#fff;font-size:9px;font-weight:700;text-align:center}
+.v814-backup-security{display:flex;gap:8px;padding:13px 22px;border-block:1px solid #ead9a8;color:#725716;background:#fff9e8;font-size:9px;line-height:1.5}
+.v814-backup-security span{color:#786a45}
+.v814-backup-card footer{display:flex;align-items:center;gap:14px;padding:17px 22px}
+.v814-backup-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-width:260px;padding:15px 20px;text-decoration:none;font-size:11px;font-weight:800}
+.v814-backup-button span{font-size:17px;line-height:1}
+.v814-backup-button.preparing{pointer-events:none;opacity:.72}
+.v814-backup-card footer small{max-width:560px;color:var(--muted);font-size:8px;line-height:1.5}
+@media(max-width:800px){.v814-backup-includes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.v814-backup-copy{align-items:start}.v814-backup-icon{width:48px;height:48px}.v814-backup-copy h2{font-size:18px}.v814-backup-includes{grid-template-columns:1fr}.v814-backup-security,.v814-backup-card footer{align-items:stretch;flex-direction:column}.v814-backup-button{width:100%;min-width:0}.v814-backup-card footer small{text-align:left}}

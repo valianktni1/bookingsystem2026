@@ -1,5 +1,18 @@
-BookingSystem2026 - Dual-diary Live Availability
-Build: 2026.08.19-live-availability-v8.13
+BookingSystem2026 - Complete Backup
+Build: 2026.08.19-complete-backup-v8.14
+
+V8.14 complete one-click backup:
+
+- Adds a large Download complete backup button at the top of Business settings.
+- Downloads one dated ZIP directly to the administrator's computer.
+- Includes a typed logical snapshot of every database table and row, uploaded
+  documents, readable booking/invoice/payment CSV registers, invoice PDFs,
+  receipts, signed-agreement PDFs and the running application source.
+- Includes a manifest, database schema and SHA-256 checksums for verification.
+- Excludes environment files, plaintext passwords, SMTP credentials, Google
+  OAuth credentials and the administrator password hash.
+- Creating a backup sends no email, changes no booking or invoice and makes no
+  Google Calendar or Accounts request.
 
 V8.13 live website availability:
 

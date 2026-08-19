@@ -14,10 +14,12 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from .bootstrap import bootstrap
+from .backup import BACKUP_BUILD, BackupBusyError, create_complete_backup
 from .booking_forms import public_booking_form, validate_booking_answers, validate_booking_form
 from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
 from .config import get_settings
@@ -74,7 +76,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.13-live-availability", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.14-complete-backup", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -485,7 +487,7 @@ def health():
             "accounts_integration_enabled": settings.accounts_integration_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
             "google_calendar_configured": google_calendar_configured(),
-            "build": "2026.08.19-live-availability-v8.13"}
+            "build": BACKUP_BUILD}
 
 
 @app.get("/api/public/config")
@@ -781,6 +783,29 @@ def businesses(_: Admin = Depends(current_admin), db: Session = Depends(get_db))
     return [{"brand": r.brand.value, "display_name": r.display_name, "legal_name": r.legal_name,
              "invoice_prefix": r.invoice_prefix, "email": r.email, "phone": r.phone,
              "website": r.website, "address": r.address, "bank_details": r.bank_details or {}} for r in rows]
+
+
+@app.get("/api/backups/complete")
+def download_complete_backup(admin: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    """Download a private, portable snapshot without changing business workflows."""
+    try:
+        path, filename, manifest = create_complete_backup(db)
+    except BackupBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    audit(db, "download_complete_backup", "admin", admin.id, {
+        "filename": filename,
+        "database_row_count": manifest["database_row_count"],
+        "uploaded_file_count": manifest["uploaded_file_count"],
+        "generated_pdf_count": manifest["generated_pdf_count"],
+    })
+    db.commit()
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=filename,
+        headers={"Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff"},
+        background=BackgroundTask(path.unlink, missing_ok=True),
+    )
 
 
 @app.patch("/api/businesses/{brand}")

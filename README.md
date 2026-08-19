@@ -1,9 +1,17 @@
-# Mark's Business Studio — Version 8.13
+# Mark's Business Studio — Version 8.14
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.13, including browser-history
+build includes every cumulative feature through V8.14, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.14 complete backup
+
+A large, administrator-only backup button in Business settings downloads a
+dated ZIP containing every database record, uploaded document, readable
+booking/invoice/payment registers, invoice PDFs, receipts and signed agreement
+PDFs, with a manifest and checksums. It changes no booking or workflow and
+excludes passwords and integration credentials.
 
 ## Version 8.13 live website availability
 
@@ -22,8 +30,8 @@ venue and ceremony time. Booking and Wedding Booking Form changes update the sam
 event; cancellation removes the event but retains the complete cancelled booking.
 Google failures remain retryable and never roll back BookingSystem2026 data.
 
-See `RELEASE-NOTES-V8.13.md` and `DEPLOY-V8.13-TRUENAS.txt` for the protected
-upgrade and website checker instructions. The original Google setup remains in
+See `RELEASE-NOTES-V8.14.md` and `DEPLOY-V8.14-TRUENAS.txt` for the protected
+upgrade instructions. The original Google setup remains in
 `DEPLOY-V8.12-TRUENAS.txt`.
 
 ## Included in Phase 2A
