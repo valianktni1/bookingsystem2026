@@ -1,8 +1,18 @@
-# Mark's Business Studio — Version 8.12
+# Mark's Business Studio — Version 8.13
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.12, including browser-history
-navigation, the client Email Centre and safe one-way Google Calendar syncing.
+build includes every cumulative feature through V8.13, including browser-history
+navigation, the client Email Centre, safe one-way Google Calendar syncing and a
+privacy-safe live website availability check.
+
+## Version 8.13 live website availability
+
+The public endpoint `/api/public/availability?date=YYYY-MM-DD` answers with only
+`Booked`, `Available` or `Unavailable`; it never exposes a couple, venue or other
+booking detail. The supplied `WEBSITE-DATE-CHECKER-V8.13.html` preserves the
+existing checker design and checks both the existing Studio Ninja/Google Apps
+Script diary and BookingSystem2026. A date is advertised as available only when
+both sources confirm that it is free.
 
 ## Version 8.12 Google Calendar
 
@@ -12,8 +22,9 @@ venue and ceremony time. Booking and Wedding Booking Form changes update the sam
 event; cancellation removes the event but retains the complete cancelled booking.
 Google failures remain retryable and never roll back BookingSystem2026 data.
 
-See `RELEASE-NOTES-V8.12.md` and `DEPLOY-V8.12-TRUENAS.txt` for the protected
-Google Cloud and TrueNAS setup.
+See `RELEASE-NOTES-V8.13.md` and `DEPLOY-V8.13-TRUENAS.txt` for the protected
+upgrade and website checker instructions. The original Google setup remains in
+`DEPLOY-V8.12-TRUENAS.txt`.
 
 ## Included in Phase 2A
 

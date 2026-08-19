@@ -1,0 +1,152 @@
+<!-- Weddings By Mark live availability checker - BookingSystem2026 V8.13 -->
+<div id="checker-container" style="background: #ffffff; padding: 40px; border: 1px solid #d4af37; border-radius: 12px; text-align: center; box-shadow: 0px 8px 25px rgba(0,0,0,0.08); max-width: 480px; margin: auto; font-family: sans-serif; transition: background 0.2s; position: relative; overflow: hidden;">
+
+    <!-- Trust Badge -->
+    <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #ad946d; margin-bottom: 10px; font-weight: bold;">
+        19 Years Experience | 1500+ Weddings Captured
+    </div>
+
+    <p style="font-size: 17px; color: #666; line-height: 1.6; margin-bottom: 25px;">
+       I know your time is precious. Check my live diary instantly before filling in your details:
+    </p>
+
+    <h2 style="color: #333; font-size: 30px; margin-bottom: 25px; font-weight: bold;">Check Your Date...</h2>
+
+    <input type="date" id="wedding-date" aria-label="Wedding date" style="padding: 14px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 20px; width: 85%; font-size: 16px;">
+
+    <button id="check-date-button" type="button" onclick="checkAvailability()" style="background: #ad946d; color: white; border: none; padding: 16px 30px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 85%; font-size: 16px; transition: 0.3s;">
+        Check My Date
+    </button>
+
+    <div id="status-message" role="status" aria-live="polite" style="margin-top: 30px; font-weight: bold; font-size: 20px; min-height: 30px; position: relative;"></div>
+</div>
+
+<style>
+/* 1. The Camera Flash Animation */
+@keyframes studioFlash {
+  0% { background-color: #ffffff; }
+  20% { background-color: #ffffff; filter: brightness(2.5); }
+  40% { background-color: #ffffff; }
+  60% { background-color: #ffffff; filter: brightness(2.5); }
+  100% { background-color: #ffffff; }
+}
+.trigger-flash { animation: studioFlash 0.5s ease-out; }
+
+/* 2. The Floating Heart/Sparkle Animation */
+.celebration-item {
+  position: absolute;
+  pointer-events: none;
+  font-size: 20px;
+  z-index: 10;
+  animation: floatUpAndFade 2s forwards;
+}
+
+@keyframes floatUpAndFade {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--x), var(--y)) scale(1.5); opacity: 0; }
+}
+</style>
+
+<script>
+// Keep the existing Studio Ninja / Google Calendar diary check, then also
+// check every job held by BookingSystem2026.
+const studioNinjaCalendarUrl = "https://script.google.com/macros/s/AKfycbwXaP1r1ieltM96gShoTHodylmCDTX5efth4fwlojcQ4MwjXX_vSDsInbJmpUfWbHLBbA/exec";
+const bookingAvailabilityUrl = "https://booking.weddingsbymark.uk/api/public/availability";
+
+async function readDiaryStatus(url, dateInput) {
+  const response = await fetch(url + "?date=" + encodeURIComponent(dateInput), { cache: "no-store" });
+  if (!response.ok) throw new Error("Diary request failed");
+  const value = (await response.text()).trim();
+  if (value === "Booked" || value === "Unavailable") return value;
+  return "Available";
+}
+
+function createCelebration() {
+  const status = document.getElementById('status-message');
+  const items = ['❤️', '✨', '💖', '🥂', '✨'];
+
+  for (let i = 0; i < 12; i++) {
+    const span = document.createElement('span');
+    span.innerText = items[Math.floor(Math.random() * items.length)];
+    span.className = 'celebration-item';
+
+    const x = (Math.random() - 0.5) * 200 + 'px';
+    const y = (Math.random() - 1) * 150 + 'px';
+    span.style.setProperty('--x', x);
+    span.style.setProperty('--y', y);
+    span.style.left = '50%';
+    span.style.top = '0';
+
+    status.appendChild(span);
+    setTimeout(() => span.remove(), 2000);
+  }
+}
+
+async function checkAvailability() {
+  const dateInput = document.getElementById('wedding-date').value;
+  const status = document.getElementById('status-message');
+  const container = document.getElementById('checker-container');
+  const button = document.getElementById('check-date-button');
+
+  if (!dateInput) {
+    status.innerHTML = "Please select a date first!";
+    status.style.color = "#ad946d";
+    return;
+  }
+
+  status.innerHTML = "Checking my diary...";
+  status.style.color = "#888";
+  container.classList.remove("trigger-flash");
+  button.disabled = true;
+  button.style.opacity = "0.7";
+
+  try {
+    const checks = await Promise.allSettled([
+      readDiaryStatus(studioNinjaCalendarUrl, dateInput),
+      readDiaryStatus(bookingAvailabilityUrl, dateInput)
+    ]);
+    const completed = checks
+      .filter(check => check.status === "fulfilled")
+      .map(check => check.value);
+    const result = completed.includes("Booked")
+      ? "Booked"
+      : completed.includes("Unavailable")
+        ? "Unavailable"
+        : checks.some(check => check.status === "rejected")
+          ? "Error"
+          : "Available";
+
+    if (result === "Booked") {
+      status.innerHTML = "❌ I'm sorry, I'm already booked that day.";
+      status.style.color = "#a30000";
+    } else if (result === "Available") {
+      void container.offsetWidth;
+      container.classList.add("trigger-flash");
+      status.innerHTML = "✨ Great news! I am available!";
+      status.style.color = "#2d5a27";
+      createCelebration();
+    } else if (result === "Unavailable") {
+      status.innerHTML = "Please choose today or a future date.";
+      status.style.color = "#ad946d";
+    } else {
+      throw new Error("Unexpected availability response");
+    }
+  } catch (error) {
+    status.innerHTML = "I couldn't check the diary just now. Please try again.";
+    status.style.color = "#a30000";
+  } finally {
+    button.disabled = false;
+    button.style.opacity = "1";
+  }
+}
+
+(function setMinimumWeddingDate() {
+  const input = document.getElementById('wedding-date');
+  if (!input) return;
+  const now = new Date();
+  const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+  input.min = localToday;
+})();
+</script>

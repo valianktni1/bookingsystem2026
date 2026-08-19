@@ -1,0 +1,42 @@
+BOOKINGSYSTEM2026 V8.13 - LIVE DATE CHECKER DEPLOYMENT
+=====================================================
+
+V8.13 is a small cumulative update on top of the verified V8.12 Google Calendar
+release. It requires no database migration, new secret or YAML change.
+
+1. Keep the V8.12 ZIP and the pre-V8.12 database backup unchanged.
+
+2. Upload the complete V8.13 repository contents to GitHub main.
+
+3. In the TrueNAS shell:
+
+   cd /mnt/apps/dockge/data/bookingsystem2026
+   docker compose -f compose.yaml build --no-cache app
+   docker compose -f compose.yaml up -d app
+
+4. Confirm the health result:
+
+   curl -sS http://127.0.0.1:30049/api/health
+
+   Expected build:
+
+   2026.08.19-live-availability-v8.13
+
+5. Check the privacy-safe endpoint using one known booked date and one known free
+   future date. Each response must be only Booked or Available:
+
+   curl -sS 'http://127.0.0.1:30049/api/public/availability?date=YYYY-MM-DD'
+
+6. In WordPress/Elementor, replace the complete old checker HTML widget with the
+   contents of WEBSITE-DATE-CHECKER-V8.13.html. Use the same replacement on each
+   page that contains the checker.
+
+7. Clear the page/cache plugin cache, then test:
+
+   - a Studio Ninja date known to be booked;
+   - the new Calendar Test date while it is cancelled (it should be free unless
+     another genuine wedding uses that date);
+   - a future date known to be free.
+
+The checker keeps the existing Google Apps Script URL. Do not delete or redeploy
+that Apps Script while Studio Ninja remains part of the diary.

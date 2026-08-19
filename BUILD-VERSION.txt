@@ -1,5 +1,16 @@
-BookingSystem2026 - Google Calendar Sync
-Build: 2026.08.19-google-calendar-v8.12
+BookingSystem2026 - Dual-diary Live Availability
+Build: 2026.08.19-live-availability-v8.13
+
+V8.13 live website availability:
+
+- Adds a public, read-only date endpoint that returns only Booked, Available or
+  Unavailable and never exposes client or wedding details.
+- The supplied website snippet preserves the existing checker design and checks
+  both the existing Studio Ninja/Google Apps Script diary and BookingSystem2026.
+- A date is shown as free only if both diary checks succeed and both say free.
+- Genuine native and imported active WBM jobs protect their dates. Enquiries,
+  cancelled records and Testing Mode records do not.
+- No new environment values or database migration are required.
 
 This is a complete cumulative build containing every feature through V8.10.3.
 

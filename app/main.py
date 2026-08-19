@@ -74,7 +74,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.12-google-calendar", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.13-live-availability", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -485,7 +485,7 @@ def health():
             "accounts_integration_enabled": settings.accounts_integration_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
             "google_calendar_configured": google_calendar_configured(),
-            "build": "2026.08.19-google-calendar-v8.12"}
+            "build": "2026.08.19-live-availability-v8.13"}
 
 
 @app.get("/api/public/config")
@@ -501,6 +501,53 @@ def public_catalog(db: Session = Depends(get_db)):
                                                        PackageOption.is_active.is_(True))
                           .order_by(PackageOption.display_order, PackageOption.price)).all()
     return {"packages": [package_json(x) for x in packages]}
+
+
+def website_date_is_booked(db: Session, wedding_date: date) -> bool:
+    """Return availability without exposing any client or wedding details.
+
+    Native and imported Weddings By Mark jobs both protect the date. Enquiries,
+    unaccepted quotes, cancelled bookings and Testing Mode records do not.
+    Archived active jobs remain protected so hiding a record cannot accidentally
+    advertise its date as available.
+    """
+    accepted_quote = select(Quote.id).where(
+        Quote.booking_id == Booking.id,
+        Quote.status == "accepted",
+    ).exists()
+    booking_id = db.scalar(select(Booking.id).where(
+        Booking.brand == Brand.WBM,
+        Booking.kind == RecordKind.WEDDING,
+        Booking.event_date == wedding_date,
+        Booking.is_test.is_(False),
+        Booking.status != RecordStatus.CANCELLED,
+        or_(
+            Booking.status.in_([
+                RecordStatus.CONFIRMED,
+                RecordStatus.IN_PROGRESS,
+                RecordStatus.COMPLETED,
+            ]),
+            accepted_quote,
+        ),
+    ).limit(1))
+    return booking_id is not None
+
+
+@app.get("/api/public/availability")
+def public_wedding_availability(date: date = Query(...), db: Session = Depends(get_db)):
+    """Privacy-safe live date result for the public website checker."""
+    result = "Unavailable" if date < datetime.now().astimezone().date() else (
+        "Booked" if website_date_is_booked(db, date) else "Available"
+    )
+    return Response(
+        content=result,
+        media_type="text/plain",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-store, max-age=0",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 def website_enquiry_template(db: Session) -> FormTemplate:
