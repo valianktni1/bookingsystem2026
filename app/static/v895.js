@@ -16,6 +16,8 @@
 
   function workspaceFacts(r, portal) {
     const journey = recordJourneyFacts(r, portal);
+    const contractFullySigned = Boolean(journey.contract &&
+      (journey.contract.is_legacy_import || journey.contract.fully_signed || journey.contract.supplier_signed_at));
     const activeInvoices = (r.invoices || []).filter(invoice => invoice.status !== "void");
     const voidInvoices = (r.invoices || []).filter(invoice => invoice.status === "void");
     const outstanding = activeInvoices.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0);
@@ -23,12 +25,12 @@
     const nextDue = activeInvoices
       .filter(invoice => Number(invoice.balance || 0) > 0 && invoice.due_date)
       .sort((a, b) => a.due_date.localeCompare(b.due_date))[0]?.due_date || r.balance_due_date;
-    return { ...journey, activeInvoices, voidInvoices, outstanding, paid, nextDue };
+    return { ...journey, contractFullySigned, activeInvoices, voidInvoices, outstanding, paid, nextDue };
   }
 
   function workspaceSections(r, portal) {
     const facts = workspaceFacts(r, portal);
-    const formCount = Number(Boolean(facts.bookingForm)) + Number(Boolean(facts.contract));
+    const formCount = Number(Boolean(facts.bookingForm)) + Number(facts.contractFullySigned);
     return [
       { tab: "Overview", icon: "⌂", label: "Overview", meta: `${(r.tasks || []).filter(task => !task.completed).length} to do` },
       { tab: "Quote", icon: "✉", label: "Quote & emails", meta: facts.quote ? "Accepted" : facts.quoteSent ? "Sent" : "Not sent" },
@@ -65,15 +67,15 @@
       { label: "Quote", done: Boolean(facts.quote), current: !facts.quote, tab: "Quote" },
       { label: "Payment", done: facts.hasPayment, current: Boolean(facts.quote && !facts.hasPayment), tab: "Payments" },
       { label: "Booking form", done: Boolean(facts.bookingForm), current: Boolean(facts.hasPayment && !facts.bookingForm), tab: "Forms" },
-      { label: "Agreement", done: Boolean(facts.contract), current: Boolean(facts.bookingForm && !facts.contract), tab: "Forms" },
-      { label: "Wedding", done: weddingDone, current: Boolean(facts.contract && !weddingDone), tab: "Overview" }
+      { label: "Agreement", done: facts.contractFullySigned, current: Boolean(facts.bookingForm && !facts.contractFullySigned), tab: "Forms" },
+      { label: "Wedding", done: weddingDone, current: Boolean(facts.contractFullySigned && !weddingDone), tab: "Overview" }
     ];
     return `<nav class="record-stage-bar" aria-label="Wedding workflow">${stages.map((stage, index) => `<button class="${stage.done ? "done" : stage.current ? "current" : ""}" data-stage-tab="${stage.tab}"><i>${stage.done ? "✓" : index + 1}</i><span>${stage.label}</span></button>`).join("")}</nav>`;
   }
 
   function bookingSnapshot(r, portal) {
     const facts = workspaceFacts(r, portal);
-    const formCount = Number(Boolean(facts.bookingForm)) + Number(Boolean(facts.contract));
+    const formCount = Number(Boolean(facts.bookingForm)) + Number(facts.contractFullySigned);
     return `<section class="record-snapshot">
       <article><small>${r.kind === "wedding" ? "WEDDING DATE" : "TARGET DATE"}</small><strong>${esc(fmtDate(r.event_date))}</strong></article>
       <article><small>PACKAGE / SERVICE</small><strong>${esc(r.package_name || "Not selected")}</strong></article>
@@ -194,15 +196,39 @@
     const portal = state.currentPortal || {};
     const bookingForm = (portal.submissions || []).find(item => item.form_type === "booking_form");
     const contract = portal.contract;
+    const fullySigned = Boolean(contract && (contract.is_legacy_import || contract.fully_signed || contract.supplier_signed_at));
+    const needsCountersignature = Boolean(contract && !contract.is_legacy_import && !fullySigned);
+    const completionEmail = (portal.emails || []).find(item => item.template_key === "contract_completed");
+    const needsCompletionEmail = Boolean(fullySigned && !contract.is_legacy_import && completionEmail?.status !== "sent");
     const answerHost = document.createElement("div");
     originalQuestionnairesV895(r, answerHost);
     body.innerHTML = `<section class="forms-status-grid">
       <article class="${bookingForm ? "complete" : "waiting"}"><i>${bookingForm ? "✓" : "1"}</i><span><small>WEDDING BOOKING FORM</small><strong>${bookingForm ? "Completed" : "Waiting for client"}</strong><em>${bookingForm ? esc(fmtDateTime(bookingForm.submitted_at)) : "Answers will appear below when submitted."}</em></span></article>
-      <article class="${contract ? "complete" : "waiting"}"><i>${contract ? "✓" : "2"}</i><span><small>AGREEMENT</small><strong>${contract ? "Signed and accepted" : "Waiting for client"}</strong><em>${contract ? `${esc(contract.accepted_name)} · ${esc(fmtDateTime(contract.accepted_at))}` : "The agreement follows the booking form."}</em></span></article>
+      <article class="${fullySigned ? "complete" : "waiting"}"><i>${fullySigned ? "✓" : "2"}</i><span><small>AGREEMENT</small><strong>${fullySigned ? (contract.is_legacy_import ? "Original agreement retained" : "Signed by both parties") : needsCountersignature ? "Couple signed · your signature needed" : "Waiting for client"}</strong><em>${fullySigned && !contract.is_legacy_import ? `${esc(contract.accepted_name)} and ${esc(contract.supplier_signed_name || "Mark Adam Powell")}` : contract ? `${esc(contract.accepted_name)} · ${esc(fmtDateTime(contract.accepted_at))}` : "The agreement follows the booking form."}</em></span></article>
     </section>
-    ${contract ? `<section class="agreement-summary"><div><small>ACCEPTED AGREEMENT</small><strong>${esc(contract.version || "Saved agreement")}</strong><span>Accepted by ${esc(contract.accepted_name)} using ${esc(contract.accepted_email || r.client.email)} on ${esc(fmtDateTime(contract.accepted_at))}.</span></div><b>Protected record</b></section>` : ""}
+    ${contract ? `<section class="agreement-summary ${needsCountersignature ? "needs-countersignature" : ""}"><div><small>${fullySigned ? "PROTECTED AGREEMENT" : "COUNTERSIGNATURE REQUIRED"}</small><strong>${esc(contract.version || "Saved agreement")}</strong><span>Client: ${esc(contract.accepted_name)} · ${esc(fmtDateTime(contract.accepted_at))}${fullySigned && !contract.is_legacy_import ? `<br>Supplier: ${esc(contract.supplier_signed_name || "Mark Adam Powell")} · ${esc(fmtDateTime(contract.supplier_signed_at))}` : needsCountersignature ? "<br>The client has signed; Mark has not yet countersigned." : ""}</span></div><div class="agreement-summary-actions">${!contract.is_legacy_import ? `<button class="secondary" data-preview-contract>View agreement</button><a class="secondary" href="/api/bookings/${r.id}/contract.pdf">Download</a>` : ""}${needsCountersignature ? `<button class="primary" data-countersign-contract>Countersign as Mark Adam Powell & email couple</button>` : needsCompletionEmail ? `<button class="primary" data-send-contract-completion>Send signed-agreement email</button>` : `<b>Protected record</b>`}</div></section>` : ""}
     <div class="forms-client-controls"><span>Need to resend their link or correct a submitted item?</span><button id="forms-open-client-area" class="secondary">Open client-area controls</button></div>
     <div class="forms-answer-host">${answerHost.innerHTML}</div>`;
     $("#forms-open-client-area", body).onclick = () => selectRecordTab(r, "Quote");
+    if ($("[data-preview-contract]", body)) $("[data-preview-contract]", body).onclick = () => showPdfPreview("Wedding agreement", `/api/bookings/${r.id}/contract.pdf?inline=true`, `/api/bookings/${r.id}/contract.pdf`);
+    if ($("[data-countersign-contract]", body)) $("[data-countersign-contract]", body).onclick = async () => {
+      if (!confirm(`Countersign this agreement as Mark Adam Powell and email ${r.client.email}?`)) return;
+      try {
+        const result = await api(`/api/bookings/${r.id}/contract/countersign`, { method: "POST" });
+        if (result.completion_email_sent) toast("Agreement countersigned and confirmation emailed");
+        else toast(`Agreement countersigned, but the email was not sent: ${result.completion_email_error}`, "error");
+        await refresh();
+        openDrawer(r.id, "Forms");
+      } catch (error) { toast(error.message, "error"); }
+    };
+    if ($("[data-send-contract-completion]", body)) $("[data-send-contract-completion]", body).onclick = async () => {
+      if (!confirm(`Send the completed agreement confirmation to ${r.client.email}?`)) return;
+      try {
+        await api(`/api/bookings/${r.id}/contract/completion-email`, { method: "POST" });
+        toast("Signed-agreement confirmation emailed");
+        await refresh();
+        openDrawer(r.id, "Forms");
+      } catch (error) { toast(error.message, "error"); }
+    };
   }
 })();

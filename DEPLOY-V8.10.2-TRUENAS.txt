@@ -1,0 +1,36 @@
+BOOKINGSYSTEM2026 V8.10.2 - TRUENAS DEPLOYMENT
+================================================
+
+1. Upload this complete release to the root of the bookingsystem2026 GitHub repo.
+
+2. Take a safe PostgreSQL backup:
+
+BOOKING_CASH_BACKUP=/mnt/temp-tntermediate/bookingapp2026data/migration-backups/bookingapp-before-cash-payments-v8.10.2-2026-08-18.dump
+
+if [ -e "$BOOKING_CASH_BACKUP" ]; then
+  echo "STOP: Booking backup already exists — nothing was overwritten"
+else
+  docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > "$BOOKING_CASH_BACKUP"
+fi
+
+ls -lh "$BOOKING_CASH_BACKUP"
+docker exec -i bookingsystem2026-db pg_restore -l < "$BOOKING_CASH_BACKUP" | head
+
+3. Rebuild the Booking app:
+
+BOOKING_COMPOSE=/mnt/apps/dockge/data/bookingsystem2026/compose.yaml
+
+docker compose -f "$BOOKING_COMPOSE" down
+docker compose -f "$BOOKING_COMPOSE" build --no-cache app
+docker compose -f "$BOOKING_COMPOSE" up -d
+
+4. Verify:
+
+docker compose -f "$BOOKING_COMPOSE" ps
+curl -fsS http://127.0.0.1:30049/api/health
+echo
+
+Expected build:
+2026.08.18-cash-payment-method-v8.10.2
+
+No YAML changes are required.

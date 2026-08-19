@@ -363,6 +363,9 @@ class ContractAcceptance(Base):
     source_detail: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_legacy_import: Mapped[bool] = mapped_column(Boolean, default=False)
     accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    supplier_signed_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    supplier_signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    supplier_signature_method: Mapped[str | None] = mapped_column(String(100), nullable=True)
     booking: Mapped[Booking] = relationship()
 
 

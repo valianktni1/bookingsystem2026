@@ -185,7 +185,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "imap_configured": False,
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
-                                 "build": "2026.08.17-chronological-invoices-v8.10.1"}
+                                     "build": "2026.08.18-workflow-assurance-v8.10.3"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -375,11 +375,18 @@ def test_phase_two_b_flow(monkeypatch):
         assert client.get(f"/api/bookings/{digital_data['id']}").json()["status"] == "confirmed"
 
         payment = client.post(f"/api/invoices/{wbm_invoice.json()['id']}/payments", json={
-            "amount": 999, "paid_date": "2026-08-03", "reference": "WBM02001"
+            "amount": 999, "paid_date": "2026-08-03", "payment_type": "cash",
+            "reference": "WBM02001"
         })
         assert payment.status_code == 201
         assert payment.json()["status"] == "paid"
         assert payment.json()["balance"] == 0
+        refreshed_wedding = client.get(f"/api/bookings/{wedding_data['id']}").json()
+        assert any(
+            row["payment_type"] == "cash"
+            for invoice in refreshed_wedding["invoices"]
+            for row in invoice["payments"]
+        )
 
         pdf = client.get(f"/api/invoices/{wbm_invoice.json()['id']}/pdf")
         assert pdf.status_code == 200
@@ -713,13 +720,15 @@ def test_phase_two_b_flow(monkeypatch):
             assert partial_payment.json()["status"] == "part_paid"
             assert partial_payment.json()["balance"] == invoice["total"] - 50
 
-        assert [mail["key"] for mail in journey_emails] == [
-            "quote", "quote_accepted", "payment_received"
-        ]
-        assert "Wedding Booking Form/questionnaire" in journey_emails[1]["body"]
-        assert "digitally sign your wedding contract" in journey_emails[1]["body"]
-        assert journey_emails[1]["portal_url"].endswith(f"/client/{quote_token}")
-        payment_mail = journey_emails[2]
+            assert [mail["key"] for mail in journey_emails] == [
+                "quote", "quote_accepted", "contract_completed", "payment_received"
+            ]
+            assert "Wedding Booking Form/questionnaire" in journey_emails[1]["body"]
+            assert "digitally sign your wedding contract" in journey_emails[1]["body"]
+            assert journey_emails[1]["portal_url"].endswith(f"/client/{quote_token}")
+            assert "countersigned by Mark Adam Powell" in journey_emails[2]["body"]
+            assert journey_emails[2]["portal_url"].endswith("?tab=agreement")
+            payment_mail = journey_emails[3]
         assert payment_mail["values"]["payment_amount"] == "£50.00"
         assert payment_mail["values"]["total_paid"] == "£50.00"
         assert payment_mail["values"]["payment_status"] == "Your booking is secured"

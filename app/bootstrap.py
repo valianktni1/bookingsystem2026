@@ -220,6 +220,7 @@ A £150 deposit secures your date."""),
         "enquiry_received": ("Website enquiry acknowledgement", "Thank you for your Weddings By Mark enquiry", "Hi {client_first_name},\n\nThank you for getting in touch about your wedding on {event_date} at {venue_or_project}. I have received your enquiry and will come back to you as soon as I can.\n\nYour secure wedding area has also been created. You can use this private link to return to your enquiry and, once prepared, view your package quote:\n{portal_url}\n\nIn the meantime, if you need to add anything, simply reply to this email.\n\nMark\nWeddings By Mark\n{business_phone}"),
         "new_enquiry_admin": ("New website enquiry - notify Mark", "New wedding enquiry - {couple_or_company} - {event_date}", "Hi Mark,\n\nA new wedding enquiry has just been submitted through your website.\n\nCouple: {couple_or_company}\nWedding date: {event_date}\nVenue/location: {venue_or_project}\nEmail: {client_email}\nPhone: {client_phone}\nPackage interest: {package_interest}\nSelfie booth interest: {selfie_booth_interest}\nSpecial offer code: {promo_code}\nHow they found you: {heard_about_us}\n\nTheir message:\n{enquiry_message}\n\nFun question answer:\n{fun_answer}\n\nOpen the booking system:\n{admin_url}\n\nYou can reply directly to this notification and it will go to the couple.\n\nWeddings By Mark Booking System"),
         "quote_accepted": ("Package accepted and invoice ready", "Your package is confirmed and your invoice is ready", "Hi {client_first_name},\n\nThank you for choosing your Weddings By Mark package. Your selection and any add-ons have been saved, and your invoice is now available in your wedding booking:\n\n{portal_url}\n\nYour booking fee of {deposit_amount} is due by {deposit_due_date}. The remaining balance is due by {balance_due_date}.\n\nPlease use the same secure link to complete your Wedding Booking Form/questionnaire and read and digitally sign your wedding contract. The invoice also contains the bank-transfer details and payment reference.\n\nYour date is secured as soon as I receive your first payment.\n\nMark\nWeddings By Mark\n{business_phone}"),
+        "contract_completed": ("Agreement signed by both parties", "Your wedding agreement is now signed by both parties", "Hi {client_first_name},\n\nThank you for completing your wedding agreement.\n\nI am pleased to confirm that it has now been signed by you and countersigned by Mark Adam Powell on behalf of Weddings By Mark. A protected copy, including both names and the date and time of acceptance, is safely retained with your wedding booking.\n\nYou can view your completed agreement, invoice, payment history and all of your wedding details at any time using your secure booking link:\n\n{portal_url}\n\nThank you again for choosing Weddings By Mark. I am genuinely looking forward to being part of your special day.\n\nWarmest regards,\nMark\nWeddings By Mark\n{business_phone}"),
     }
     for brand in (Brand.WBM, Brand.IVORY):
         for key, (name, subject, body) in template_rows.items():
@@ -227,9 +228,14 @@ A £150 deposit secures your date."""),
                                                 "new_enquiry_admin", "quote_followup_1",
                                                 "quote_followup_final", "deposit_due_1", "check_in_120",
                                                 "balance_due_7", "balance_due_10", "balance_due_1",
-                                                "balance_overdue_2"):
+                                                "balance_overdue_2", "contract_completed"):
                 continue
-            if fresh_install and not db.scalar(select(EmailTemplate).where(EmailTemplate.brand == brand, EmailTemplate.template_key == key)):
+            # New system templates must also be added safely to an existing
+            # installation. Existing edited templates are never overwritten.
+            existing_template = db.scalar(select(EmailTemplate).where(
+                EmailTemplate.brand == brand, EmailTemplate.template_key == key
+            ))
+            if not existing_template and (fresh_install or key == "contract_completed"):
                 db.add(EmailTemplate(brand=brand, template_key=key, display_name=name, subject=subject, body=body))
 
     # There is one Wedding Booking Form/questionnaire only. Final details are

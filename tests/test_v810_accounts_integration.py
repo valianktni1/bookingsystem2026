@@ -60,6 +60,13 @@ def test_payload_preserves_number_cancellation_and_signed_refund():
     assert payload["event_id"].endswith(digest[:32])
 
 
+def test_cash_payment_method_is_preserved_for_accounts():
+    invoice = linked_invoice()
+    invoice.payments[0].payment_type = "cash"
+    payload, _ = build_invoice_payload(invoice)
+    assert payload["payments"][0]["payment_type"] == "cash"
+
+
 def test_payload_revision_is_deterministic_and_changes_with_financial_state():
     invoice = linked_invoice()
     first, first_hash = build_invoice_payload(invoice)

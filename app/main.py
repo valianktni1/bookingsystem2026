@@ -32,7 +32,7 @@ from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, 
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
                      EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, PackageOption, Payment,
                      Quote, RecordKind, RecordStatus, ReminderLog, SystemSetting, Task)
-from .pdf import invoice_pdf
+from .pdf import contract_acceptance_pdf, invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
                       BookingFormTemplateIn, EnquiryFormTemplateIn,
@@ -71,7 +71,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.10.1-chronological-invoices", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.10.3-workflow-assurance", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -98,6 +98,7 @@ def issue_client_email_url(db: Session, booking: Booking, template_key: str,
         "quote_accepted": "invoices",
         "deposit_due_1": "invoices",
         "payment_received": "invoices",
+        "contract_completed": "agreement",
         "balance_due_7": "invoices",
         "balance_due_1": "invoices",
         "balance_overdue_2": "invoices",
@@ -480,7 +481,7 @@ def health():
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
             "accounts_integration_enabled": settings.accounts_integration_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
-            "build": "2026.08.17-chronological-invoices-v8.10.1"}
+            "build": "2026.08.18-workflow-assurance-v8.10.3"}
 
 
 @app.get("/api/public/config")
@@ -1194,7 +1195,7 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
             invoice.booking.deposit_paid_date = payload.paid_date
         if money(invoice.booking.deposit_amount) <= 0:
             invoice.booking.deposit_amount = payload.amount
-        # Any first bank-transfer payment secures an enquiry, even when it is
+        # Any first genuine payment secures an enquiry, even when it is
         # only part of the requested booking fee (for example £50 of £100).
         auto_confirmed = confirm_when_paid(invoice.booking)
     audit(db, "record_payment", "booking", invoice.booking_id,
@@ -1279,11 +1280,13 @@ def delete_payment(payment_id: str, _: Admin = Depends(current_admin), db: Sessi
 
 
 @app.get("/api/invoices/{invoice_id}/pdf")
-def download_invoice_pdf(invoice_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+def download_invoice_pdf(invoice_id: str, inline: bool = Query(False),
+                         _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     invoice = full_invoice(db, invoice_id)
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile), media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{invoice.number}.pdf"'})
+                    headers={"Content-Disposition":
+                             f'{"inline" if inline else "attachment"}; filename="{invoice.number}.pdf"'})
 
 
 @app.get("/api/invoices/{invoice_id}/receipt.pdf")
@@ -1421,20 +1424,16 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
     client_templates = db.scalars(select(EmailTemplate).where(
         EmailTemplate.brand == booking.brand,
         EmailTemplate.is_active.is_(True),
-        EmailTemplate.template_key != "new_enquiry_admin",
+        EmailTemplate.template_key.notin_(("new_enquiry_admin", "contract_completed")),
     ).order_by(EmailTemplate.display_name)).all()
     return {
         "submissions": [{"id": x.id, "form_type": x.form_type, "data": x.data,
                          "submission_source": x.submission_source,
                          "submitted_at": x.submitted_at.isoformat()} for x in submissions],
-        "contract": ({"accepted_name": acceptance.accepted_name, "accepted_email": acceptance.accepted_email,
-                      "accepted_at": acceptance.accepted_at.isoformat(), "version": acceptance.contract_version,
-                      "acceptance_source": acceptance.acceptance_source,
-                      "source_detail": acceptance.source_detail,
-                      "is_legacy_import": acceptance.is_legacy_import}
-                     if acceptance else None),
+        "contract": (contract_acceptance_json(acceptance) if acceptance else None),
         "emails": [{"template_key": x.template_key, "recipient": x.recipient, "subject": x.subject,
-                    "status": x.status, "sent_at": x.sent_at.isoformat()} for x in logs],
+                    "status": x.status, "error": x.error,
+                    "sent_at": x.sent_at.isoformat()} for x in logs],
         "quote": quote_data,
         "quote_preparation": quote_preparation_json(booking),
         "automation_suppressed": booking.automation_suppressed,
@@ -1442,6 +1441,23 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "email_templates": [{"template_key": item.template_key,
                              "display_name": item.display_name}
                             for item in client_templates],
+    }
+
+
+def contract_acceptance_json(acceptance: ContractAcceptance) -> dict:
+    return {
+        "accepted_name": acceptance.accepted_name,
+        "accepted_email": acceptance.accepted_email,
+        "accepted_at": acceptance.accepted_at.isoformat(),
+        "version": acceptance.contract_version,
+        "acceptance_source": acceptance.acceptance_source,
+        "source_detail": acceptance.source_detail,
+        "is_legacy_import": acceptance.is_legacy_import,
+        "supplier_signed_name": acceptance.supplier_signed_name,
+        "supplier_signed_at": (acceptance.supplier_signed_at.isoformat()
+                               if acceptance.supplier_signed_at else None),
+        "supplier_signature_method": acceptance.supplier_signature_method,
+        "fully_signed": bool(acceptance.is_legacy_import or acceptance.supplier_signed_at),
     }
 
 
@@ -1871,11 +1887,13 @@ def public_invoice_for_portal(db: Session, token: str, invoice_id: str) -> Invoi
 
 
 @app.get("/api/client/{token}/invoices/{invoice_id}/invoice.pdf")
-def public_invoice_pdf(token: str, invoice_id: str, db: Session = Depends(get_db)):
+def public_invoice_pdf(token: str, invoice_id: str, inline: bool = Query(False),
+                       db: Session = Depends(get_db)):
     invoice = public_invoice_for_portal(db, token, invoice_id)
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile), media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{invoice.number}.pdf"'})
+                    headers={"Content-Disposition":
+                             f'{"inline" if inline else "attachment"}; filename="{invoice.number}.pdf"'})
 
 
 @app.get("/api/client/{token}/invoices/{invoice_id}/receipt.pdf")
@@ -2115,6 +2133,8 @@ def accept_contract(token: str, payload: ContractAcceptIn, request: Request, db:
     portal = resolve_portal(db, token)
     booking = portal.booking
     require_booking_journey_unlocked(db, booking)
+    if booking.legacy_source == "studio_ninja":
+        raise HTTPException(409, "This original Studio Ninja agreement remains protected and unchanged")
     if payload.accepted_email.lower() != booking.client.email.lower():
         raise HTTPException(422, "Please use the email address shown on your booking")
     if db.scalar(select(ContractAcceptance).where(ContractAcceptance.booking_id == booking.id)):
@@ -2123,6 +2143,7 @@ def accept_contract(token: str, payload: ContractAcceptIn, request: Request, db:
                                                         ContractTemplate.is_active.is_(True)))
     if not contract:
         raise HTTPException(404, "No active agreement is available")
+    signed_at = datetime.now(timezone.utc)
     forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
     row = ContractAcceptance(booking_id=booking.id, contract_title=contract.title,
                              contract_version=contract.version, contract_body=contract.body,
@@ -2130,15 +2151,148 @@ def accept_contract(token: str, payload: ContractAcceptIn, request: Request, db:
                              accepted_email=str(payload.accepted_email).lower(),
                              ip_address=forwarded or (request.client.host if request.client else None),
                              user_agent=request.headers.get("user-agent", "")[:500],
-                             acceptance_source="client_portal", is_legacy_import=False)
+                             acceptance_source="client_portal", is_legacy_import=False,
+                             accepted_at=signed_at,
+                             supplier_signed_name="Mark Adam Powell",
+                             supplier_signed_at=signed_at,
+                             supplier_signature_method="automatic_after_client_acceptance")
     db.add(row)
+    db.flush()
     for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
                                               Task.title.ilike("%contract%"))).all():
         task.completed = True
+    completion_email_sent, completion_email_error = send_contract_completion_email(db, booking)
     audit(db, "accept_contract", "booking", booking.id,
-          {"version": contract.version, "accepted_name": row.accepted_name})
+          {"version": contract.version, "accepted_name": row.accepted_name,
+           "supplier_signed_name": row.supplier_signed_name,
+           "completion_email_sent": completion_email_sent})
     db.commit()
-    return {"ok": True, "accepted_at": row.accepted_at.isoformat()}
+    return {"ok": True, "accepted_at": row.accepted_at.isoformat(),
+            "supplier_signed_name": row.supplier_signed_name,
+            "supplier_signed_at": row.supplier_signed_at.isoformat(),
+            "completion_email_sent": completion_email_sent,
+            "completion_email_error": completion_email_error}
+
+
+def send_contract_completion_email(db: Session, booking: Booking) -> tuple[bool, str | None]:
+    """Notify the client after both parties are recorded without touching legacy imports."""
+    recipient = client_email_recipient(db, booking)
+    template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == booking.brand,
+        EmailTemplate.template_key == "contract_completed",
+        EmailTemplate.is_active.is_(True),
+    ))
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    error = None
+    if not automations_allowed(booking):
+        error = "Automatic client email is paused for this imported booking"
+    elif not template:
+        error = "The signed-agreement email template is missing or inactive"
+    elif not profile:
+        error = "The business profile is missing"
+    elif not smtp_ready(booking.brand):
+        error = f"SMTP is not configured for {booking.brand.value}"
+    if error:
+        db.add(EmailLog(booking_id=booking.id, template_key="contract_completed",
+                        recipient=recipient,
+                        subject=(template.subject if template else "Agreement signed by both parties"),
+                        status="failed", error=error))
+        return False, error
+    portal_url = issue_client_email_url(db, booking, "contract_completed")
+    try:
+        subject, _ = send_booking_template_email(db, booking, profile, template, portal_url)
+        db.add(EmailLog(booking_id=booking.id, template_key="contract_completed",
+                        recipient=recipient, subject=subject, status="sent"))
+        return True, None
+    except Exception as exc:
+        error = str(exc)
+        db.add(EmailLog(booking_id=booking.id, template_key="contract_completed",
+                        recipient=recipient, subject=template.subject,
+                        status="failed", error=error[:2000]))
+        return False, error
+
+
+@app.post("/api/bookings/{booking_id}/contract/countersign")
+def countersign_existing_contract(booking_id: str, _: Admin = Depends(current_admin),
+                                  db: Session = Depends(get_db)):
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(Booking.id == booking_id))
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    acceptance = db.scalar(select(ContractAcceptance).where(
+        ContractAcceptance.booking_id == booking.id
+    ))
+    if not acceptance:
+        raise HTTPException(409, "The client has not accepted the agreement yet")
+    if acceptance.is_legacy_import or booking.legacy_source == "studio_ninja":
+        raise HTTPException(409, "Imported Studio Ninja agreements remain protected and unchanged")
+    if acceptance.supplier_signed_at:
+        raise HTTPException(409, "This agreement has already been countersigned")
+    acceptance.supplier_signed_name = "Mark Adam Powell"
+    acceptance.supplier_signed_at = datetime.now(timezone.utc)
+    acceptance.supplier_signature_method = "admin_authorised_existing_acceptance"
+    completion_email_sent, completion_email_error = send_contract_completion_email(db, booking)
+    audit(db, "countersign_contract", "booking", booking.id,
+          {"supplier_signed_name": acceptance.supplier_signed_name,
+           "completion_email_sent": completion_email_sent})
+    db.commit()
+    return {"ok": True, "contract": contract_acceptance_json(acceptance),
+            "completion_email_sent": completion_email_sent,
+            "completion_email_error": completion_email_error}
+
+
+@app.post("/api/bookings/{booking_id}/contract/completion-email")
+def resend_contract_completion_email(booking_id: str, _: Admin = Depends(current_admin),
+                                     db: Session = Depends(get_db)):
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(
+        Booking.id == booking_id
+    ))
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    acceptance = db.scalar(select(ContractAcceptance).where(
+        ContractAcceptance.booking_id == booking.id
+    ))
+    if not acceptance or not acceptance.supplier_signed_at:
+        raise HTTPException(409, "The agreement must be signed by both parties first")
+    if acceptance.is_legacy_import or booking.legacy_source == "studio_ninja":
+        raise HTTPException(409, "Imported Studio Ninja agreements remain protected and unchanged")
+    sent, error = send_contract_completion_email(db, booking)
+    audit(db, "send_contract_completion_email", "booking", booking.id,
+          {"sent": sent, "error": error})
+    db.commit()
+    if not sent:
+        raise HTTPException(503, error or "The signed-agreement email could not be sent")
+    return {"ok": True, "completion_email_sent": True}
+
+
+def contract_for_booking(db: Session, booking_id: str) -> tuple[ContractAcceptance, BusinessProfile]:
+    acceptance = db.scalar(select(ContractAcceptance).where(
+        ContractAcceptance.booking_id == booking_id
+    ))
+    if not acceptance:
+        raise HTTPException(404, "No accepted agreement is available for this booking")
+    booking = db.get(Booking, booking_id)
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    if not profile:
+        raise HTTPException(404, "Business profile not found")
+    return acceptance, profile
+
+
+@app.get("/api/bookings/{booking_id}/contract.pdf")
+def admin_contract_pdf(booking_id: str, inline: bool = Query(False),
+                       _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    acceptance, profile = contract_for_booking(db, booking_id)
+    return Response(contract_acceptance_pdf(acceptance, profile), media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             f'{"inline" if inline else "attachment"}; filename="signed-agreement.pdf"'})
+
+
+@app.get("/api/client/{token}/contract.pdf")
+def public_contract_pdf(token: str, inline: bool = Query(False), db: Session = Depends(get_db)):
+    portal = resolve_portal(db, token)
+    acceptance, profile = contract_for_booking(db, portal.booking_id)
+    return Response(contract_acceptance_pdf(acceptance, profile), media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             f'{"inline" if inline else "attachment"}; filename="signed-agreement.pdf"'})
 
 
 def run_due_reminders(db: Session) -> dict:

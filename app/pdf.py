@@ -12,7 +12,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (HRFlowable, Image, KeepTogether, Paragraph, SimpleDocTemplate,
                                 Spacer, Table, TableStyle)
 
-from .models import Brand, BusinessProfile, Invoice
+from .models import Brand, BusinessProfile, ContractAcceptance, Invoice
 
 
 BRANDING_DIR = Path(__file__).parent / "static" / "branding"
@@ -49,6 +49,96 @@ def fitted_image(path, max_width, max_height) -> Image | None:
     width, height = ImageReader(str(path)).getSize()
     scale = min(max_width / width, max_height / height)
     return Image(str(path), width=width * scale, height=height * scale)
+
+
+def contract_acceptance_pdf(acceptance: ContractAcceptance, profile: BusinessProfile) -> bytes:
+    """Create the protected agreement snapshot with both parties recorded."""
+    branding = BRAND_ASSETS.get(profile.brand, BRAND_ASSETS[Brand.WBM])
+    accent = branding["accent"]
+    ink = branding["ink"]
+    pale = branding["pale"]
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output, pagesize=A4, rightMargin=18 * mm, leftMargin=18 * mm,
+        topMargin=17 * mm, bottomMargin=17 * mm,
+        title=f"{acceptance.contract_title} - signed agreement",
+    )
+    styles = getSampleStyleSheet()
+    normal = ParagraphStyle("AgreementNormal", parent=styles["Normal"], fontName="Helvetica",
+                            fontSize=9, leading=13, textColor=ink)
+    small = ParagraphStyle("AgreementSmall", parent=normal, fontSize=7.5, leading=10,
+                           textColor=MUTED)
+    heading = ParagraphStyle("AgreementHeading", parent=styles["Title"], fontName="Helvetica-Bold",
+                             fontSize=22, leading=27, textColor=ink)
+    section_heading = ParagraphStyle("AgreementSection", parent=normal, fontName="Helvetica-Bold",
+                                     fontSize=11, leading=15, textColor=ink, spaceAfter=5)
+    story = []
+    logo = fitted_image(branding.get("logo"), 70 * mm, 33 * mm)
+    identity = [logo] if logo else [Paragraph(f"<b>{escape(profile.display_name)}</b>", normal)]
+    header = Table([[identity, Paragraph("SIGNED AGREEMENT", heading)]], colWidths=[90 * mm, 66 * mm])
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story.extend([
+        header, Spacer(1, 5 * mm), HRFlowable(color=accent, thickness=2), Spacer(1, 7 * mm),
+        Paragraph(escape(acceptance.contract_title), section_heading),
+        Paragraph(f"Version {escape(acceptance.contract_version)}", small),
+        Spacer(1, 6 * mm),
+    ])
+    body = escape(acceptance.contract_body or "").replace("\n", "<br/>")
+    story.extend([Paragraph(body, normal), Spacer(1, 9 * mm)])
+
+    def signed_at(value) -> str:
+        return value.strftime("%d %B %Y at %H:%M UTC") if value else "Not recorded"
+
+    supplier_name = acceptance.supplier_signed_name or "Awaiting supplier countersignature"
+    signature_rows = [
+        [Paragraph("<b>CLIENT ACCEPTANCE</b>", small), Paragraph("<b>SUPPLIER COUNTERSIGNATURE</b>", small)],
+        [Paragraph(f"<b>{escape(acceptance.accepted_name)}</b>", normal),
+         Paragraph(f"<b>{escape(supplier_name)}</b>", normal)],
+        [Paragraph(escape(acceptance.accepted_email), small),
+         Paragraph(escape(profile.email or profile.display_name), small)],
+        [Paragraph(signed_at(acceptance.accepted_at), small),
+         Paragraph(signed_at(acceptance.supplier_signed_at), small)],
+        [Paragraph("Electronically accepted through the secure client portal", small),
+         Paragraph("Automatically countersigned on behalf of the supplier after client acceptance"
+                   if acceptance.supplier_signed_at else "Supplier countersignature pending", small)],
+    ]
+    signatures = Table(signature_rows, colWidths=[77 * mm, 77 * mm])
+    signatures.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), pale),
+        ("BOX", (0, 0), (-1, -1), .7, colors.HexColor("#d8d0c1")),
+        ("INNERGRID", (0, 0), (-1, -1), .35, colors.HexColor("#e6dfd3")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    story.extend([
+        KeepTogether([Paragraph("Agreement record", section_heading), signatures]),
+        Spacer(1, 6 * mm),
+        Paragraph(
+            "This PDF is generated from the protected agreement snapshot retained by the booking system. "
+            "The original wording and acceptance audit are not changed when the live template is edited later.",
+            small,
+        ),
+    ])
+    def agreement_footer(canvas, document):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#ded7ca"))
+        canvas.setLineWidth(.4)
+        canvas.line(18 * mm, 11 * mm, A4[0] - 18 * mm, 11 * mm)
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(MUTED)
+        canvas.drawString(18 * mm, 7 * mm, profile.display_name)
+        canvas.drawRightString(A4[0] - 18 * mm, 7 * mm, f"Page {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=agreement_footer, onLaterPages=agreement_footer)
+    return output.getvalue()
 
 
 def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = False) -> bytes:
@@ -91,8 +181,6 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     client_name = client.company_name or invoice.booking.title
     client_lines = "<br/>".join(escape(str(x)) for x in [client_name, client.email, client.phone, client.address] if x)
     meta_lines = [f"<b>Number</b>&nbsp;&nbsp; {invoice.number}", f"<b>Issue date</b>&nbsp;&nbsp; {invoice.issue_date.strftime('%d %B %Y')}"]
-    if invoice.legacy_number:
-        meta_lines.append(f"<b>Previous Studio Ninja number</b>&nbsp;&nbsp; {escape(invoice.legacy_number)}")
     if invoice.deposit_due_date:
         meta_lines.append(f"<b>Booking fee due</b>&nbsp;&nbsp; {invoice.deposit_due_date.strftime('%d %B %Y')}")
     if invoice.due_date:

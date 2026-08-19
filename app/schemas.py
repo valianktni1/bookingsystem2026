@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -102,7 +103,7 @@ class InvoiceDueDatePatch(BaseModel):
 class PaymentIn(BaseModel):
     amount: Decimal = Field(gt=0)
     paid_date: date = Field(default_factory=date.today)
-    payment_type: str = Field(default="bank_transfer", max_length=40)
+    payment_type: Literal["bank_transfer", "cash"] = "bank_transfer"
     reference: str | None = Field(default=None, max_length=120)
     notes: str | None = None
 

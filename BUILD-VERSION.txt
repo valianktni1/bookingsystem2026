@@ -1,7 +1,31 @@
-BookingSystem2026 - Chronological Invoice Migration
-Build: 2026.08.17-chronological-invoices-v8.10.1
+BookingSystem2026 - Workflow Assurance & Bilateral Agreements
+Build: 2026.08.18-workflow-assurance-v8.10.3
 
-This is a complete cumulative build containing every feature through V8.10.1.
+This is a complete cumulative build containing every feature through V8.10.3.
+
+V8.10.3 workflow assurance and bilateral agreements:
+
+- Every future native client acceptance is automatically countersigned as Mark
+  Adam Powell at the same recorded date and time.
+- A warm, editable confirmation email is sent after both signatures are stored,
+  with a fresh secure link opening the completed agreement.
+- Today's native agreement signed before deployment gets one deliberate admin
+  countersign button; it never changes an imported Studio Ninja agreement.
+- Quote, booking-confirmation, latest-payment and completed-agreement email results
+  are shown persistently against the couple, including failures.
+- Admin and client invoice PDFs open inside the app, with Download still available.
+- The completed bilateral agreement can be viewed or downloaded as a branded PDF.
+- Existing imported bookings remain visible but are never countersigned or emailed.
+- Invoice PDFs contain the current genuine number only; private migration references
+  remain in the database and admin audit rather than appearing on client invoices.
+
+V8.10.2 cash payment handling:
+
+- Recording a payment now asks whether it arrived by bank transfer or cash.
+- Cash payments remain attached to the original invoice and client receipt.
+- The selected method is retained in the protected Accounts sync payload.
+- Accounts can count genuine cash once without requiring a fake bank deposit.
+- Existing invoice numbers, payment dates, reminders and client emails are preserved.
 
 V8.10.1 controlled invoice renumbering:
 

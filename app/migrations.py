@@ -54,6 +54,9 @@ def apply_safe_migrations() -> None:
             "acceptance_source": "VARCHAR(80) NOT NULL DEFAULT 'client_portal'",
             "source_detail": "VARCHAR(500) NULL",
             "is_legacy_import": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
+            "supplier_signed_name": "VARCHAR(180) NULL",
+            "supplier_signed_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+            "supplier_signature_method": "VARCHAR(100) NULL",
         },
         "addon_options": {
             "is_discount": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
