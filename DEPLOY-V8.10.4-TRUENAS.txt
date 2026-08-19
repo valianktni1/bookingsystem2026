@@ -1,0 +1,80 @@
+BOOKINGSYSTEM2026 V8.10.4 - TRUENAS DEPLOYMENT
+================================================
+
+This is a cumulative release. Upload its complete contents to the main branch of:
+https://github.com/valianktni1/bookingsystem2026
+
+No YAML additions are required.
+Deploying sends no client email and does not alter invoice numbers.
+
+1. BACK UP POSTGRESQL
+---------------------
+
+BOOKING_COMPOSE=/mnt/apps/dockge/data/bookingsystem2026/compose.yaml
+CONTRACT_BACKUP=/mnt/temp-tntermediate/bookingapp2026data/migration-backups/bookingapp-before-full-contract-v8.10.4-2026-08-19.dump
+
+if [ -e "$CONTRACT_BACKUP" ]; then
+  echo "STOP: Backup already exists - nothing was overwritten"
+else
+  docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > "$CONTRACT_BACKUP"
+fi
+
+ls -lh "$CONTRACT_BACKUP"
+docker exec -i bookingsystem2026-db pg_restore -l < "$CONTRACT_BACKUP" | head
+
+2. REBUILD THE APP
+------------------
+
+docker compose -f "$BOOKING_COMPOSE" down
+docker compose -f "$BOOKING_COMPOSE" build --no-cache app
+docker compose -f "$BOOKING_COMPOSE" up -d
+
+3. WAIT FOR HEALTH
+------------------
+
+for ATTEMPT in $(seq 1 30); do
+  HEALTH=$(curl -sS http://127.0.0.1:30049/api/health 2>/dev/null || true)
+  if printf '%s' "$HEALTH" | grep -q 'full-contract-v8.10.4'; then
+    printf '%s\n' "$HEALTH"
+    break
+  fi
+  printf 'Waiting for BookingSystem - attempt %s/30\n' "$ATTEMPT"
+  sleep 2
+done
+
+docker compose -f "$BOOKING_COMPOSE" ps
+
+Expected build:
+2026.08.19-full-contract-v8.10.4
+
+4. CHECK THE LIVE TEMPLATE
+--------------------------
+
+In the admin app:
+
+1. Open More, then Email & contract templates.
+2. Open the Weddings By Mark contract.
+3. Confirm the version says Rev 1.4 - August 2026.
+4. Confirm the contract includes section m) DRONE COVERAGE and all 15 sections.
+
+5. CORRECT TODAY'S NEW NATIVE AGREEMENT ONLY
+--------------------------------------------
+
+Do this only for the new couple who accepted the shortened BookingSystem contract:
+
+1. Open their booking.
+2. Open Forms & agreement.
+3. Press Reset agreement and confirm the protected reset.
+4. Send or provide their existing secure account link.
+5. Ask them to open Agreement and accept the corrected Rev 1.4 contract.
+6. The system automatically countersigns it as Mark Adam Powell.
+7. Confirm the completed-agreement email delivery and open View agreement.
+
+Do not reset any imported Studio Ninja agreement. The server also protects imported
+agreements from being newly signed or countersigned.
+
+6. AFTER THIS CHECK
+-------------------
+
+Leave automatic Accounts sync off. Invoice-number cut-off reconciliation remains a
+separate guarded job. Do not run the full historical invoice-renumber command again.

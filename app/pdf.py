@@ -1,6 +1,7 @@
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
+import re
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
@@ -87,8 +88,22 @@ def contract_acceptance_pdf(acceptance: ContractAcceptance, profile: BusinessPro
         Paragraph(f"Version {escape(acceptance.contract_version)}", small),
         Spacer(1, 6 * mm),
     ])
-    body = escape(acceptance.contract_body or "").replace("\n", "<br/>")
-    story.extend([Paragraph(body, normal), Spacer(1, 9 * mm)])
+    body_blocks = [block.strip() for block in re.split(r"\n\s*\n", acceptance.contract_body or "")
+                   if block.strip()]
+    for block in body_blocks:
+        is_numbered_heading = bool(re.fullmatch(r"\d+\.\s+.+", block))
+        is_special_heading = block in {
+            "WEDDINGS BY MARK - TERMS AND CONDITIONS",
+            "m) DRONE COVERAGE",
+        }
+        if is_numbered_heading or is_special_heading:
+            story.extend([Spacer(1, 2.5 * mm), Paragraph(escape(block), section_heading)])
+        elif block.startswith("BY PAYING THE DEPOSIT"):
+            story.extend([Spacer(1, 2.5 * mm), Paragraph(f"<b>{escape(block)}</b>", normal)])
+        else:
+            story.append(Paragraph(escape(block).replace("\n", "<br/>"), normal))
+            story.append(Spacer(1, 2.2 * mm))
+    story.append(Spacer(1, 6 * mm))
 
     def signed_at(value) -> str:
         return value.strftime("%d %B %Y at %H:%M UTC") if value else "Not recorded"

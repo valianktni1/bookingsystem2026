@@ -416,7 +416,7 @@ Weddings By Mark"""
         existing_contract = db.scalar(select(ContractTemplate).where(ContractTemplate.brand == brand))
         if not existing_contract:
             db.add(ContractTemplate(brand=brand, title=title, version=version, body=body))
-        elif brand == Brand.WBM and existing_contract.version == "Rev 1.3 - August 2024":
+        elif brand == Brand.WBM and existing_contract.version != WBM_CONTRACT_VERSION:
             existing_contract.title = title
             existing_contract.version = version
             existing_contract.body = body

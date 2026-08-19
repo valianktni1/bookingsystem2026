@@ -18,7 +18,8 @@ from sqlalchemy import select
 from app.database import SessionLocal, engine
 from app.email_service import build_email_message
 from app.main import app
-from app.models import Booking, Brand, BusinessProfile, Client, ReminderLog
+from app.models import (Booking, Brand, BusinessProfile, Client, ContractAcceptance,
+                        ReminderLog)
 
 
 def booking_payload(brand="wbm", title="Sophie & James"):
@@ -113,6 +114,33 @@ def test_deleted_default_email_template_stays_deleted_after_restart():
         assert ("wbm", "contract_reminder") not in keys
 
 
+def test_short_wbm_contract_is_upgraded_to_complete_rev_1_4_on_restart():
+    db_file = TEST_ROOT / "test.db"
+    engine.dispose()
+    db_file.unlink(missing_ok=True)
+    (TEST_ROOT / "test.db-journal").unlink(missing_ok=True)
+    with TestClient(app) as client:
+        assert client.post("/api/auth/login", json={
+            "email": "mark@example.com", "password": "SecureTestPassword!123",
+        }).status_code == 200
+        contracts = client.get("/api/communications/templates").json()["contracts"]
+        wedding_contract = next(row for row in contracts if row["brand"] == "wbm")
+        assert client.patch(
+            f"/api/communications/contracts/{wedding_contract['id']}",
+            json={"version": "Rev 1.3 - August 2022", "body": "Short former contract"},
+        ).status_code == 200
+
+    with TestClient(app) as client:
+        assert client.post("/api/auth/login", json={
+            "email": "mark@example.com", "password": "SecureTestPassword!123",
+        }).status_code == 200
+        contracts = client.get("/api/communications/templates").json()["contracts"]
+        wedding_contract = next(row for row in contracts if row["brand"] == "wbm")
+        assert wedding_contract["version"] == "Rev 1.4 - August 2026"
+        assert len(wedding_contract["body"].split()) > 2500
+        assert "m) DRONE COVERAGE" in wedding_contract["body"]
+
+
 def test_zero_payment_voided_test_booking_can_be_deleted_without_reusing_number():
     db_file = TEST_ROOT / "test.db"
     engine.dispose()
@@ -185,7 +213,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "imap_configured": False,
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
-                                     "build": "2026.08.18-workflow-assurance-v8.10.3"}
+                                     "build": "2026.08.19-full-contract-v8.10.4"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -239,8 +267,11 @@ def test_phase_two_b_flow(monkeypatch):
         }
         wedding_contract = next(row for row in templates.json()["contracts"] if row["brand"] == "wbm")
         assert wedding_contract["title"] == "Weddings By Mark Contract"
-        assert wedding_contract["version"] == "Rev 1.3 - August 2022"
-        assert "15. DELIVERY TIME FRAMES AND ALBUMS" in wedding_contract["body"]
+        assert wedding_contract["version"] == "Rev 1.4 - August 2026"
+        assert len(wedding_contract["body"].split()) > 2500
+        assert "m) DRONE COVERAGE" in wedding_contract["body"]
+        assert "15. TIME FRAMES" in wedding_contract["body"]
+        assert "guest QR-code uploads" in wedding_contract["body"]
         quote_template = next(row for row in templates.json()["templates"]
                               if row["brand"] == "wbm" and row["template_key"] == "quote")
         assert "planning a wedding can feel overwhelming" in quote_template["body"]
@@ -333,8 +364,26 @@ def test_phase_two_b_flow(monkeypatch):
         assert accepted.status_code == 200
         portal_status = client.get(f"/api/bookings/{wedding_data['id']}/portal").json()
         assert portal_status["contract"]["accepted_name"] == "Sophie Taylor"
+        assert portal_status["contract"]["version"] == "Rev 1.4 - August 2026"
+        assert portal_status["contract"]["supplier_signed_name"] == "Mark Adam Powell"
         assert portal_status["submissions"][0]["form_type"] == "booking_form"
         assert portal_status["submissions"][0]["data"]["ceremony_time"] == "13:00"
+        # Editing the live template must never rewrite the signed agreement snapshot.
+        assert client.patch(
+            f"/api/communications/contracts/{wedding_contract['id']}",
+            json={"body": "A later live-template edit"},
+        ).status_code == 200
+        with SessionLocal() as db:
+            signed_snapshot = db.scalar(select(ContractAcceptance).where(
+                ContractAcceptance.booking_id == wedding_data["id"]
+            ))
+            assert signed_snapshot.contract_version == "Rev 1.4 - August 2026"
+            assert "m) DRONE COVERAGE" in signed_snapshot.contract_body
+            assert signed_snapshot.contract_body != "A later live-template edit"
+        assert client.patch(
+            f"/api/communications/contracts/{wedding_contract['id']}",
+            json={"body": wedding_contract["body"]},
+        ).status_code == 200
         assert client.post(f"/api/client/{token}/contract", json={
             "accepted_name": "Sophie Taylor", "accepted_email": "wbm@example.com", "agreed": True
         }).status_code == 409

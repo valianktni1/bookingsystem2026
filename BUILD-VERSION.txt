@@ -144,3 +144,15 @@ V8.9.5 admin refinement:
 All V8.9.4 behaviour remains included: the single Wedding Booking Form, private
 30-day phone task, editable email templates, automatic client account links,
 friendly quote wording and branded quote button.
+2026.08.19-full-contract-v8.10.4
+
+- Replaced the shortened Weddings By Mark Rev 1.3 agreement with the complete
+  Rev 1.4 August 2026 wording.
+- Added the complete drone clause and explicit three-month guest QR-upload and
+  gallery download/retention wording.
+- The startup bootstrap upgrades only the live Weddings By Mark template; signed
+  agreement snapshots and imported Studio Ninja contracts remain untouched.
+- Signed agreement PDFs now use clear section headings and paragraph spacing.
+- Deployment sends no emails and changes no invoices, payments, links or counters.
+- Twenty-eight cumulative automated tests pass and the five-page agreement PDF
+  has been rendered and visually checked.

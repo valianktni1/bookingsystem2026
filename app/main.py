@@ -71,7 +71,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.10.3-workflow-assurance", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.10.4-full-contract", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -481,7 +481,7 @@ def health():
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
             "accounts_integration_enabled": settings.accounts_integration_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
-            "build": "2026.08.18-workflow-assurance-v8.10.3"}
+            "build": "2026.08.19-full-contract-v8.10.4"}
 
 
 @app.get("/api/public/config")

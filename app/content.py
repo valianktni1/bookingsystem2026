@@ -1,7 +1,7 @@
 WBM_CONTRACT_TITLE = "Weddings By Mark Contract"
-WBM_CONTRACT_VERSION = "Rev 1.3 - August 2022"
+WBM_CONTRACT_VERSION = "Rev 1.4 - August 2026"
 
-WBM_CONTRACT_BODY = """WEDDINGS BY MARK - TERMS AND CONDITIONS
+_WBM_CONTRACT_BODY_LEGACY = """WEDDINGS BY MARK - TERMS AND CONDITIONS
 
 1. COPYRIGHT
 
@@ -138,3 +138,11 @@ Sole trader, Weddings By Mark
 https://www.perfectweddingsbymark.uk
 mark@perfectweddingsbymark.uk
 07712 117357"""
+
+# Kept as a separate, human-readable source so the complete legal wording can
+# be reviewed without editing Python syntax. Contract acceptances still retain
+# their own immutable snapshot in the database.
+from pathlib import Path
+
+WBM_CONTRACT_BODY = (Path(__file__).with_name("wbm_contract_rev_1_4.txt")
+                     .read_text(encoding="utf-8").strip())
