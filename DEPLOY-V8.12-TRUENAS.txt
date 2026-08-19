@@ -1,0 +1,97 @@
+BOOKINGSYSTEM2026 V8.12 - GOOGLE CALENDAR DEPLOYMENT
+===================================================
+
+Keep the complete V8.11 ZIP and the current TrueNAS database backup untouched
+until V8.12 has been verified.
+
+ONE-TIME GOOGLE CLOUD SETUP
+---------------------------
+
+1. Open Google Cloud Console and select or create the private project used for
+   BookingSystem2026.
+
+2. In APIs & Services > Library, enable "Google Calendar API".
+
+3. Configure the OAuth consent screen. This integration requests only:
+
+   https://www.googleapis.com/auth/calendar.events
+
+   For a personal Google account the audience is External. Add Mark's Google
+   account while testing. For a connection that lasts longer than seven days,
+   publish the OAuth app to In production; Google documents that External apps
+   left in Testing receive refresh tokens that expire after seven days.
+
+4. Create an OAuth Client ID with application type "Web application".
+
+5. Add this exact Authorized redirect URI:
+
+   https://booking.weddingsbymark.uk/api/integrations/google-calendar/callback
+
+6. Copy the generated Client ID and Client Secret into the existing BookingSystem
+   .env file in Dockge. Add these three lines without changing any current value:
+
+   GOOGLE_CALENDAR_CLIENT_ID=the-client-id-from-google
+   GOOGLE_CALENDAR_CLIENT_SECRET=the-client-secret-from-google
+   GOOGLE_CALENDAR_REDIRECT_URI=https://booking.weddingsbymark.uk/api/integrations/google-calendar/callback
+
+   Keep the existing SESSION_SECRET unchanged. It is also used to encrypt the
+   stored Google refresh token.
+
+DEPLOY V8.12
+------------
+
+Run these commands in the TrueNAS shell only after the complete V8.12 repository
+has been uploaded to GitHub main.
+
+BOOKING_COMPOSE=/mnt/apps/dockge/data/bookingsystem2026/compose.yaml
+
+docker compose -f "$BOOKING_COMPOSE" build --no-cache app
+docker compose -f "$BOOKING_COMPOSE" stop app
+docker compose -f "$BOOKING_COMPOSE" up -d app
+
+for ATTEMPT in $(seq 1 30); do
+  HEALTH=$(curl -sS http://127.0.0.1:30049/api/health 2>/dev/null || true)
+  if printf '%s' "$HEALTH" | grep -q 'google-calendar-v8.12'; then
+    printf '%s\n' "$HEALTH"
+    break
+  fi
+  printf 'Waiting for BookingSystem2026 — attempt %s/30\n' "$ATTEMPT"
+  sleep 2
+done
+
+docker compose -f "$BOOKING_COMPOSE" ps
+
+Expected build:
+2026.08.19-google-calendar-v8.12
+
+CONNECT AND VERIFY
+------------------
+
+1. Hard-refresh booking.weddingsbymark.uk once and sign in.
+2. Open Business settings.
+3. Press Connect Google Calendar and choose Mark's correct Google account.
+4. Approve permission to view and edit events on calendars Mark can access.
+5. Return to Business settings and confirm "Connected and automatic" appears.
+6. Press Sync current bookings only after reading its confirmation. This is the
+   deliberate one-time backfill for existing native jobs.
+7. Check one real wedding in Google Calendar. Its title must show:
+   couple names — first/main venue — ceremony time.
+8. Change that wedding's ceremony time or venue and confirm the same event updates.
+9. Do not cancel a genuine wedding for testing. The automated suite verifies that
+   cancellation deletes the Google event while retaining the cancelled record.
+
+SAFETY BEHAVIOUR
+----------------
+
+- Deployment itself sends no email and creates no Google event.
+- Connect creates no event. The first bulk sync is a separate confirmed button.
+- Future native accepted/confirmed weddings sync automatically.
+- No couple is added as an attendee; no Google invitation is sent.
+- Google failure never reverses a BookingSystem action. Business settings displays
+  the affected booking and Sync current bookings retries it.
+- Cancellation while Google is offline remains safely cancelled and queues the
+  event removal for the next successful sync.
+- Studio Ninja imports and Testing Mode records are not synced.
+- Disconnect pauses future changes and leaves existing Google events untouched.
+- V8.11 can be redeployed as a code rollback; it ignores V8.12's additive JSON
+  connection and per-booking sync state.

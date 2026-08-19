@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db
+from .google_calendar import sync_booking_calendar_safely
 from .models import (
     Admin,
     AuditLog,
@@ -207,6 +208,7 @@ def register_v82_routes(app: FastAPI) -> None:
              "emails_sent": 0},
         )
         db.commit()
+        calendar_sync = sync_booking_calendar_safely(db, booking)
         return {
             "ok": True,
             "status": booking.status.value,
@@ -214,6 +216,7 @@ def register_v82_routes(app: FastAPI) -> None:
             "unpaid_balance_closed": float(total_closed),
             "payments_retained": float(total_retained),
             "emails_sent": 0,
+            "google_calendar": calendar_sync,
             "message": ("Booking cancelled and the unpaid balance was closed. "
                         "All invoice numbers and recorded payments were retained. No client email was sent."),
         }
@@ -280,9 +283,11 @@ def register_v82_routes(app: FastAPI) -> None:
         )
         audit(db, "reopen_booking", "booking", booking.id, {"reason": reason})
         db.commit()
+        calendar_sync = sync_booking_calendar_safely(db, booking)
         return {
             "ok": True,
             "status": booking.status.value,
+            "google_calendar": calendar_sync,
             "message": "Record reopened. Create a new client portal link if one is needed.",
         }
 

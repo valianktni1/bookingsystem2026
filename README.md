@@ -1,6 +1,19 @@
-# Mark's Business Studio — Version 8.5
+# Mark's Business Studio — Version 8.12
 
-Phase 2B of Mark's private, self-hosted booking and business management system. It adds secure client forms, electronic agreement acceptance, editable email templates, SMTP sending and reminders to the Phase 2A record, workflow, document and invoice tools.
+Mark's private, self-hosted booking and business management system. The current
+build includes every cumulative feature through V8.12, including browser-history
+navigation, the client Email Centre and safe one-way Google Calendar syncing.
+
+## Version 8.12 Google Calendar
+
+Native accepted or confirmed weddings sync to the connected account's primary
+Google Calendar. The all-day event visibly contains the couple names, first/main
+venue and ceremony time. Booking and Wedding Booking Form changes update the same
+event; cancellation removes the event but retains the complete cancelled booking.
+Google failures remain retryable and never roll back BookingSystem2026 data.
+
+See `RELEASE-NOTES-V8.12.md` and `DEPLOY-V8.12-TRUENAS.txt` for the protected
+Google Cloud and TrueNAS setup.
 
 ## Included in Phase 2A
 

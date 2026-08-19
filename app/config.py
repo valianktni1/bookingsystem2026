@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     reminder_scan_hours: int = 6
     reminders_enabled: bool = False
     google_maps_api_key: str | None = None
+    google_calendar_client_id: str | None = None
+    google_calendar_client_secret: str | None = None
+    google_calendar_redirect_uri: str | None = None
+    google_calendar_timeout_seconds: int = Field(default=20, ge=5, le=60)
     accounts_integration_enabled: bool = False
     accounts_integration_auto_sync: bool = False
     accounts_api_url: str | None = None
@@ -62,6 +66,8 @@ class Settings(BaseSettings):
                     raise ValueError("ACCOUNTS_API_URL must be a complete http:// or https:// address")
                 if not self.accounts_integration_key or len(self.accounts_integration_key) < 32:
                     raise ValueError("ACCOUNTS_INTEGRATION_KEY must contain at least 32 characters")
+            if bool(self.google_calendar_client_id) != bool(self.google_calendar_client_secret):
+                raise ValueError("GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET must be set together")
         return self
 
 

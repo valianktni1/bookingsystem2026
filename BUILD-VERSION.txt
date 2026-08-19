@@ -1,5 +1,5 @@
-BookingSystem2026 - Workflow Assurance & Bilateral Agreements
-Build: 2026.08.18-workflow-assurance-v8.10.3
+BookingSystem2026 - Google Calendar Sync
+Build: 2026.08.19-google-calendar-v8.12
 
 This is a complete cumulative build containing every feature through V8.10.3.
 
@@ -194,3 +194,21 @@ friendly quote wording and branded quote button.
   cancellation controls and email confirmations are unchanged.
 - Deployment performs no data migration and sends no email.
 - Thirty-three cumulative automated tests pass.
+
+2026.08.19-google-calendar-v8.12
+
+- Added a direct, single-user Google OAuth connection for the primary Google
+  Calendar using the narrow calendar.events permission.
+- A native accepted wedding creates one all-day Google event containing the
+  couple names, first/main venue and visible ceremony time.
+- Changes to the couple, date, venue, package or Wedding Booking Form update the
+  same event; a deterministic event ID prevents duplicates after retries.
+- Cancelling removes the mapped Google event while the cancelled booking,
+  invoices, payments, reason and audit trail remain in BookingSystem2026.
+- Reopening an eligible wedding recreates the event safely.
+- Google outages never roll back booking work; errors and pending removals are
+  retained for a deliberate retry from Business settings.
+- No couple is added as an attendee, so Calendar sync sends no client invite.
+- OAuth refresh tokens are encrypted at rest using the existing session secret.
+- Testing Mode records and imported Studio Ninja weddings are excluded.
+- No database schema migration is required; thirty-seven automated tests pass.

@@ -213,7 +213,8 @@ def test_phase_two_b_flow(monkeypatch):
                                  "imap_configured": False,
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
-                                     "build": "2026.08.19-navigation-workflow-v8.11"}
+                                 "google_calendar_configured": False,
+                                 "build": "2026.08.19-google-calendar-v8.12"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -508,6 +509,8 @@ def test_phase_two_b_flow(monkeypatch):
         assert quote.json()["quote"]["total"] == 1069
         assert quote.json()["invoice"]["number"] == "WBM02002"
         assert quote.json()["acceptance_email_sent"] is False
+        assert quote.json()["google_calendar"]["status"] == "pending"
+        assert quote.json()["google_calendar"]["desired_action"] == "create"
         expected_deposit_due = date.today() + timedelta(days=1)
         expected_balance_due = max(date(2026, 10, 4) - timedelta(days=45), expected_deposit_due)
         assert quote.json()["invoice"]["deposit_due_date"] == expected_deposit_due.isoformat()

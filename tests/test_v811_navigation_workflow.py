@@ -39,7 +39,9 @@ def test_v811_direct_workspace_and_booking_urls_return_the_admin_app():
         assert booking.status_code == 200
         assert "/static/v811.js?v=navigation-workflow-v8-11" in dashboard.text
         assert "/static/v811.css?v=navigation-workflow-v8-11" in dashboard.text
-        assert "NAVIGATION & WORKFLOW V8.11" in dashboard.text
+        assert "GOOGLE CALENDAR V8.12" in dashboard.text
+        assert "/static/v812.js?v=google-calendar-v8-12" in dashboard.text
+        assert "/static/v812.css?v=google-calendar-v8-12" in dashboard.text
         assert client.get("/not-a-real-workspace").status_code == 404
 
 

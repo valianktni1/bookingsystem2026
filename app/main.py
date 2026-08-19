@@ -24,6 +24,8 @@ from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .email_service import preview_template_email, send_template_email, smtp_credentials, smtp_ready
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
+from .google_calendar import (google_calendar_configured, register_google_calendar_routes,
+                              sync_booking_calendar_safely)
 from .migrations import apply_safe_migrations
 from .legacy_archive_import import register_legacy_archive_import_routes
 from .legacy_import import register_legacy_import_routes
@@ -72,7 +74,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.11-navigation-workflow", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.12-google-calendar", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -482,7 +484,8 @@ def health():
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
             "accounts_integration_enabled": settings.accounts_integration_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
-            "build": "2026.08.19-navigation-workflow-v8.11"}
+            "google_calendar_configured": google_calendar_configured(),
+            "build": "2026.08.19-google-calendar-v8.12"}
 
 
 @app.get("/api/public/config")
@@ -1032,6 +1035,7 @@ def create_booking(payload: BookingIn, _: Admin = Depends(current_admin), db: Se
     create_default_tasks(db, booking.id, booking.kind, booking.event_date)
     audit(db, "create", "booking", booking.id, {"title": booking.title, "brand": booking.brand.value})
     db.commit()
+    sync_booking_calendar_safely(db, booking)
     return get_booking(booking.id, _, db)
 
 
@@ -1081,6 +1085,7 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
     audit(db, "update", "booking", item.id,
           {"fields": list(payload.model_fields_set), "auto_confirmed": auto_confirmed})
     db.commit()
+    sync_booking_calendar_safely(db, item)
     return get_booking(item.id, _, db)
 
 
@@ -1333,6 +1338,7 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
 
     invoice = full_invoice(db, invoice.id)
     booking = invoice.booking
+    sync_booking_calendar_safely(db, booking)
     payment_email_sent = False
     payment_email_error = None
     payment_email_paused = not automations_allowed(booking)
@@ -2322,8 +2328,10 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
            "total": money(total), "invoice": number,
            "acceptance_email_sent": acceptance_email_sent})
     db.commit()
+    calendar_sync = sync_booking_calendar_safely(db, booking)
     return {"ok": True, "quote": quote_json(quote), "invoice": invoice_json(invoice),
-            "acceptance_email_sent": acceptance_email_sent}
+            "acceptance_email_sent": acceptance_email_sent,
+            "google_calendar": calendar_sync}
 
 
 @app.post("/api/client/{token}/forms")
@@ -2397,6 +2405,8 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
             task.completed = True
     audit(db, "submit_form", "booking", booking.id, {"form_type": payload.form_type})
     db.commit()
+    if payload.form_type == "booking_form":
+        sync_booking_calendar_safely(db, booking)
     return {"ok": True, "submitted_at": row.submitted_at.isoformat()}
 
 
@@ -2675,6 +2685,7 @@ async def reminder_loop():
 
 register_v82_routes(app)
 register_v84_routes(app)
+register_google_calendar_routes(app)
 register_mail_routes(app)
 register_legacy_import_routes(app)
 register_legacy_archive_import_routes(app)
