@@ -12,7 +12,16 @@
 .v814-backup-card footer{display:flex;align-items:center;gap:14px;padding:17px 22px}
 .v814-backup-button{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-width:260px;padding:15px 20px;text-decoration:none;font-size:11px;font-weight:800}
 .v814-backup-button span{font-size:17px;line-height:1}
-.v814-backup-button.preparing{pointer-events:none;opacity:.72}
+.v814-backup-button.preparing,.v814-backup-button:disabled{cursor:wait;opacity:.72}
 .v814-backup-card footer small{max-width:560px;color:var(--muted);font-size:8px;line-height:1.5}
+.v814-backup-status{margin:0 22px 20px;padding:14px 16px;border:1px solid #cfe1dd;border-radius:10px;background:#f7fbfa;color:#274e49}
+.v814-backup-status>div{display:flex;justify-content:space-between;gap:14px;margin-bottom:9px;font-size:10px;font-weight:800}
+.v814-backup-status progress{display:block;width:100%;height:10px;overflow:hidden;border:0;border-radius:999px;background:#dce9e7;accent-color:#0f6b63}
+.v814-backup-status progress::-webkit-progress-bar{border-radius:999px;background:#dce9e7}
+.v814-backup-status progress::-webkit-progress-value{border-radius:999px;background:#0f6b63}
+.v814-backup-status small{display:block;margin-top:8px;color:var(--muted);font-size:8px;line-height:1.5}
+.v814-backup-status.ready{border-color:#acd5c9;background:#effaf5;color:#145c48}
+.v814-backup-status.failed{border-color:#e2b7b7;background:#fff5f5;color:#8d2929}
+.v814-backup-status.failed progress{accent-color:#a94747}
 @media(max-width:800px){.v814-backup-includes{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.v814-backup-copy{align-items:start}.v814-backup-icon{width:48px;height:48px}.v814-backup-copy h2{font-size:18px}.v814-backup-includes{grid-template-columns:1fr}.v814-backup-security,.v814-backup-card footer{align-items:stretch;flex-direction:column}.v814-backup-button{width:100%;min-width:0}.v814-backup-card footer small{text-align:left}}

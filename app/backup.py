@@ -21,7 +21,7 @@ import zipfile
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -33,7 +33,7 @@ from .models import (Booking, BusinessProfile, ContractAcceptance, Invoice,
 from .pdf import contract_acceptance_pdf, invoice_pdf
 
 
-BACKUP_BUILD = "2026.08.20-final-call-pack-v8.23"
+BACKUP_BUILD = "2026.08.20-reliable-backup-v8.23.1"
 BACKUP_LOCK = threading.Lock()
 SENSITIVE_SETTING_KEYS = {
     "google_calendar_connection",
@@ -258,11 +258,19 @@ def _program_snapshot() -> dict[str, bytes]:
     return files
 
 
-def create_complete_backup(db: Session) -> tuple[Path, str, dict]:
+def create_complete_backup(
+    db: Session,
+    progress: Callable[[int, str], None] | None = None,
+) -> tuple[Path, str, dict]:
     """Create a dated ZIP and return its temporary path, filename and manifest."""
+    def report(percent: int, message: str) -> None:
+        if progress:
+            progress(percent, message)
+
     if not BACKUP_LOCK.acquire(blocking=False):
         raise BackupBusyError("A complete backup is already being prepared")
     try:
+        report(3, "Reading the complete database")
         created_at = datetime.now(timezone.utc)
         stamp = created_at.astimezone().strftime("%Y%m%d-%H%M%S")
         filename = f"BookingSystem2026-complete-backup-{stamp}.zip"
@@ -273,13 +281,17 @@ def create_complete_backup(db: Session) -> tuple[Path, str, dict]:
         warnings: list[str] = []
         try:
             database_files, table_counts, schema = _database_export(db)
+            report(20, "Preparing readable booking and payment registers")
             registers = _readable_registers(db)
+            report(32, "Creating invoice, receipt and agreement PDFs")
             generated_pdfs, pdf_warnings = _generated_pdfs(db)
+            report(55, "Copying the running program safely")
             program_files = _program_snapshot()
             warnings.extend(pdf_warnings)
 
             storage_root = get_settings().storage_root
             stored_files: list[tuple[Path, str]] = []
+            report(62, "Finding uploaded client documents")
             if storage_root.exists():
                 resolved_root = storage_root.resolve()
                 for path in sorted(storage_root.rglob("*")):
@@ -335,6 +347,7 @@ def create_complete_backup(db: Session) -> tuple[Path, str, dict]:
                 "Do not import individual JSONL files into the live system by hand.\n"
             )
 
+            report(70, "Building and checking the private ZIP")
             with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED,
                                  compresslevel=6, allowZip64=True) as archive:
                 _zip_bytes(archive, checksums, "README.txt", readme)
@@ -350,17 +363,21 @@ def create_complete_backup(db: Session) -> tuple[Path, str, dict]:
                     _zip_bytes(archive, checksums, name, content)
                 for name, content in program_files.items():
                     _zip_bytes(archive, checksums, name, content)
-                for source, archive_name in stored_files:
+                uploaded_total = max(1, len(stored_files))
+                for position, (source, archive_name) in enumerate(stored_files, start=1):
                     digest = hashlib.sha256()
                     with source.open("rb") as handle:
                         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                             digest.update(chunk)
                     archive.write(source, archive_name)
                     checksums[archive_name] = digest.hexdigest()
+                    report(70 + min(24, int(position / uploaded_total * 24)),
+                           f"Adding uploaded documents ({position} of {len(stored_files)})")
                 checksum_text = "".join(
                     f"{digest}  {name}\n" for name, digest in sorted(checksums.items())
                 )
                 archive.writestr("checksums.sha256", checksum_text.encode("utf-8"))
+            report(100, "Backup ready to download")
             return target, filename, manifest
         except Exception:
             target.unlink(missing_ok=True)

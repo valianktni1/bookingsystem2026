@@ -11,7 +11,8 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, status
+from fastapi import (BackgroundTasks, Depends, FastAPI, File, HTTPException, Query,
+                     Request, Response, UploadFile, status)
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from .bootstrap import bootstrap
 from .backup import BACKUP_BUILD, BackupBusyError, create_complete_backup
+from .backup_jobs import (get_complete_backup_file, get_complete_backup_job,
+                          prepare_complete_backup_job, start_complete_backup_job)
 from .booking_forms import public_booking_form, validate_booking_answers, validate_booking_form
 from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
 from .config import get_settings
@@ -84,7 +87,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.23-final-call-pack", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.23.1-reliable-backup", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -954,7 +957,11 @@ def businesses(_: Admin = Depends(current_admin), db: Session = Depends(get_db))
 
 @app.get("/api/backups/complete")
 def download_complete_backup(admin: Admin = Depends(current_admin), db: Session = Depends(get_db)):
-    """Download a private, portable snapshot without changing business workflows."""
+    """Legacy direct download retained for API compatibility.
+
+    The Business Settings screen uses the preparation-job routes below so a
+    proxy timeout cannot interrupt a long build before response headers exist.
+    """
     try:
         path, filename, manifest = create_complete_backup(db)
     except BackupBusyError as exc:
@@ -972,6 +979,47 @@ def download_complete_backup(admin: Admin = Depends(current_admin), db: Session 
         filename=filename,
         headers={"Cache-Control": "no-store, max-age=0", "X-Content-Type-Options": "nosniff"},
         background=BackgroundTask(path.unlink, missing_ok=True),
+    )
+
+
+@app.post("/api/backups/complete", status_code=202)
+def start_complete_backup(background_tasks: BackgroundTasks,
+                          admin: Admin = Depends(current_admin)):
+    """Return immediately, then prepare the complete ZIP outside the request."""
+    job, created = start_complete_backup_job(admin.id)
+    if created:
+        background_tasks.add_task(prepare_complete_backup_job, job["job_id"])
+    return job
+
+
+@app.get("/api/backups/complete/{job_id}")
+def complete_backup_status(job_id: str, admin: Admin = Depends(current_admin)):
+    job = get_complete_backup_job(job_id, admin.id)
+    if not job:
+        raise HTTPException(404, "Backup preparation not found or has expired")
+    return job
+
+
+@app.get("/api/backups/complete/{job_id}/download")
+def download_prepared_complete_backup(job_id: str, admin: Admin = Depends(current_admin)):
+    job = get_complete_backup_job(job_id, admin.id)
+    if not job:
+        raise HTTPException(404, "Backup preparation not found or has expired")
+    if job["status"] != "ready":
+        raise HTTPException(409, "The backup is not ready to download yet")
+    prepared = get_complete_backup_file(job_id, admin.id)
+    if not prepared:
+        raise HTTPException(404, "The prepared backup file is no longer available")
+    path, filename = prepared
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=filename,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "private, no-cache, max-age=0",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

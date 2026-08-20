@@ -1,5 +1,16 @@
-BookingSystem2026 - Complete Final Call Pack
-Build: 2026.08.20-final-call-pack-v8.23
+BookingSystem2026 - Reliable Complete Backup
+Build: 2026.08.20-reliable-backup-v8.23.1
+
+V8.23.1 reliable complete backup:
+
+- Prepares the complete ZIP in a background job so a browser or reverse-proxy
+  timeout cannot interrupt the long database, PDF and document build.
+- Shows live preparation stages and progress in Business Settings.
+- Starts the file transfer only when the stable ZIP is ready.
+- Keeps the prepared file securely available for 24 hours and supports byte-range
+  requests so the browser can resume an interrupted transfer.
+- Preserves every V8.23 feature and does not change any booking, invoice, email,
+  Calendar or Accounts workflow.
 
 V8.23 complete final call pack:
 

@@ -1,0 +1,31 @@
+BOOKINGSYSTEM2026 V8.23.1 - TRUENAS SHELL COMMANDS
+
+1. In GitHub Desktop, unzip/open this V8.23.1 folder, commit it and push it to main.
+
+2. Then run these commands in the TrueNAS shell:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+test ! -e bookingapp-before-v8231-2026-08-20.dump || { echo "STOP: backup already exists"; exit 1; }
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > bookingapp-before-v8231-2026-08-20.dump
+
+pg_restore -l bookingapp-before-v8231-2026-08-20.dump >/dev/null && echo "Database backup checked OK"
+
+ls -lh bookingapp-before-v8231-2026-08-20.dump
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+3. The health response should include:
+
+"build":"2026.08.20-reliable-backup-v8.23.1"
+
+No YAML, environment or database changes are needed for V8.23.1.
+
+The build command deliberately keeps Docker's safe unchanged layers, including
+the Python dependency installation. This should be considerably faster than a
+--no-cache build on this code-only update.

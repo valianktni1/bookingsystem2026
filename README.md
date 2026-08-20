@@ -1,9 +1,18 @@
-# Mark's Business Studio — Version 8.23
+# Mark's Business Studio — Version 8.23.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.23, including browser-history
+build includes every cumulative feature through V8.23.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.23.1 reliable complete backup
+
+The complete Business Settings backup now prepares as a background job with
+visible stages and progress, rather than keeping one silent browser request open
+while the database, PDFs and documents are assembled. The download begins only
+when the dated ZIP is ready. The prepared file remains privately available for
+24 hours and supports byte-range requests, allowing a browser to resume an
+interrupted transfer. Backup contents and credential exclusions are unchanged.
 
 ## Version 8.23 complete final call pack
 

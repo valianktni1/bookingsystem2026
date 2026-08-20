@@ -2,6 +2,7 @@ import hashlib
 import io
 import json
 import os
+import time
 import zipfile
 from pathlib import Path
 
@@ -36,6 +37,7 @@ def test_complete_backup_is_private_readable_and_complete():
     reset_database()
     with TestClient(app) as client:
         assert client.get("/api/backups/complete").status_code == 401
+        assert client.post("/api/backups/complete").status_code == 401
         assert client.post("/api/auth/login", json={
             "email": "mark@example.com", "password": "SecureTestPassword!123",
         }).status_code == 200
@@ -109,7 +111,7 @@ def test_complete_backup_is_private_readable_and_complete():
         assert "program/requirements.txt" in names
 
         manifest = json.loads(archive.read("manifest.json"))
-        assert manifest["application_build"] == "2026.08.20-final-call-pack-v8.23"
+        assert manifest["application_build"] == "2026.08.20-reliable-backup-v8.23.1"
         assert manifest["table_counts"]["bookings"] == 1
         assert manifest["table_counts"]["invoices"] == 1
         assert manifest["table_counts"]["payments"] == 1
@@ -134,3 +136,38 @@ def test_complete_backup_is_private_readable_and_complete():
         for line in checksum_lines:
             expected, name = line.split("  ", 1)
             assert hashlib.sha256(archive.read(name)).hexdigest() == expected
+
+        started = client.post("/api/backups/complete")
+        assert started.status_code == 202
+        job_id = started.json()["job_id"]
+        job = None
+        for _ in range(100):
+            status_response = client.get(f"/api/backups/complete/{job_id}")
+            assert status_response.status_code == 200
+            job = status_response.json()
+            if job["status"] in {"ready", "failed"}:
+                break
+            time.sleep(0.05)
+        assert job is not None
+        assert job["status"] == "ready", job
+        assert job["progress"] == 100
+        assert job["download_url"] == f"/api/backups/complete/{job_id}/download"
+        assert job["filename"].startswith("BookingSystem2026-complete-backup-")
+        assert job["size_bytes"] > 0
+
+        ranged = client.get(job["download_url"], headers={"Range": "bytes=0-127"})
+        assert ranged.status_code == 206
+        assert ranged.headers["accept-ranges"] == "bytes"
+        assert ranged.headers["content-range"].startswith("bytes 0-127/")
+        assert len(ranged.content) == 128
+
+
+def test_business_settings_uses_background_job_instead_of_a_silent_long_download():
+    javascript = (Path(__file__).parents[1] / "app" / "static" / "v814.js").read_text()
+    index = (Path(__file__).parents[1] / "app" / "static" / "index.html").read_text()
+
+    assert 'api("/api/backups/complete", {method: "POST"})' in javascript
+    assert "complete-backup-status" in javascript
+    assert "job.download_url" in javascript
+    assert 'href="/api/backups/complete"' not in javascript
+    assert "reliable-backup-v8-23-1" in index
