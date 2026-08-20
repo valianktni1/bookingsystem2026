@@ -1,5 +1,13 @@
-BookingSystem2026 - Thirty-day Wedding Check-in
-Build: 2026.08.20-thirty-day-check-in-v8.18
+BookingSystem2026 - Dashboard Payment Total
+Build: 2026.08.20-dashboard-payment-total-v8.19
+
+V8.19 dashboard payment total:
+
+- Keeps the payment count on the Payments due soon card.
+- Adds a prominent total of all outstanding amounts due in the next 60 days.
+- Uses the same rows as the visible payment queue and follows the selected
+  Weddings By Mark, Ivory Digital or All businesses filter.
+- Does not change invoices, due dates, reminders, payments or client emails.
 
 V8.14 complete one-click backup:
 

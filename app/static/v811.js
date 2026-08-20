@@ -424,6 +424,17 @@
     return `<button class="v811-queue-item" data-queue-record="${attr(row.booking_id)}" data-section="${attr(row.section)}" data-action="${attr(row.action)}"><span class="record-avatar ${row.brand}">${esc(row.title.split(/\s+|&/).filter(Boolean).slice(0, 2).map(word => word[0]).join(""))}</span><span><strong>${esc(row.title)}</strong><small>${esc(row.detail)}${esc(due)}${esc(amount)}</small></span><b>Open →</b></button>`;
   }
 
+  function queueCard(key, rows) {
+    const [label, help, icon] = queueCopy[key];
+    const paymentTotal = key === "payments_due"
+      ? rows.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+      : null;
+    const total = paymentTotal !== null
+      ? `<b class="v819-payment-total">${money(paymentTotal)} total due</b>`
+      : "";
+    return `<button data-queue-jump="${key}" class="${rows.length ? "has-items" : ""}"><i>${icon}</i><span><strong>${rows.length}</strong><small>${label}</small>${total}<em>${help}</em></span></button>`;
+  }
+
   function renderTodayDashboard(data, renderNumber) {
     if (renderNumber !== dashboardRenderNumber || state.view !== "dashboard") return;
     const d = state.dashboard || {};
@@ -432,7 +443,7 @@
     const upcoming = filtered(d.upcoming || []);
     const tasks = (d.tasks || []).filter(task => state.brand === "all" || state.records.find(record => record.id === task.booking_id)?.brand === state.brand);
     $("#content").innerHTML = `<section class="v811-today-head"><div><small>YOUR WORKING DAY</small><h2>Today</h2><p>Each item opens the right client and the exact part of their journey.</p></div><b class="${urgent ? "attention" : "clear"}">${urgent ? `${urgent} need attention` : "All clear"}</b></section>
-      <section class="v811-queue-cards">${queueOrder.map(key => { const [label, help, icon] = queueCopy[key]; return `<button data-queue-jump="${key}" class="${queues[key].length ? "has-items" : ""}"><i>${icon}</i><span><strong>${queues[key].length}</strong><small>${label}</small><em>${help}</em></span></button>`; }).join("")}</section>
+      <section class="v811-queue-cards">${queueOrder.map(key => queueCard(key, queues[key])).join("")}</section>
       <section class="v811-worklists">${queueOrder.filter(key => queues[key].length).map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>Your upcoming dates and private tasks are still shown below.</article>`}</section>
       <section class="dash-grid v811-dashboard-lower"><article class="panel"><div class="panel-title"><div><h2>Upcoming dates</h2><p>Your next bookings and deadlines</p></div><button data-jump="calendar">View all</button></div>${upcoming.length ? upcoming.slice(0, 7).map(recordRow).join("") : `<div class="empty"><strong>No upcoming records</strong>Add a booking or project to get started.</div>`}</article>
       <article class="panel"><div class="panel-title"><div><h2>Private things to do · ${d.open_tasks || 0}</h2><p>These never email a client</p></div><button data-jump="workflows">View all</button></div>${tasks.length ? tasks.slice(0, 7).map(task => taskRow(task, true)).join("") : `<div class="empty"><strong>You're all caught up</strong>No open private tasks.</div>`}</article></section>`;

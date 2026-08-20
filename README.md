@@ -1,9 +1,16 @@
-# Mark's Business Studio — Version 8.18
+# Mark's Business Studio — Version 8.19
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.18, including browser-history
+build includes every cumulative feature through V8.19, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.19 dashboard payment total
+
+The Payments due soon card keeps its number of payments and now also displays a
+prominent total of the outstanding amounts due during the next 60 days. The
+figure is calculated from the exact payment rows shown in the queue and follows
+the current All businesses, Weddings By Mark or Ivory Digital filter.
 
 ## Version 8.18 thirty-day wedding check-in
 
