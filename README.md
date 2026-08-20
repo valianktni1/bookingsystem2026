@@ -1,9 +1,18 @@
-# Mark's Business Studio — Version 8.20.1
+# Mark's Business Studio — Version 8.21
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.20.1, including browser-history
+build includes every cumulative feature through V8.21, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.21 final timings records
+
+The Final Wedding Timings area now shows an unmistakable submitted or waiting
+status with the submission time. A completed form can be viewed in full from
+Journey, previewed as a professionally formatted PDF or downloaded. The PDF is
+created automatically when the couple submits or updates their answers and one
+current copy is retained privately in the booking's Files tab. Updates refresh
+the same document and reopen the existing private review task.
 
 ## Version 8.20.1 manual timings send fix
 

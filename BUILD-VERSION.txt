@@ -1,5 +1,14 @@
-BookingSystem2026 - Manual Final Timings Send Fix
-Build: 2026.08.20-manual-timings-send-fix-v8.20.1
+BookingSystem2026 - Final Timings Records
+Build: 2026.08.20-final-timings-records-v8.21
+
+V8.21 final timings records:
+
+- Shows an unmistakable waiting or submitted state and the submission time.
+- Adds a complete in-app view of every answer supplied by the couple.
+- Creates a professionally formatted Final Wedding Timings PDF automatically.
+- Retains one current private PDF copy in the correct booking's Files tab.
+- Adds Journey actions to preview or download the PDF immediately.
+- Updates the same PDF and reopens the existing review task after any revision.
 
 V8.20.1 manual timings send fix:
 

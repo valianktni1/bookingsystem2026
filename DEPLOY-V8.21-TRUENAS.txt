@@ -1,0 +1,24 @@
+BookingSystem2026 V8.21 - TrueNAS deployment
+==============================================
+
+After committing and pushing the V8.21 files with GitHub Desktop, run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc \
+  > bookingapp-before-v821-2026-08-20.dump
+
+ls -lh bookingapp-before-v821-2026-08-20.dump
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+Expected build:
+
+2026.08.20-final-timings-records-v8.21
+
+No compose.yaml, .env or manual database changes are required. Deployment does
+not itself send any email or change an invoice, payment, package or Calendar item.

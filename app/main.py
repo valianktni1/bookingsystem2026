@@ -41,7 +41,7 @@ from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, 
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
                      EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, PackageOption, Payment,
                      Quote, RecordKind, RecordStatus, ReminderLog, SystemSetting, Task)
-from .pdf import contract_acceptance_pdf, invoice_pdf
+from .pdf import contract_acceptance_pdf, final_timings_pdf, invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
                       BookingFormTemplateIn, EnquiryFormTemplateIn,
@@ -82,7 +82,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.20.1-manual-timings-send-fix", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.21-final-timings-records", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -433,6 +433,54 @@ def document_json(item: Document) -> dict:
             "document_date": item.document_date.isoformat() if item.document_date else None,
             "is_client_visible": item.is_client_visible,
             "created_at": item.created_at.isoformat()}
+
+
+def ensure_final_timings_document(db: Session, booking: Booking,
+                                  submission: FormSubmission) -> tuple[Document, bytes]:
+    """Create or refresh the private PDF retained in the booking's Files tab."""
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    if not profile:
+        raise HTTPException(503, "Business profile not found for the Final Wedding Timings PDF")
+    content = final_timings_pdf(booking, submission, profile)
+    document = db.get(Document, submission.source_document_id) if submission.source_document_id else None
+    if not document or document.booking_id != booking.id:
+        document = db.scalar(select(Document).where(
+            Document.booking_id == booking.id,
+            Document.source_system == "bookingsystem2026_generated",
+            Document.legacy_reference == f"final_timings:{submission.id}",
+        ).limit(1))
+    safe_title = re.sub(r"[^A-Za-z0-9&'() ._-]", "_", booking.title or "Wedding")[:150].strip()
+    original_name = f"Final Wedding Timings - {safe_title or 'Wedding'}.pdf"
+    if not document:
+        document = Document(
+            booking_id=booking.id,
+            category="final_timings",
+            original_name=original_name,
+            storage_name=f"{booking.id}/final_timings/{uuid.uuid4().hex}.pdf",
+            content_type="application/pdf",
+            size_bytes=len(content),
+            source_system="bookingsystem2026_generated",
+            legacy_reference=f"final_timings:{submission.id}",
+            document_date=booking.event_date or date.today(),
+            is_client_visible=False,
+        )
+        db.add(document)
+        db.flush()
+    target = settings.storage_root / document.storage_name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(".pdf.tmp")
+    try:
+        temporary.write_bytes(content)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    document.original_name = original_name
+    document.content_type = "application/pdf"
+    document.size_bytes = len(content)
+    document.document_date = booking.event_date or date.today()
+    submission.source_document_id = document.id
+    db.flush()
+    return document, content
 
 
 def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | None = None) -> dict:
@@ -1654,7 +1702,9 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
     return {
         "submissions": [{"id": x.id, "form_type": x.form_type, "data": x.data,
                          "submission_source": x.submission_source,
-                         "submitted_at": x.submitted_at.isoformat()} for x in submissions],
+                         "source_document_id": x.source_document_id,
+                         "submitted_at": x.submitted_at.isoformat(),
+                         "updated_at": x.updated_at.isoformat()} for x in submissions],
         "contract": (contract_acceptance_json(acceptance) if acceptance else None),
         "emails": [{"template_key": x.template_key, "recipient": x.recipient, "subject": x.subject,
                     "status": x.status, "error": x.error,
@@ -1672,6 +1722,12 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "final_timings": {
             "available": final_timings_unlocked(db, booking),
             "submitted": bool(final_submission),
+            "submitted_at": (final_submission.submitted_at.isoformat()
+                             if final_submission else None),
+            "updated_at": (final_submission.updated_at.isoformat()
+                           if final_submission else None),
+            "pdf_document_id": (final_submission.source_document_id
+                                if final_submission else None),
             "reviewed_at": final_workflow.get("reviewed_at"),
             "reviewed_by": final_workflow.get("reviewed_by"),
             "coverage": booking_coverage_allowance(db, booking),
@@ -2557,6 +2613,7 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
         row = FormSubmission(booking_id=booking.id, form_type=payload.form_type,
                              data=form_values, submission_source="client_portal")
         db.add(row)
+    final_document = None
     if payload.form_type == "booking_form":
         previous_plan = payment_plan_code(booking)
         booking.form_data = {**form_values,
@@ -2617,11 +2674,44 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
                 title="Review final wedding timings",
                 workflow_key="wbm_review_final_timings",
             ))
-    audit(db, "submit_form", "booking", booking.id, {"form_type": payload.form_type})
+        db.flush()
+        final_document, _ = ensure_final_timings_document(db, booking, row)
+    audit(db, "submit_form", "booking", booking.id, {
+        "form_type": payload.form_type,
+        "pdf_document_id": final_document.id if final_document else None,
+    })
     db.commit()
     if payload.form_type == "booking_form":
         sync_booking_calendar_safely(db, booking)
-    return {"ok": True, "submitted_at": row.submitted_at.isoformat()}
+    return {"ok": True, "submitted_at": row.submitted_at.isoformat(),
+            "updated_at": row.updated_at.isoformat(),
+            "pdf_document_id": final_document.id if final_document else None}
+
+
+@app.get("/api/bookings/{booking_id}/final-timings.pdf")
+def download_final_timings_pdf(
+    booking_id: str,
+    inline: bool = Query(False),
+    _: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(
+        Booking.id == booking_id
+    ))
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    submission = db.scalar(select(FormSubmission).where(
+        FormSubmission.booking_id == booking.id,
+        FormSubmission.form_type == FINAL_TIMINGS_FORM_TYPE,
+    ).limit(1))
+    if not submission:
+        raise HTTPException(409, "The couple has not submitted their Final Wedding Timings Form")
+    document, content = ensure_final_timings_document(db, booking, submission)
+    db.commit()
+    disposition = "inline" if inline else "attachment"
+    return Response(content, media_type="application/pdf", headers={
+        "Content-Disposition": f'{disposition}; filename="{document.original_name}"',
+    })
 
 
 @app.post("/api/bookings/{booking_id}/final-timings/review")

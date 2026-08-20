@@ -1,7 +1,9 @@
 from decimal import Decimal
+from datetime import timezone
 from io import BytesIO
 from pathlib import Path
 import re
+from zoneinfo import ZoneInfo
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
@@ -10,10 +12,10 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
-from reportlab.platypus import (HRFlowable, Image, KeepTogether, Paragraph, SimpleDocTemplate,
-                                Spacer, Table, TableStyle)
+from reportlab.platypus import (HRFlowable, Image, KeepTogether, PageBreak, Paragraph,
+                                SimpleDocTemplate, Spacer, Table, TableStyle)
 
-from .models import Brand, BusinessProfile, ContractAcceptance, Invoice
+from .models import Booking, Brand, BusinessProfile, ContractAcceptance, FormSubmission, Invoice
 from .services import payment_reference
 
 
@@ -154,6 +156,208 @@ def contract_acceptance_pdf(acceptance: ContractAcceptance, profile: BusinessPro
         canvas.restoreState()
 
     doc.build(story, onFirstPage=agreement_footer, onLaterPages=agreement_footer)
+    return output.getvalue()
+
+
+def final_timings_pdf(booking: Booking, submission: FormSubmission,
+                      profile: BusinessProfile) -> bytes:
+    """Create the photographer's complete, printable final-timings record."""
+    branding = BRAND_ASSETS.get(profile.brand, BRAND_ASSETS[Brand.WBM])
+    accent, ink, pale = branding["accent"], branding["ink"], branding["pale"]
+    values = dict(submission.data or {})
+    calculation = dict(values.pop("_calculation", {}) or {})
+    output = BytesIO()
+    doc = SimpleDocTemplate(
+        output, pagesize=A4, rightMargin=16 * mm, leftMargin=16 * mm,
+        topMargin=15 * mm, bottomMargin=16 * mm,
+        title=f"Final Wedding Timings - {booking.title}",
+    )
+    styles = getSampleStyleSheet()
+    normal = ParagraphStyle("TimingsNormal", parent=styles["Normal"], fontName="Helvetica",
+                            fontSize=8.5, leading=12, textColor=ink)
+    small = ParagraphStyle("TimingsSmall", parent=normal, fontSize=7.4, leading=10,
+                           textColor=MUTED)
+    heading = ParagraphStyle("TimingsHeading", parent=styles["Title"], fontName="Helvetica-Bold",
+                             fontSize=23, leading=27, textColor=ink, alignment=TA_RIGHT)
+    section = ParagraphStyle("TimingsSection", parent=normal, fontName="Helvetica-Bold",
+                             fontSize=11.5, leading=15, textColor=ink, spaceBefore=7, spaceAfter=6)
+    value_style = ParagraphStyle("TimingsValue", parent=normal, fontSize=8, leading=11)
+
+    def clean(value, fallback="Not supplied") -> str:
+        if value is True:
+            return "Yes"
+        if value is False:
+            return "No"
+        if value is None or str(value).strip() == "":
+            return fallback
+        if isinstance(value, list):
+            return ", ".join(str(item) for item in value) or fallback
+        return str(value)
+
+    def duration(minutes) -> str:
+        if minutes is None:
+            return "Check package"
+        amount = max(0, int(minutes or 0))
+        hours, remainder = divmod(amount, 60)
+        parts = []
+        if hours:
+            parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+        if remainder:
+            parts.append(f"{remainder} minutes")
+        return " ".join(parts) or "0 minutes"
+
+    def submitted_time(value) -> str:
+        if not value:
+            return "Not recorded"
+        aware = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        local = aware.astimezone(ZoneInfo("Europe/London"))
+        return local.strftime("%d %B %Y at %H:%M %Z")
+
+    logo = fitted_image(branding.get("logo"), 68 * mm, 30 * mm)
+    identity = [logo] if logo else [Paragraph(f"<b>{escape(profile.display_name)}</b>", normal)]
+    header = Table([[identity, Paragraph("FINAL WEDDING<br/>TIMINGS", heading)]],
+                   colWidths=[98 * mm, 63 * mm])
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story = [header, Spacer(1, 4 * mm), HRFlowable(color=accent, thickness=2), Spacer(1, 5 * mm)]
+
+    wedding_rows = [
+        [Paragraph("<b>COUPLE</b>", small), Paragraph(escape(booking.title), normal),
+         Paragraph("<b>WEDDING DATE</b>", small),
+         Paragraph(booking.event_date.strftime("%d %B %Y") if booking.event_date else "Not set", normal)],
+        [Paragraph("<b>PACKAGE</b>", small), Paragraph(escape(clean(booking.package_name)), normal),
+         Paragraph("<b>SUBMITTED</b>", small), Paragraph(submitted_time(submission.submitted_at), normal)],
+    ]
+    wedding = Table(wedding_rows, colWidths=[27 * mm, 55 * mm, 30 * mm, 49 * mm])
+    wedding.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), pale),
+        ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#d7dfdd")),
+        ("INNERGRID", (0, 0), (-1, -1), .3, colors.HexColor("#d7dfdd")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+    ]))
+    story.extend([wedding, Paragraph("Coverage summary", section)])
+
+    status_labels = {
+        "within": "Fits included coverage",
+        "within_grace": "Within 15-minute grace",
+        "over": f"Over by {duration(calculation.get('over_standard_minutes'))}",
+        "package_review": "Package needs checking",
+    }
+    coverage_rows = [
+        ["Suggested start", clean(calculation.get("suggested_start")),
+         "Expected finish", clean(calculation.get("expected_finish"))],
+        ["Expected coverage", duration(calculation.get("coverage_minutes")),
+         "Package allowance", duration(calculation.get("package_allowance_minutes"))],
+        ["Coverage result", status_labels.get(calculation.get("status"), "Check timings"),
+         "Preparation departure", clean(calculation.get("prep_departure"))],
+    ]
+    coverage = Table([[Paragraph(f"<b>{escape(str(label))}</b>", small),
+                       Paragraph(escape(clean(value)), value_style),
+                       Paragraph(f"<b>{escape(str(label2))}</b>", small),
+                       Paragraph(escape(clean(value2)), value_style)]
+                      for label, value, label2, value2 in coverage_rows],
+                     colWidths=[32 * mm, 48 * mm, 36 * mm, 45 * mm])
+    coverage.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#d7dfdd")),
+        ("INNERGRID", (0, 0), (-1, -1), .3, colors.HexColor("#e3e8e7")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(coverage)
+    if calculation.get("coverage_warning"):
+        story.extend([Spacer(1, 3 * mm), Paragraph(
+            f"<b>Coverage warning:</b> These timings exceed the included coverage by "
+            f"{escape(duration(calculation.get('over_standard_minutes')))}. Nothing has been charged or changed automatically.",
+            normal,
+        )])
+    if calculation.get("travel_warning"):
+        story.extend([Spacer(1, 2 * mm), Paragraph(
+            f"<b>Private preparation/travel warning:</b> Only "
+            f"{escape(duration(calculation.get('prep_window_minutes')))} remains for preparation photographs before departure.",
+            normal,
+        )])
+
+    story.append(Paragraph("Wedding-day run sheet", section))
+    timeline_rows = [[Paragraph("<b>TIME</b>", small), Paragraph("<b>EVENT</b>", small),
+                      Paragraph("<b>DETAIL</b>", small)]]
+    for item in calculation.get("timeline") or []:
+        timeline_rows.append([
+            Paragraph(escape(clean(item.get("time"))), value_style),
+            Paragraph(f"<b>{escape(clean(item.get('event')))}</b>", value_style),
+            Paragraph(escape(clean(item.get("detail"), "")), value_style),
+        ])
+    timeline = Table(timeline_rows, colWidths=[24 * mm, 60 * mm, 77 * mm], repeatRows=1)
+    timeline.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), pale),
+        ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#d7dfdd")),
+        ("INNERGRID", (0, 0), (-1, -1), .3, colors.HexColor("#e3e8e7")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(timeline)
+
+    labels = {
+        "ceremony_time": "Ceremony time", "ceremony_duration": "Ceremony duration (minutes)",
+        "ceremony_venue": "Ceremony venue and address", "reception_same": "Reception at the same venue",
+        "reception_venue": "Reception venue and address", "prep_photos": "Preparation photographs",
+        "prep_person": "Who is getting ready", "prep_venue": "Preparation venue and address",
+        "travel_minutes": "Travel to ceremony (minutes)", "start_choice": "Preferred photography start",
+        "requested_start": "Requested earlier start", "prep_notes": "Preparation notes",
+        "second_prep": "Second preparation location", "group_photo_time": "Group photograph time",
+        "meal_time": "Wedding breakfast / meal time", "speeches_time": "Speeches time",
+        "speeches_position": "Speeches position", "evening_time": "Evening guests arrive",
+        "cake_time": "Cake cutting", "first_dance_time": "First dance",
+        "later_event": "Essential event after first dance", "later_event_name": "Later event",
+        "later_event_time": "Later event time", "extra_stops": "Additional stops or venues",
+        "day_contact": "Wedding-day contact", "day_mobile": "Wedding-day mobile",
+        "coordinator": "Venue coordinator", "group_count": "Formal group photographs",
+        "important_notes": "Important details and requests",
+    }
+    story.extend([PageBreak(), Paragraph("Complete submitted answers", section)])
+    answer_rows = []
+    for key, label in labels.items():
+        answer_rows.append([
+            Paragraph(f"<b>{escape(label)}</b>", small),
+            Paragraph(escape(clean(values.get(key))).replace("\n", "<br/>"), value_style),
+        ])
+    answers = Table(answer_rows, colWidths=[55 * mm, 106 * mm])
+    answers.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#d7dfdd")),
+        ("INNERGRID", (0, 0), (-1, -1), .3, colors.HexColor("#e3e8e7")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BACKGROUND", (0, 0), (0, -1), pale),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    story.append(answers)
+
+    def timings_footer(canvas, document):
+        canvas.saveState()
+        canvas.setStrokeColor(colors.HexColor("#d7dfdd"))
+        canvas.setLineWidth(.4)
+        canvas.line(16 * mm, 10 * mm, A4[0] - 16 * mm, 10 * mm)
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(MUTED)
+        canvas.drawString(16 * mm, 6 * mm, f"{profile.display_name} · Private planning copy")
+        canvas.drawRightString(A4[0] - 16 * mm, 6 * mm, f"Page {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=timings_footer, onLaterPages=timings_footer)
     return output.getvalue()
 
 

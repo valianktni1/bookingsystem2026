@@ -18,7 +18,7 @@ import app.main as main_module
 from app.database import SessionLocal, engine
 from app.final_timings import STUDIO_NINJA_AUTOMATION_AFTER, studio_ninja_final_timings_email_due
 from app.main import app
-from app.models import (Booking, Brand, Client, ClientPortalToken, EmailLog,
+from app.models import (Booking, Brand, Client, ClientPortalToken, Document, EmailLog,
                         FormSubmission, RecordKind, RecordStatus, ReminderLog, Task)
 
 
@@ -79,8 +79,14 @@ def test_native_final_timings_uses_spare_coverage_and_reopens_review_task():
             "form_type": "final_timings", "data": final_answers(),
         })
         assert saved.status_code == 200, saved.text
+        pdf_document_id = saved.json()["pdf_document_id"]
+        assert pdf_document_id
         public = client.get(f"/api/client/{token}").json()
         submission = next(x for x in public["submissions"] if x["form_type"] == "final_timings")
+        assert submission["source_document_id"] == pdf_document_id
+        assert public["final_timings"]["submitted"] is True
+        assert public["final_timings"]["submitted_at"] == submission["submitted_at"]
+        assert public["final_timings"]["pdf_document_id"] == pdf_document_id
         calculation = submission["data"]["_calculation"]
         assert calculation["suggested_start"] == "11:30"
         assert calculation["prep_departure"] == "12:25"
@@ -89,15 +95,35 @@ def test_native_final_timings_uses_spare_coverage_and_reopens_review_task():
         assert calculation["coverage_warning"] is False
         assert calculation["earlier_start_minutes"] == 30
 
+        pdf = client.get(f"/api/bookings/{booking['id']}/final-timings.pdf")
+        assert pdf.status_code == 200, pdf.text
+        assert pdf.content.startswith(b"%PDF")
+        assert pdf.headers["content-disposition"].startswith("attachment")
+        inline_pdf = client.get(f"/api/bookings/{booking['id']}/final-timings.pdf?inline=true")
+        assert inline_pdf.status_code == 200
+        assert inline_pdf.headers["content-disposition"].startswith("inline")
+        record_documents = client.get(f"/api/bookings/{booking['id']}").json()["documents"]
+        assert any(item["id"] == pdf_document_id and item["category"] == "final_timings"
+                   for item in record_documents)
+        with SessionLocal() as db:
+            document = db.get(Document, pdf_document_id)
+            assert document.category == "final_timings"
+            assert document.source_system == "bookingsystem2026_generated"
+            assert document.is_client_visible is False
+            assert document.original_name == "Final Wedding Timings - Sophie & James.pdf"
+            assert (TEST_ROOT / "v820-storage" / document.storage_name).read_bytes().startswith(b"%PDF")
+
         reviewed = client.post(f"/api/bookings/{booking['id']}/final-timings/review")
         assert reviewed.status_code == 200
         assert client.get(f"/api/bookings/{booking['id']}/portal").json()["final_timings"]["reviewed_at"]
 
         changed = final_answers()
         changed["first_dance_time"] = "19:45"
-        assert client.post(f"/api/client/{token}/forms", json={
+        changed_response = client.post(f"/api/client/{token}/forms", json={
             "form_type": "final_timings", "data": changed,
-        }).status_code == 200
+        })
+        assert changed_response.status_code == 200
+        assert changed_response.json()["pdf_document_id"] == pdf_document_id
         refreshed = client.get(f"/api/bookings/{booking['id']}/portal").json()
         assert refreshed["final_timings"]["reviewed_at"] is None
         with SessionLocal() as db:
@@ -106,6 +132,11 @@ def test_native_final_timings_uses_spare_coverage_and_reopens_review_task():
                 Task.workflow_key == "wbm_review_final_timings",
             ))
             assert task is not None and task.completed is False
+            documents = db.scalars(select(Document).where(
+                Document.booking_id == booking["id"],
+                Document.category == "final_timings",
+            )).all()
+            assert [item.id for item in documents] == [pdf_document_id]
 
 
 def test_bronze_genuine_overrun_is_visible_but_does_not_change_booking():
@@ -223,8 +254,8 @@ def test_v820_assets_and_old_final_questionnaire_remain_blocked():
     root = Path(__file__).parents[1]
     index = (root / "app/static/index.html").read_text()
     client_html = (root / "app/static/client.html").read_text()
-    assert "/static/v820.js?v=manual-timings-send-v8-20-1" in index
-    assert "/static/client-v820.js?v=manual-timings-send-v8-20-1" in client_html
+    assert "/static/v820.js?v=final-timings-records-v8-21" in index
+    assert "/static/client-v820.js?v=final-timings-records-v8-21" in client_html
     assert "only automatic email permitted" in (root / "app/main.py").read_text()
     assert 'pattern="^(booking_form|final_timings)$"' in (root / "app/schemas.py").read_text()
     admin_js = (root / "app/static/v820.js").read_text()
@@ -232,6 +263,9 @@ def test_v820_assets_and_old_final_questionnaire_remain_blocked():
     assert "Open & send form now" in admin_js
     assert 'host.querySelectorAll(".v820-final")' in admin_js
     assert "SEND ONE MANUAL EMAIL" in admin_js
+    assert "View complete form" in admin_js
+    assert "View / download PDF" in admin_js
+    assert "A PDF copy is retained automatically in Files" in admin_js
 
 
 def teardown_module():
