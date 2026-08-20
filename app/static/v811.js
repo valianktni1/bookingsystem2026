@@ -375,7 +375,8 @@
     if (title.includes("record their first payment") || title.includes("outstanding") || title.includes("balance remaining")) return { ...next, action: "record_payment" };
     if (title.includes("countersign")) return { ...next, action: "countersign" };
     if (title.includes("booking form") || title.includes("contract") || title.includes("agreement")) return { ...next, action: "review_forms" };
-    if (title.includes("finalise") || title.includes("to do")) return { ...next, action: "open_task" };
+    if (title.includes("finalise")) return { ...next, action: "open_final_call_pack" };
+    if (title.includes("to do")) return { ...next, action: "open_task" };
     return { ...next, action: "view" };
   }
 
@@ -391,6 +392,7 @@
     else if (action === "review_forms") $(".v811-journey-forms")?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (action === "review_booking_form") $(".v811-journey-forms")?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (action === "review_final_timings") $(".v820-final")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (action === "open_final_call_pack") $(".v823-final-call-pack")?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (action === "open_task") $(".overview-task-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 

@@ -1,9 +1,19 @@
-# Mark's Business Studio — Version 8.22
+# Mark's Business Studio — Version 8.23
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.22, including browser-history
+build includes every cumulative feature through V8.23, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.23 complete final call pack
+
+Every wedding Journey now ends with a private Step 5 Final Call Pack. It brings
+together the couple's contact details, venues, package, submitted forms, complete
+run sheet, coverage warnings, agreement and payment position. A ten-point checklist
+and editable private notes can be saved during the call, and the existing final-call
+task can be completed or reopened from the same panel. One current printable PDF is
+retained privately in Files. The same private feature works for Studio Ninja imports
+without sending any client message or lifting their automation suppression.
 
 ## Version 8.22 new client updates dashboard
 

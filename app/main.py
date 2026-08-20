@@ -33,6 +33,8 @@ from .final_timings import (FORM_TYPE as FINAL_TIMINGS_FORM_TYPE,
                             booking_coverage_allowance, final_timings_unlocked,
                             studio_ninja_final_timings_email_due,
                             validated_final_timings)
+from .final_call_pack import (CHECKLIST_ITEMS, clean_final_call_state,
+                              final_call_pack_pdf, final_call_readiness)
 from .migrations import apply_safe_migrations
 from .legacy_archive_import import register_legacy_archive_import_routes
 from .legacy_import import register_legacy_import_routes
@@ -48,7 +50,7 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       ClientEmailComposeIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn,
-                      SendEmailIn, TaskIn, TaskPatch,
+                      FinalCallPackIn, SendEmailIn, TaskIn, TaskPatch,
                       TemplateTestIn, TestingModeIn)
 from .security import create_token, current_admin, verify_password
 from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
@@ -82,7 +84,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.22-client-updates-dashboard", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.23-final-call-pack", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -481,6 +483,113 @@ def ensure_final_timings_document(db: Session, booking: Booking,
     submission.source_document_id = document.id
     db.flush()
     return document, content
+
+
+def final_call_records(db: Session, booking_id: str):
+    booking = full_booking(db, booking_id)
+    if booking.kind != RecordKind.WEDDING:
+        raise HTTPException(409, "The Final Call Pack is available for wedding bookings only")
+    submissions = list(db.scalars(select(FormSubmission).where(
+        FormSubmission.booking_id == booking.id,
+        FormSubmission.form_type.in_(("booking_form", FINAL_TIMINGS_FORM_TYPE)),
+    )).all())
+    booking_form = next((row for row in submissions if row.form_type == "booking_form"), None)
+    final_timings = next((row for row in submissions if row.form_type == FINAL_TIMINGS_FORM_TYPE), None)
+    contract = db.scalar(select(ContractAcceptance).where(
+        ContractAcceptance.booking_id == booking.id
+    ).limit(1))
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    if not profile:
+        raise HTTPException(503, "Business profile not found for the Final Call Pack")
+    return booking, booking_form, final_timings, contract, list(booking.invoices), profile
+
+
+def ensure_final_call_pack_document(
+    db: Session,
+    booking: Booking,
+    booking_form: FormSubmission | None,
+    final_timings: FormSubmission | None,
+    contract: ContractAcceptance | None,
+    invoices: list[Invoice],
+    profile: BusinessProfile,
+) -> tuple[Document, bytes]:
+    """Create or refresh one current private Final Call Pack in Files."""
+    state = clean_final_call_state(booking)
+    content = final_call_pack_pdf(
+        booking, booking_form, final_timings, contract, invoices, profile, state
+    )
+    reference = "final_call_pack:v1"
+    document = db.scalar(select(Document).where(
+        Document.booking_id == booking.id,
+        Document.source_system == "bookingsystem2026_generated",
+        Document.legacy_reference == reference,
+    ).limit(1))
+    safe_title = re.sub(r"[^A-Za-z0-9&'() ._-]", "_", booking.title or "Wedding")[:150].strip()
+    original_name = f"Final Call Pack - {safe_title or 'Wedding'}.pdf"
+    if not document:
+        document = Document(
+            booking_id=booking.id,
+            category="final_call_pack",
+            original_name=original_name,
+            storage_name=f"{booking.id}/final_call_pack/{uuid.uuid4().hex}.pdf",
+            content_type="application/pdf",
+            size_bytes=len(content),
+            source_system="bookingsystem2026_generated",
+            legacy_reference=reference,
+            document_date=booking.event_date or date.today(),
+            is_client_visible=False,
+        )
+        db.add(document)
+        db.flush()
+    target = settings.storage_root / document.storage_name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(".pdf.tmp")
+    try:
+        temporary.write_bytes(content)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    document.original_name = original_name
+    document.content_type = "application/pdf"
+    document.size_bytes = len(content)
+    document.document_date = booking.event_date or date.today()
+    db.flush()
+    return document, content
+
+
+def final_call_pack_json(
+    booking: Booking,
+    booking_form: FormSubmission | None,
+    final_timings: FormSubmission | None,
+    contract: ContractAcceptance | None,
+    invoices: list[Invoice],
+) -> dict:
+    state = clean_final_call_state(booking)
+    task = next((row for row in booking.tasks if row.workflow_key == "wbm_final_details_call"), None)
+    return {
+        "booking_id": booking.id,
+        "private_only": True,
+        "legacy_source": booking.legacy_source,
+        "automation_suppressed": booking.automation_suppressed,
+        "checklist": [
+            {"key": key, "label": label, "checked": state["checklist"][key]}
+            for key, label in CHECKLIST_ITEMS
+        ],
+        "checked_count": sum(state["checklist"].values()),
+        "checklist_count": len(CHECKLIST_ITEMS),
+        "notes": state["notes"],
+        "updated_at": state["updated_at"],
+        "updated_by": state["updated_by"],
+        "completed": bool(state["completed_at"] or (task and task.completed)),
+        "completed_at": state["completed_at"],
+        "completed_by": state["completed_by"],
+        "task_id": task.id if task else None,
+        "task_due_at": task.due_at.isoformat() if task and task.due_at else None,
+        "readiness": final_call_readiness(
+            booking, booking_form, final_timings, contract, invoices
+        ),
+        "pdf_url": f"/api/bookings/{booking.id}/final-call-pack.pdf",
+    }
 
 
 def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | None = None) -> dict:
@@ -1173,7 +1282,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                     and task.due_at and task.due_at.date() <= final_calls_due_through):
                 queues["final_calls"].append(item(
                     booking, "Private 30-day final-details telephone call",
-                    "Overview", "open_task", due=task.due_at.date(),
+                    "Journey", "open_final_call_pack", due=task.due_at.date(),
                 ))
 
     queues["client_updates"].sort(
@@ -2846,6 +2955,97 @@ def review_final_timings(
     })
     db.commit()
     return {"ok": True, "reviewed_at": reviewed_at.isoformat(), "reviewed_by": admin.email}
+
+
+@app.get("/api/bookings/{booking_id}/final-call-pack")
+def get_final_call_pack(
+    booking_id: str,
+    _: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    booking, booking_form, final_timings, contract, invoices, _profile = final_call_records(
+        db, booking_id
+    )
+    return final_call_pack_json(booking, booking_form, final_timings, contract, invoices)
+
+
+@app.put("/api/bookings/{booking_id}/final-call-pack")
+def save_final_call_pack(
+    booking_id: str,
+    payload: FinalCallPackIn,
+    admin: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    booking, booking_form, final_timings, contract, invoices, profile = final_call_records(
+        db, booking_id
+    )
+    now = datetime.now(timezone.utc)
+    previous = clean_final_call_state(booking)
+    checklist = {
+        key: bool(payload.checklist.get(key, False))
+        for key, _label in CHECKLIST_ITEMS
+    }
+    state = {
+        "checklist": checklist,
+        "notes": payload.notes.strip(),
+        "updated_at": now.isoformat(),
+        "updated_by": admin.email,
+        "completed_at": previous["completed_at"],
+        "completed_by": previous["completed_by"],
+    }
+    if payload.completed and not state["completed_at"]:
+        state["completed_at"] = now.isoformat()
+        state["completed_by"] = admin.email
+    elif not payload.completed:
+        state["completed_at"] = None
+        state["completed_by"] = None
+    workflow = dict(booking.workflow_state or {})
+    workflow["final_call_pack"] = state
+    booking.workflow_state = workflow
+    task = sync_final_details_call_task(db, booking)
+    if task:
+        task.completed = payload.completed
+    db.flush()
+    document, _content = ensure_final_call_pack_document(
+        db, booking, booking_form, final_timings, contract, invoices, profile
+    )
+    audit(db, "save_final_call_pack", "booking", booking.id, {
+        "completed": payload.completed,
+        "checked": sum(checklist.values()),
+        "document_id": document.id,
+        "private_only": True,
+    })
+    db.commit()
+    booking, booking_form, final_timings, contract, invoices, _profile = final_call_records(
+        db, booking_id
+    )
+    result = final_call_pack_json(booking, booking_form, final_timings, contract, invoices)
+    result["document_id"] = document.id
+    return result
+
+
+@app.get("/api/bookings/{booking_id}/final-call-pack.pdf")
+def download_final_call_pack_pdf(
+    booking_id: str,
+    inline: bool = Query(False),
+    _: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    booking, booking_form, final_timings, contract, invoices, profile = final_call_records(
+        db, booking_id
+    )
+    document, content = ensure_final_call_pack_document(
+        db, booking, booking_form, final_timings, contract, invoices, profile
+    )
+    audit(db, "generate_final_call_pack", "booking", booking.id, {
+        "document_id": document.id,
+        "private_only": True,
+    })
+    db.commit()
+    disposition = "inline" if inline else "attachment"
+    return Response(content, media_type="application/pdf", headers={
+        "Content-Disposition": f'{disposition}; filename="{document.original_name}"',
+    })
 
 
 @app.post("/api/client/{token}/contract")

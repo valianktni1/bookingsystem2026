@@ -84,6 +84,12 @@ class TaskPatch(BaseModel):
     completed: bool | None = None
 
 
+class FinalCallPackIn(BaseModel):
+    checklist: dict[str, bool] = Field(default_factory=dict)
+    notes: str = Field(default="", max_length=10000)
+    completed: bool = False
+
+
 class InvoiceIn(BaseModel):
     total: Decimal = Field(gt=0)
     issue_date: date = Field(default_factory=date.today)

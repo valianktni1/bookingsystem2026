@@ -1,5 +1,17 @@
-BookingSystem2026 - New Client Updates Dashboard
-Build: 2026.08.20-client-updates-dashboard-v8.22
+BookingSystem2026 - Complete Final Call Pack
+Build: 2026.08.20-final-call-pack-v8.23
+
+V8.23 complete final call pack:
+
+- Adds a private Step 5 Final Call Pack to every wedding Journey.
+- Brings the booking, client contacts, venues, package, booking form, final
+  timings, coverage checks, agreement and account position together.
+- Provides a ten-point telephone checklist and private editable call notes.
+- Creates one polished, current PDF working copy and retains it privately in Files.
+- Completing or reopening the pack updates the existing final-call task.
+- The Today final-call queue now opens directly at the complete pack.
+- Works for native and Studio Ninja weddings without sending an email or changing
+  the imported booking's automation suppression.
 
 V8.22 new client updates dashboard:
 
