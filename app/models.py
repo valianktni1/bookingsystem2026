@@ -376,8 +376,13 @@ class EmailLog(Base):
     template_key: Mapped[str] = mapped_column(String(80), index=True)
     recipient: Mapped[str] = mapped_column(String(254))
     subject: Mapped[str] = mapped_column(String(240))
+    body: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="sent", index=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tracking_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
+    first_link_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_link_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    link_access_count: Mapped[int] = mapped_column(default=0)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     booking: Mapped[Booking] = relationship()
 

@@ -1,5 +1,5 @@
-BookingSystem2026 - Complete Backup
-Build: 2026.08.19-couple-payment-reference-v8.15
+BookingSystem2026 - Client Communication
+Build: 2026.08.20-client-communication-v8.16
 
 V8.14 complete one-click backup:
 
@@ -245,3 +245,15 @@ friendly quote wording and branded quote button.
   and relevant payment emails.
 - Invoice numbering, existing data, imported Studio Ninja records, Ivory
   Digital records, Calendar, availability, Accounts sync and backups are unchanged.
+
+2026.08.20-client-communication-v8.16
+
+- New quote emails carry a private self-hosted access marker; the Journey shows
+  the first access, latest access and count without claiming an email was read.
+- Previewing or copying the normal client URL does not record an access.
+- Each Journey shows successful sent mail and live incoming Hostinger mail for
+  only that booking's exact couple email address or addresses.
+- Newly sent app messages retain their exact body for the conversation view;
+  historic delivery records remain visible even when their body was not stored.
+- Existing bookings and invoice data remain unchanged. Studio Ninja automation
+  locks, Testing Mode, Calendar, availability, Accounts sync and backups remain intact.

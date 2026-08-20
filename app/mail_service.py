@@ -12,7 +12,7 @@ from email import policy
 from email.header import decode_header, make_header
 from email.message import EmailMessage, Message
 from email.parser import BytesParser
-from email.utils import make_msgid, parseaddr, parsedate_to_datetime
+from email.utils import getaddresses, make_msgid, parseaddr, parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Iterator
@@ -305,6 +305,69 @@ def read_inbox_message(brand: Brand, uid: str, mark_seen: bool = True) -> dict:
         }
 
 
+def list_correspondent_messages(brand: Brand, email_address: str,
+                                limit: int = 60) -> list[dict]:
+    """Read only inbox messages sent by one exact client email address.
+
+    IMAP narrows the remote search first, then the parsed From/Reply-To address
+    is compared exactly. This prevents another client's or Mark's personal mail
+    from leaking into a booking conversation because of a partial text match.
+    Messages are read with BODY.PEEK and are not marked as seen.
+    """
+    target = str(email_address or "").strip().lower()
+    if not re.fullmatch(r'[^@\s"]+@[^@\s"]+', target):
+        raise ValueError("The booking does not have a valid email address")
+    count = max(1, min(int(limit or 60), 100))
+    with imap_connection(brand) as connection:
+        status, data = connection.uid("search", None, "FROM", f'"{target}"')
+        if status != "OK":
+            raise RuntimeError("The client conversation could not be searched")
+        uids = (data[0] or b"").split()[-count:]
+        rows: list[dict] = []
+        for uid_bytes in uids:
+            uid = uid_bytes.decode("ascii", "ignore")
+            if not uid:
+                continue
+            try:
+                meta, message = _fetch_message(connection, uid)
+            except FileNotFoundError:
+                continue
+            sender_name, sender_email = parseaddr(_decoded(message.get("From")))
+            reply_name, reply_email = parseaddr(_decoded(message.get("Reply-To")))
+            sender_email = sender_email.lower()
+            reply_email = (reply_email or sender_email).lower()
+            if target not in {sender_email, reply_email}:
+                continue
+            attachments = attachment_parts(message)
+            flags = _flags_from_meta(meta)
+            rows.append({
+                "uid": uid,
+                "brand": brand.value,
+                "from_name": _decoded(sender_name) or sender_email,
+                "from_email": sender_email,
+                "reply_to_name": _decoded(reply_name),
+                "reply_to_email": reply_email,
+                "to": _decoded(message.get("To")),
+                "subject": _decoded(message.get("Subject")) or "(No subject)",
+                "date": _date_iso(message.get("Date")),
+                "message_id": _decoded(message.get("Message-ID")),
+                "in_reply_to": _decoded(message.get("In-Reply-To")),
+                "references": _decoded(message.get("References")),
+                "unread": "\\Seen" not in flags,
+                "body": message_text(message)[:50_000],
+                "attachments": [
+                    {
+                        "index": index,
+                        "filename": _decoded(part.get_filename()) or f"attachment-{index + 1}",
+                        "content_type": part.get_content_type(),
+                        "size": len(part.get_payload(decode=True) or b""),
+                    }
+                    for index, part in enumerate(attachments)
+                ],
+            })
+        return sorted(rows, key=lambda item: (item.get("date") or "", int(item["uid"])))
+
+
 def read_attachment(brand: Brand, uid: str, index: int) -> tuple[bytes, str, str]:
     with imap_connection(brand) as connection:
         _, message = _fetch_message(connection, uid)
@@ -390,6 +453,52 @@ def _sent_folder(connection: imaplib.IMAP4) -> str | None:
         if status == "OK":
             return candidate
     return None
+
+
+def list_sent_messages_to_correspondent(brand: Brand, email_address: str,
+                                         limit: int = 60) -> list[dict]:
+    """Read exact-recipient messages from the business mailbox Sent folder."""
+    target = str(email_address or "").strip().lower()
+    if not re.fullmatch(r'[^@\s"]+@[^@\s"]+', target):
+        raise ValueError("The booking does not have a valid email address")
+    count = max(1, min(int(limit or 60), 100))
+    with imap_connection(brand) as connection:
+        folder = _sent_folder(connection)
+        if not folder:
+            return []
+        status, _ = connection.select(folder, readonly=True)
+        if status != "OK":
+            return []
+        status, data = connection.uid("search", None, "TO", f'"{target}"')
+        if status != "OK":
+            raise RuntimeError("Sent messages for this client could not be searched")
+        uids = (data[0] or b"").split()[-count:]
+        rows: list[dict] = []
+        for uid_bytes in uids:
+            uid = uid_bytes.decode("ascii", "ignore")
+            if not uid:
+                continue
+            try:
+                _, message = _fetch_message(connection, uid)
+            except FileNotFoundError:
+                continue
+            recipients = {
+                address.lower() for _, address in getaddresses(message.get_all("To", []))
+                if address
+            }
+            if target not in recipients:
+                continue
+            rows.append({
+                "uid": uid,
+                "brand": brand.value,
+                "subject": _decoded(message.get("Subject")) or "(No subject)",
+                "date": _date_iso(message.get("Date")),
+                "message_id": _decoded(message.get("Message-ID")),
+                "body": message_text(message)[:50_000],
+                "to_email": target,
+                "attachments": [],
+            })
+        return sorted(rows, key=lambda item: (item.get("date") or "", int(item["uid"])))
 
 
 def append_to_sent(brand: Brand, message: EmailMessage) -> bool:

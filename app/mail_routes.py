@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
@@ -19,9 +20,11 @@ from .database import get_db
 from .email_service import send_email_message, smtp_ready
 from .mail_service import (append_to_sent, build_reply_message, friendly_mail_error,
                            imap_credentials, imap_ready, list_inbox_messages,
-                           mailbox_status, read_attachment, read_inbox_message, set_seen)
+                           list_correspondent_messages, mailbox_status, read_attachment,
+                           read_inbox_message, list_sent_messages_to_correspondent, set_seen)
 from .models import (Admin, AuditLog, Booking, Brand, BusinessProfile, Client,
-                     ClientPortalToken, EmailLog, MailboxReply, RecordStatus)
+                     ClientPortalToken, EmailLog, FormSubmission, MailboxReply,
+                     RecordStatus)
 from .security import current_admin
 from .services import audit
 
@@ -192,6 +195,174 @@ def register_mail_routes(app: FastAPI) -> None:
         messages.sort(key=lambda item: (item.get("date") or "", int(item["uid"])), reverse=True)
         return {"messages": messages[:limit], "errors": errors,
                 "configured": {item.value: imap_ready(item) for item in Brand}}
+
+    @app.get("/api/bookings/{booking_id}/conversation")
+    def booking_conversation(
+        booking_id: str,
+        limit: int = Query(default=60, ge=10, le=100),
+        _: Admin = Depends(current_admin),
+        db: Session = Depends(get_db),
+    ):
+        """Return only mail securely associated with this booking and client."""
+        booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(
+            Booking.id == booking_id
+        ))
+        if not booking:
+            raise HTTPException(404, "Booking not found")
+
+        # The primary address is taken from the client record. Once the couple
+        # have submitted their booking form, include both exact addresses from
+        # that form as well. No name, subject or partial-address matching is
+        # used here: this is the privacy boundary for the client conversation.
+        form_submission = db.scalar(select(FormSubmission).where(
+            FormSubmission.booking_id == booking.id,
+            FormSubmission.form_type == "booking_form",
+        ))
+        form_answers = dict(booking.form_data or {})
+        if form_submission and isinstance(form_submission.data, dict):
+            form_answers.update(form_submission.data)
+        client_emails: list[str] = []
+        for value in (
+            booking.client.email,
+            form_answers.get("primary_email"),
+            form_answers.get("partner_email"),
+        ):
+            address = str(value or "").strip().lower()
+            if (address and address not in client_emails
+                    and re.fullmatch(r'[^@\s"]+@[^@\s"]+', address)):
+                client_emails.append(address)
+        if not client_emails:
+            raise HTTPException(409, "This booking does not have a valid client email address")
+
+        sent: list[dict] = []
+        logs = db.scalars(select(EmailLog).where(
+            EmailLog.booking_id == booking.id,
+            EmailLog.status == "sent",
+            EmailLog.template_key.notin_(("new_enquiry_admin", "mail_reply")),
+            func.lower(EmailLog.recipient).in_(client_emails),
+        ).order_by(EmailLog.sent_at).limit(limit)).all()
+        for row in logs:
+            sent.append({
+                "id": f"email-log:{row.id}",
+                "direction": "sent",
+                "source": "booking_system",
+                "subject": row.subject,
+                "body": row.body,
+                "body_available": bool(row.body),
+                "address": row.recipient,
+                "date": row.sent_at.isoformat(),
+                "status": row.status,
+                "attachments": [],
+            })
+
+        replies = db.scalars(select(MailboxReply).where(
+            MailboxReply.booking_id == booking.id,
+            MailboxReply.brand == booking.brand,
+            MailboxReply.status == "sent",
+            func.lower(MailboxReply.recipient).in_(client_emails),
+        ).order_by(MailboxReply.sent_at).limit(limit)).all()
+        reply_message_ids = {str(row.message_id) for row in replies if row.message_id}
+        for row in replies:
+            sent.append({
+                "id": f"mailbox-reply:{row.id}",
+                "direction": "sent",
+                "source": "mailbox_reply",
+                "subject": row.subject,
+                "body": row.body,
+                "body_available": True,
+                "address": row.recipient,
+                "date": row.sent_at.isoformat(),
+                "status": row.status,
+                "attachments": [],
+            })
+
+        received: list[dict] = []
+        incoming_error = None
+        mailbox_configured = imap_ready(booking.brand)
+        if booking.is_test:
+            incoming_error = "Testing Mode records do not read personal or test-mailbox conversations."
+        elif mailbox_configured:
+            mail_errors: list[str] = []
+            received_uids: set[str] = set()
+            sent_uids: set[str] = set()
+            for client_email in client_emails:
+                try:
+                    incoming = list_correspondent_messages(
+                        booking.brand, client_email, limit
+                    )
+                    for row in incoming:
+                        uid = str(row["uid"])
+                        if uid in received_uids:
+                            continue
+                        received_uids.add(uid)
+                        received.append({
+                            "id": f"imap:{booking.brand.value}:{uid}",
+                            "direction": "received",
+                            "source": "hostinger_imap",
+                            "subject": row["subject"],
+                            "body": row["body"],
+                            "body_available": True,
+                            "address": row["reply_to_email"],
+                            "from_name": row["from_name"],
+                            "date": row["date"],
+                            "status": "unread" if row["unread"] else "read",
+                            "unread": row["unread"],
+                            "brand": booking.brand.value,
+                            "uid": uid,
+                            "attachments": [{
+                                **item,
+                                "url": (f"/api/mail/{booking.brand.value}/messages/{uid}"
+                                        f"/attachments/{item['index']}"),
+                            } for item in row["attachments"]],
+                        })
+                except Exception as exc:
+                    mail_errors.append(f"Received mail for {client_email}: {friendly_mail_error(exc)}")
+
+                try:
+                    sent_folder_rows = list_sent_messages_to_correspondent(
+                        booking.brand, client_email, limit
+                    )
+                    for row in sent_folder_rows:
+                        uid = str(row["uid"])
+                        if uid in sent_uids or row.get("message_id") in reply_message_ids:
+                            continue
+                        sent_uids.add(uid)
+                        sent.append({
+                            "id": f"imap-sent:{booking.brand.value}:{uid}",
+                            "direction": "sent",
+                            "source": "hostinger_sent",
+                            "subject": row["subject"],
+                            "body": row["body"],
+                            "body_available": True,
+                            "address": row["to_email"],
+                            "date": row["date"],
+                            "status": "sent",
+                            "attachments": [],
+                        })
+                except Exception as exc:
+                    mail_errors.append(f"Sent mail for {client_email}: {friendly_mail_error(exc)}")
+            if mail_errors:
+                incoming_error = " ".join(mail_errors)[:1000]
+        else:
+            incoming_error = "The business inbox is not configured."
+
+        messages = sorted(
+            [*sent, *received],
+            key=lambda item: (item.get("date") or "", item["id"]),
+        )
+        return {
+            "booking_id": booking.id,
+            "client_name": booking.title,
+            "client_email": booking.client.email,
+            "client_emails": client_emails,
+            "brand": booking.brand.value,
+            "messages": messages,
+            "sent_count": len(sent),
+            "received_count": len(received),
+            "mailbox_configured": mailbox_configured,
+            "incoming_error": incoming_error,
+            "privacy_scope": "Exact booking and couple email addresses only",
+        }
 
     @app.get("/api/mail/{brand}/messages/{uid}")
     def mail_message(

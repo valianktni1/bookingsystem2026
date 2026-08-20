@@ -77,7 +77,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.14-complete-backup", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.16-client-communication", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -720,11 +720,11 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
         if acknowledgement:
             try:
                 recipient = client_email_recipient(db, booking)
-                subject, _ = send_booking_template_email(
+                subject, email_body = send_booking_template_email(
                     db, booking, profile, acknowledgement, portal_url
                 )
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
-                                recipient=recipient, subject=subject, status="sent"))
+                                recipient=recipient, subject=subject, body=email_body, status="sent"))
             except Exception as exc:
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
                                 recipient=client_email_recipient(db, booking), subject=acknowledgement.subject,
@@ -732,7 +732,7 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
         if admin_notification:
             notification_recipient = "mark@perfectweddingsbymark.uk"
             try:
-                subject, _ = send_template_email(
+                subject, email_body = send_template_email(
                     booking, profile, admin_notification,
                     extra_values={
                         "package_interest": payload.package_interest or "Not selected",
@@ -747,7 +747,8 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                     reply_to=client_email_recipient(db, booking),
                 )
                 db.add(EmailLog(booking_id=booking.id, template_key=admin_notification.template_key,
-                                recipient=notification_recipient, subject=subject, status="sent"))
+                                recipient=notification_recipient, subject=subject,
+                                body=email_body, status="sent"))
             except Exception as exc:
                 db.add(EmailLog(booking_id=booking.id, template_key=admin_notification.template_key,
                                 recipient=notification_recipient, subject=admin_notification.subject,
@@ -1439,7 +1440,7 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
         outstanding = max(Decimal("0"), invoice.total - invoice.paid)
         deposit_remaining = max(Decimal("0"), booking.deposit_amount - invoice.paid)
         try:
-            subject, _ = send_booking_template_email(
+            subject, email_body = send_booking_template_email(
                 db, booking,
                 profile,
                 template,
@@ -1456,7 +1457,8 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
                 },
             )
             db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
-                            recipient=client_email_recipient(db, booking), subject=subject, status="sent"))
+                            recipient=client_email_recipient(db, booking), subject=subject,
+                            body=email_body, status="sent"))
             payment_email_sent = True
         except Exception as exc:
             payment_email_error = str(exc)
@@ -1624,7 +1626,7 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
     submissions = db.scalars(select(FormSubmission).where(FormSubmission.booking_id == booking.id)).all()
     acceptance = db.scalar(select(ContractAcceptance).where(ContractAcceptance.booking_id == booking.id))
     logs = db.scalars(select(EmailLog).where(EmailLog.booking_id == booking.id)
-                      .order_by(EmailLog.sent_at.desc()).limit(20)).all()
+                      .order_by(EmailLog.sent_at.desc()).limit(100)).all()
     quote = db.scalar(select(Quote).where(Quote.booking_id == booking.id)
                       .order_by(Quote.created_at.desc()).limit(1))
     quote_data = quote_json(quote)
@@ -1643,6 +1645,12 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "contract": (contract_acceptance_json(acceptance) if acceptance else None),
         "emails": [{"template_key": x.template_key, "recipient": x.recipient, "subject": x.subject,
                     "status": x.status, "error": x.error,
+                    "link_tracking_enabled": bool(x.tracking_token_hash),
+                    "first_link_accessed_at": (x.first_link_accessed_at.isoformat()
+                                                if x.first_link_accessed_at else None),
+                    "last_link_accessed_at": (x.last_link_accessed_at.isoformat()
+                                               if x.last_link_accessed_at else None),
+                    "link_access_count": int(x.link_access_count or 0),
                     "sent_at": x.sent_at.isoformat()} for x in logs],
         "quote": quote_data,
         "quote_preparation": quote_preparation_json(booking),
@@ -1950,22 +1958,40 @@ def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
         db, booking.id, max(payload.expires_days, portal_lifetime_days(booking))
     )
     quote_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=quote"
+    tracking_token = secrets.token_urlsafe(32)
+    tracked_quote_url = f"{quote_url}&email_access={tracking_token}"
     template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
                                                      EmailTemplate.template_key == "quote",
                                                      EmailTemplate.is_active.is_(True)))
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == Brand.WBM))
+    recipient = client_email_recipient(db, booking)
+    email_log = EmailLog(
+        booking_id=booking.id,
+        template_key="quote",
+        recipient=recipient,
+        subject=(template.subject if template else "Wedding package quote"),
+        status="sending",
+        tracking_token_hash=token_digest(tracking_token),
+    )
+    db.add(email_log)
     email_sent, email_error, subject = False, None, None
     if not template:
         email_error = "The quote email template is missing or inactive"
+        email_log.status = "failed"
+        email_log.error = email_error
     elif not smtp_ready(Brand.WBM):
         email_error = "SMTP is not configured for Weddings By Mark"
+        email_log.status = "failed"
+        email_log.error = email_error
     else:
         try:
-            recipient = client_email_recipient(db, booking)
-            subject, _ = send_booking_template_email(db, booking, profile, template, quote_url)
+            subject, email_body = send_booking_template_email(
+                db, booking, profile, template, tracked_quote_url
+            )
             email_sent = True
-            db.add(EmailLog(booking_id=booking.id, template_key="quote",
-                            recipient=recipient, subject=subject, status="sent"))
+            email_log.subject = subject
+            email_log.body = email_body
+            email_log.status = "sent"
             if booking.status == RecordStatus.ENQUIRY:
                 booking.status = RecordStatus.QUOTED
             for task in db.scalars(select(Task).where(
@@ -1974,9 +2000,8 @@ def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
                 task.completed = True
         except Exception as exc:
             email_error = str(exc)
-            db.add(EmailLog(booking_id=booking.id, template_key="quote",
-                            recipient=booking.client.email, subject=template.subject,
-                            status="failed", error=email_error[:2000]))
+            email_log.status = "failed"
+            email_log.error = email_error[:2000]
     audit(db, "send_quote", "booking", booking.id,
           {"email_sent": email_sent, "expires_at": row.expires_at.isoformat()})
     db.commit()
@@ -2009,9 +2034,11 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
     try:
         portal_url = issue_client_email_url(db, booking, template.template_key)
         recipient = client_email_recipient(db, booking)
-        subject, _ = send_booking_template_email(db, booking, profile, template, portal_url)
+        subject, email_body = send_booking_template_email(
+            db, booking, profile, template, portal_url
+        )
         log = EmailLog(booking_id=booking.id, template_key=template.template_key,
-                       recipient=recipient, subject=subject, status="sent")
+                       recipient=recipient, subject=subject, body=email_body, status="sent")
         db.add(log)
         audit(
             db,
@@ -2144,12 +2171,15 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
     recipient = client_email_recipient(db, booking)
     try:
         portal_url = issue_client_email_url(db, booking, template_key)
-        subject, _ = send_booking_template_email(db, booking, profile, composed, portal_url)
+        subject, email_body = send_booking_template_email(
+            db, booking, profile, composed, portal_url
+        )
         db.add(EmailLog(
             booking_id=booking.id,
             template_key=template_key,
             recipient=recipient,
             subject=subject,
+            body=email_body,
             status="sent",
         ))
         audit(db, "send_manual_email" if manual_only else "send_client_email",
@@ -2185,9 +2215,33 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
 
 
 @app.get("/api/client/{token}")
-def public_portal_data(token: str, db: Session = Depends(get_db)):
+def public_portal_data(
+    token: str,
+    email_access: str | None = Query(default=None, max_length=200),
+    db: Session = Depends(get_db),
+):
     portal = resolve_portal(db, token)
     booking = portal.booking
+    if email_access:
+        access_log = db.scalar(select(EmailLog).where(
+            EmailLog.booking_id == booking.id,
+            EmailLog.template_key == "quote",
+            EmailLog.status == "sent",
+            EmailLog.tracking_token_hash == token_digest(email_access),
+        ).limit(1))
+        if access_log:
+            accessed_at = datetime.now(timezone.utc)
+            first_access = access_log.first_link_accessed_at is None
+            if first_access:
+                access_log.first_link_accessed_at = accessed_at
+            access_log.last_link_accessed_at = accessed_at
+            access_log.link_access_count = int(access_log.link_access_count or 0) + 1
+            if first_access:
+                audit(db, "quote_link_accessed", "booking", booking.id, {
+                    "email_log_id": access_log.id,
+                    "recipient": access_log.recipient,
+                })
+            db.commit()
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
     contract = db.scalar(select(ContractTemplate).where(ContractTemplate.brand == booking.brand,
                                                         ContractTemplate.is_active.is_(True)))
@@ -2384,7 +2438,7 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
             and smtp_ready(booking.brand)):
         try:
             invoice_portal_url = f"{settings.app_url.rstrip('/')}/client/{token}"
-            subject, _ = send_booking_template_email(
+            subject, email_body = send_booking_template_email(
                 db, booking, profile, acceptance_template, invoice_portal_url,
                 extra_values={
                     "deposit_due_date": deposit_due_date.strftime("%d %B %Y"),
@@ -2393,7 +2447,8 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
                 },
             )
             db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
-                            recipient=client_email_recipient(db, booking), subject=subject, status="sent"))
+                            recipient=client_email_recipient(db, booking), subject=subject,
+                            body=email_body, status="sent"))
             acceptance_email_sent = True
         except Exception as exc:
             db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
@@ -2560,9 +2615,11 @@ def send_contract_completion_email(db: Session, booking: Booking) -> tuple[bool,
         return False, error
     portal_url = issue_client_email_url(db, booking, "contract_completed")
     try:
-        subject, _ = send_booking_template_email(db, booking, profile, template, portal_url)
+        subject, email_body = send_booking_template_email(
+            db, booking, profile, template, portal_url
+        )
         db.add(EmailLog(booking_id=booking.id, template_key="contract_completed",
-                        recipient=recipient, subject=subject, status="sent"))
+                        recipient=recipient, subject=subject, body=email_body, status="sent"))
         return True, None
     except Exception as exc:
         error = str(exc)
@@ -2732,10 +2789,12 @@ def run_due_reminders(db: Session) -> dict:
                     db, booking, template_key, max(365, expires_days)
                 )
                 recipient = client_email_recipient(db, booking)
-                subject, _ = send_booking_template_email(db, booking, profile, template, portal_url)
+                subject, email_body = send_booking_template_email(
+                    db, booking, profile, template, portal_url
+                )
                 reminder.status, reminder.sent_at = "sent", datetime.now(timezone.utc)
                 db.add(EmailLog(booking_id=booking.id, template_key=template_key, recipient=recipient,
-                                subject=subject, status="sent"))
+                                subject=subject, body=email_body, status="sent"))
                 sent += 1
             except Exception as exc:
                 reminder.status, reminder.error = "failed", str(exc)[:2000]

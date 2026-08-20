@@ -1,9 +1,20 @@
-# Mark's Business Studio — Version 8.15
+# Mark's Business Studio — Version 8.16
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.15, including browser-history
+build includes every cumulative feature through V8.16, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.16 client communication
+
+New quote emails use a private, self-hosted access marker so the client record
+can show when that emailed link was first accessed and how many accesses were
+recorded. The administrator's Preview and Copy link remains untracked. Each
+client Journey also has one private conversation view containing successful
+booking-system messages, replies sent from the built-in Inbox, messages sent
+from the correct business mailbox, and incoming Hostinger mail from only the
+couple's exact email address or addresses. It never searches by a partial name
+or subject and never includes unrelated or personal mail.
 
 ## Version 8.15 couple payment reference
 

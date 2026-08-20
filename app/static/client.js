@@ -1,7 +1,9 @@
 const $ = selector => document.querySelector(selector);
 let data = null;
 let bookingStep = 0;
-const requestedTab = new URLSearchParams(location.search).get("tab");
+const initialQuery = new URLSearchParams(location.search);
+const requestedTab = initialQuery.get("tab");
+const emailAccess = initialQuery.get("email_access");
 const requestedTabs = {quote:"Choose package", invoices:"Invoices", booking:"Booking form", documents:"Documents", agreement:"Agreement"};
 let active = requestedTabs[requestedTab] || "Overview";
 const token = location.pathname.split("/").filter(Boolean).pop();
@@ -62,7 +64,12 @@ function directionsUrl() {
 
 async function init() {
   try {
-    data = await api(`/api/client/${token}`);
+    data = await api(`/api/client/${token}${emailAccess ? `?email_access=${encodeURIComponent(emailAccess)}` : ""}`);
+    if (emailAccess) {
+      const cleanQuery = new URLSearchParams(location.search);
+      cleanQuery.delete("email_access");
+      history.replaceState(history.state, "", `${location.pathname}${cleanQuery.size ? `?${cleanQuery}` : ""}`);
+    }
     if (!bookingJourneyUnlocked() && !["Overview", "Choose package"].includes(active)) active = "Overview";
     const brand = data.business.brand || (data.record.kind === "wedding" ? "wbm" : "ivory");
     document.body.classList.add(`brand-${brand}`);

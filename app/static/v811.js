@@ -228,6 +228,7 @@
       update: "Booking details updated",
       prepare_quote: "Quote prepared",
       send_quote: "Quote sent",
+      quote_link_accessed: "Quote link first accessed",
       accept_quote: "Quote accepted",
       create_invoice: "Invoice created",
       change_invoice_due_date: "Payment date changed",

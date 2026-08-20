@@ -61,6 +61,13 @@ def apply_safe_migrations() -> None:
         "addon_options": {
             "is_discount": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
         },
+        "email_logs": {
+            "body": "TEXT NULL",
+            "tracking_token_hash": "VARCHAR(64) NULL",
+            "first_link_accessed_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+            "last_link_accessed_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+            "link_access_count": "INTEGER NOT NULL DEFAULT 0",
+        },
     }
     with engine.begin() as connection:
         for table, columns in additions.items():
@@ -75,4 +82,10 @@ def apply_safe_migrations() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_booking_legacy_source_id_idx "
                 "ON bookings (legacy_source, legacy_id) "
                 "WHERE legacy_source IS NOT NULL AND legacy_id IS NOT NULL"
+            ))
+        if inspector.has_table("email_logs"):
+            connection.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_email_log_tracking_token_hash_idx "
+                "ON email_logs (tracking_token_hash) "
+                "WHERE tracking_token_hash IS NOT NULL"
             ))
