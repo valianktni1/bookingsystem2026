@@ -77,7 +77,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.17-workflow-clarity", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.18-thirty-day-check-in", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -1715,6 +1715,7 @@ WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
     "quote_followup_final": ("automatic", "Automatic final quote follow-up nine days after a successful quote"),
     "deposit_due_1": ("automatic", "Automatic booking-fee reminder on its due date"),
     "check_in_120": ("automatic", "Automatic friendly check-in 120 days before the wedding"),
+    "check_in_30": ("automatic", "Automatic final check-in 30 days before the wedding, including the Monday telephone-call date"),
     "balance_due_7": ("automatic", "Automatic final-balance reminder seven days before it is due"),
     "balance_due_1": ("automatic", "Automatic final-balance reminder one day before it is due"),
     "balance_overdue_2": ("automatic", "Automatic overdue reminder every two days while a balance remains"),
@@ -2802,6 +2803,8 @@ def run_due_reminders(db: Session) -> dict:
             days_to_wedding = (booking.event_date - today).days
             if days_to_wedding == 120:
                 reminders.append(("check_in_120", "check_in_120", None, 0))
+            if days_to_wedding == 30:
+                reminders.append(("check_in_30", "check_in_30", None, 0))
 
         if is_wbm_wedding and booking.balance_due_date and has_balance:
             days_to_balance = (booking.balance_due_date - today).days

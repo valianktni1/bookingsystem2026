@@ -2,6 +2,7 @@ import html
 import re
 import smtplib
 import ssl
+from datetime import timedelta
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -33,6 +34,13 @@ def template_values(booking: Booking, profile: BusinessProfile, portal_url: str 
                     extra_values: dict[str, str] | None = None) -> dict[str, str]:
     client = booking.client
     bank = profile.bank_details or {}
+    final_call_date = None
+    if booking.event_date:
+        # The call is on the Monday immediately before the wedding. For a
+        # Monday wedding, "before" means the previous Monday, never the day
+        # of the wedding itself.
+        days_back = booking.event_date.weekday() or 7
+        final_call_date = booking.event_date - timedelta(days=days_back)
     values = {
         "client_first_name": client.first_name or "there",
         "client_name": " ".join(x for x in [client.first_name, client.last_name] if x),
@@ -47,6 +55,8 @@ def template_values(booking: Booking, profile: BusinessProfile, portal_url: str 
         "deposit_amount": f"£{float(booking.deposit_amount or 0):,.2f}",
         "deposit_due_date": "within one day of accepting your quote",
         "balance_due_date": booking.balance_due_date.strftime("%d %B %Y") if booking.balance_due_date else "as shown on your invoice",
+        "final_call_date": (f"Monday {final_call_date.strftime('%d %B %Y')}"
+                            if final_call_date else "the Monday before your wedding"),
         "portal_url": portal_url or "",
         "payment_amount": "£100.00",
         "payment_date": "today",

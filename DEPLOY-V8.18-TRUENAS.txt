@@ -1,0 +1,26 @@
+BookingSystem2026 V8.18 - TrueNAS deployment
+================================================
+
+After uploading, committing and pushing the complete V8.18 project to the
+GitHub main branch, run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc \
+  > bookingapp-before-v818-2026-08-20.dump
+
+ls -lh bookingapp-before-v818-2026-08-20.dump
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+Expected build:
+
+2026.08.20-thirty-day-check-in-v8.18
+
+No compose.yaml, .env or manual database changes are required.
+Deploying this update does not send an email. The reminder scanner sends the
+new email only for an eligible wedding when it is exactly 30 days away.

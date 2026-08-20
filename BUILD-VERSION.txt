@@ -1,5 +1,5 @@
-BookingSystem2026 - Workflow Clarity
-Build: 2026.08.20-workflow-clarity-v8.17
+BookingSystem2026 - Thirty-day Wedding Check-in
+Build: 2026.08.20-thirty-day-check-in-v8.18
 
 V8.14 complete one-click backup:
 
@@ -269,3 +269,14 @@ friendly quote wording and branded quote button.
   button; retrying does not reset or alter the signed agreement.
 - Existing bookings, invoices, payment schedules, Calendar, availability,
   Accounts settings, Studio Ninja locks and Testing Mode remain unchanged.
+
+2026.08.20-thirty-day-check-in-v8.18
+
+- Adds an editable WBM email template called Wedding check-in - 30 days before.
+- Confirmed and in-progress native WBM weddings receive it automatically once,
+  exactly 30 days before the wedding.
+- The `{final_call_date}` placeholder inserts the actual Monday before the
+  wedding; a Monday wedding correctly uses the previous Monday.
+- The existing 120-day check-in and private 30-day telephone task are unchanged.
+- Imported Studio Ninja records remain automation-suppressed, Testing Mode
+  remains protected, and deployment sends no email.

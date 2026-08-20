@@ -137,13 +137,17 @@ def test_exact_simple_wedding_email_schedule(monkeypatch):
                     ReminderLog.reminder_key == reminder_key,
                 ))
 
-        # Thirty days before is Mark's private phone-call task, not a
-        # second questionnaire or a client email.
+        # Thirty days before now sends the second friendly check-in while the
+        # separate private telephone task remains in Mark's workflow.
         FrozenDate.current = wedding_day - timedelta(days=30)
         with SessionLocal() as db:
             assert main_module.run_due_reminders(db) == {
-                "sent": 0, "skipped": 0, "failed": 0,
+                "sent": 1, "skipped": 0, "failed": 0,
             }
+            assert db.scalar(select(ReminderLog).where(
+                ReminderLog.booking_id == booking_id,
+                ReminderLog.reminder_key == "check_in_30",
+            ))
             assert not db.scalar(select(ReminderLog).where(
                 ReminderLog.booking_id == booking_id,
                 ReminderLog.reminder_key == "final_questionnaire",

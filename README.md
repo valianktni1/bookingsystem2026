@@ -1,9 +1,17 @@
-# Mark's Business Studio — Version 8.17
+# Mark's Business Studio — Version 8.18
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.17, including browser-history
+build includes every cumulative feature through V8.18, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.18 thirty-day wedding check-in
+
+Confirmed Weddings By Mark weddings receive a second friendly automatic
+check-in exactly 30 days before the wedding. Its fully editable template tells
+the couple the actual Monday when Mark plans to telephone them and includes the
+dynamic `{final_call_date}` placeholder. The existing 120-day check-in and
+private final-details telephone task remain unchanged.
 
 ## Version 8.17 workflow clarity
 
