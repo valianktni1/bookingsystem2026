@@ -28,7 +28,7 @@
         ? '<div class="v820-safety"><strong>Studio Ninja safety rule</strong><span>This Final Wedding Timings invitation is the one permitted automatic email. It sends 30 days before this wedding. Every other automatic Studio Ninja email remains blocked.</span></div>'
         : '<div class="v820-safety manual"><strong>Studio Ninja — manual only</strong><span>This wedding is not after 20 October 2026, so no automatic email will be sent. You can still open the form and deliberately send the link yourself.</span></div>'
       : '<p>The 30-day check-in opens this form and sends the couple directly to it. Your edited email template remains in use.</p>';
-    return `<section class="v820-waiting"><div><small>STEP 4 · WEDDING-DAY RUN SHEET</small><h3>Final Wedding Timings</h3><p>${available?"The form is open and waiting for the couple to submit it.":"It opens automatically 30 days before the wedding. You can open it earlier when needed."}</p></div><span class="v820-state ${available?"ready":"scheduled"}">${available?"Ready for couple":"Scheduled"}</span>${safety}${available?"":'<button class="secondary" data-open-final-timings type="button">Open form early</button>'}</section>`;
+    return `<section class="v820-waiting"><div><small>STEP 4 · WEDDING-DAY RUN SHEET</small><h3>Final Wedding Timings</h3><p>${available?"The form is open and waiting for the couple to submit it.":"It opens automatically 30 days before the wedding. You can open it earlier when needed."}</p></div><span class="v820-state ${available?"ready":"scheduled"}">${available?"Ready for couple":"Scheduled"}</span>${safety}<div class="v820-actions">${available?'<button class="primary" data-send-final-timings type="button">Send timings form now</button>':'<button class="secondary" data-open-final-timings type="button">Open without emailing</button><button class="primary" data-open-send-final-timings type="button">Open & send form now</button>'}</div></section>`;
   }
 
   function submittedPanel(r, portal, submission) {
@@ -49,9 +49,27 @@
     const portal=state.currentPortal||{},submission=(portal.submissions||[]).find(item=>item.form_type==="final_timings");
     const host=body.querySelector(".v811-journey");
     if(!host)return;
+    host.querySelectorAll(".v820-final").forEach(section=>section.remove());
     host.insertAdjacentHTML("beforeend",`<section class="v811-journey-block v820-final"><header><div><small>STEP 4</small><h3>Final wedding timings</h3></div><span>Coverage check and private run sheet</span></header><div>${submission?submittedPanel(r,portal,submission):waitingPanel(r,portal)}</div></section>`);
     const open=body.querySelector("[data-open-final-timings]");
     if(open)open.onclick=async()=>{if(!confirm("Open the Final Wedding Timings Form early for this couple?"))return;try{await api(`/api/bookings/${r.id}/final-details`,{method:"POST",body:JSON.stringify({unlocked:true,reason:"Opened early from the Final Wedding Timings panel"})});toast("Final Wedding Timings Form opened");await refresh();openDrawer(r.id,"Journey")}catch(error){toast(error.message,"error")}};
+    const send=body.querySelector("[data-send-final-timings]");
+    const openAndSend=body.querySelector("[data-open-send-final-timings]");
+    const sendNow=async(button,openFirst=false)=>{
+      const imported=r.legacy_source==="studio_ninja";
+      const warning=imported
+        ? `Send the Final Wedding Timings Form to ${r.client.email} now?\n\nThis is one deliberate manual email. Every other Studio Ninja automatic email remains blocked.`
+        : `Send the Final Wedding Timings Form to ${r.client.email} now?`;
+      if(!confirm(warning))return;
+      button.disabled=true;button.textContent="Sending…";
+      try{
+        if(openFirst)await api(`/api/bookings/${r.id}/final-details`,{method:"POST",body:JSON.stringify({unlocked:true,reason:"Opened early to send the Final Wedding Timings Form"})});
+        await api(`/api/bookings/${r.id}/emails/send`,{method:"POST",body:JSON.stringify({template_key:"check_in_30",manual_confirmation:imported?"SEND ONE MANUAL EMAIL":null,manual_reason:imported?"Final Wedding Timings Form deliberately sent early":null})});
+        toast("Final Wedding Timings Form emailed successfully");await refresh();openDrawer(r.id,"Journey");
+      }catch(error){button.disabled=false;button.textContent=openFirst?"Open & send form now":"Send timings form now";toast(error.message,"error")}
+    };
+    if(send)send.onclick=()=>sendNow(send,false);
+    if(openAndSend)openAndSend.onclick=()=>sendNow(openAndSend,true);
     const review=body.querySelector("[data-review-final-timings]");
     if(review)review.onclick=async()=>{try{await api(`/api/bookings/${r.id}/final-timings/review`,{method:"POST"});toast("Final wedding timings marked as reviewed");await refresh();openDrawer(r.id,"Journey")}catch(error){toast(error.message,"error")}};
   }

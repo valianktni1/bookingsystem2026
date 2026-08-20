@@ -149,11 +149,13 @@ def test_studio_ninja_has_exactly_one_eligible_automatic_email(monkeypatch):
                         lambda db, booking, profile, template, portal_url=None, **kwargs:
                         (template.subject, delivered.append((booking.id, template.template_key, portal_url)) or template.body))
 
-    with TestClient(app):
+    with TestClient(app) as client:
+        login(client)
         with SessionLocal() as db:
             eligible_client = Client(first_name="Eligible", last_name="Couple", email="eligible@example.com")
             too_early_client = Client(first_name="Later", last_name="Couple", email="later@example.com")
-            db.add_all([eligible_client, too_early_client]); db.flush()
+            manual_client = Client(first_name="Manual", last_name="Couple", email="manual@example.com")
+            db.add_all([eligible_client, too_early_client, manual_client]); db.flush()
             eligible = Booking(
                 brand=Brand.WBM, kind=RecordKind.WEDDING, status=RecordStatus.CONFIRMED,
                 title="Eligible SN Couple", client_id=eligible_client.id,
@@ -168,8 +170,15 @@ def test_studio_ninja_has_exactly_one_eligible_automatic_email(monkeypatch):
                 legacy_source="studio_ninja", legacy_id="sn-not-due",
                 automation_suppressed=True,
             )
-            db.add_all([eligible, not_due]); db.commit()
-            eligible_id, not_due_id = eligible.id, not_due.id
+            manual = Booking(
+                brand=Brand.WBM, kind=RecordKind.WEDDING, status=RecordStatus.CONFIRMED,
+                title="Pre-cutoff manual SN Couple", client_id=manual_client.id,
+                event_date=STUDIO_NINJA_AUTOMATION_AFTER, package_name="Gold Package 3",
+                legacy_source="studio_ninja", legacy_id="sn-manual",
+                automation_suppressed=True,
+            )
+            db.add_all([eligible, not_due, manual]); db.commit()
+            eligible_id, not_due_id, manual_id = eligible.id, not_due.id, manual.id
 
             assert main_module.run_due_reminders(db) == {"sent": 1, "skipped": 0, "failed": 0}
             assert main_module.run_due_reminders(db) == {"sent": 0, "skipped": 1, "failed": 0}
@@ -178,6 +187,28 @@ def test_studio_ninja_has_exactly_one_eligible_automatic_email(monkeypatch):
             assert db.scalars(select(EmailLog).where(EmailLog.booking_id == eligible_id)).all()[0].template_key == "check_in_30"
             assert db.scalars(select(ReminderLog).where(ReminderLog.booking_id == not_due_id)).all() == []
             assert db.scalars(select(ClientPortalToken).where(ClientPortalToken.booking_id == not_due_id)).all() == []
+
+        opened = client.post(f"/api/bookings/{manual_id}/final-details", json={
+            "unlocked": True,
+            "reason": "Opened early to send the Final Wedding Timings Form",
+        })
+        assert opened.status_code == 200, opened.text
+        sent = client.post(f"/api/bookings/{manual_id}/emails/send", json={
+            "template_key": "check_in_30",
+            "manual_confirmation": "SEND ONE MANUAL EMAIL",
+            "manual_reason": "Final Wedding Timings Form deliberately sent early",
+        })
+        assert sent.status_code == 200, sent.text
+        assert sent.json()["manual_only"] is True
+        assert sent.json()["automation_suppressed"] is True
+        assert delivered[-1][0:2] == (manual_id, "check_in_30")
+        assert "?tab=timings" in delivered[-1][2]
+        assert client.get(f"/api/bookings/{manual_id}/portal").json()["final_timings"]["available"] is True
+        with SessionLocal() as db:
+            manual_booking = db.get(Booking, manual_id)
+            manual_logs = db.scalars(select(EmailLog).where(EmailLog.booking_id == manual_id)).all()
+            assert manual_booking.automation_suppressed is True
+            assert [item.template_key for item in manual_logs] == ["check_in_30"]
 
     boundary = Booking(
         brand=Brand.WBM, kind=RecordKind.WEDDING, status=RecordStatus.CONFIRMED,
@@ -192,10 +223,15 @@ def test_v820_assets_and_old_final_questionnaire_remain_blocked():
     root = Path(__file__).parents[1]
     index = (root / "app/static/index.html").read_text()
     client_html = (root / "app/static/client.html").read_text()
-    assert "/static/v820.js?v=final-wedding-timings-v8-20" in index
-    assert "/static/client-v820.js?v=final-wedding-timings-v8-20" in client_html
+    assert "/static/v820.js?v=manual-timings-send-v8-20-1" in index
+    assert "/static/client-v820.js?v=manual-timings-send-v8-20-1" in client_html
     assert "only automatic email permitted" in (root / "app/main.py").read_text()
     assert 'pattern="^(booking_form|final_timings)$"' in (root / "app/schemas.py").read_text()
+    admin_js = (root / "app/static/v820.js").read_text()
+    assert "Send timings form now" in admin_js
+    assert "Open & send form now" in admin_js
+    assert 'host.querySelectorAll(".v820-final")' in admin_js
+    assert "SEND ONE MANUAL EMAIL" in admin_js
 
 
 def teardown_module():

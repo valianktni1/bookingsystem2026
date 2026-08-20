@@ -1,5 +1,12 @@
-BookingSystem2026 - Final Wedding Timings
-Build: 2026.08.20-final-wedding-timings-v8.20
+BookingSystem2026 - Manual Final Timings Send Fix
+Build: 2026.08.20-manual-timings-send-fix-v8.20.1
+
+V8.20.1 manual timings send fix:
+
+- Adds a clear Send timings form now action whenever the form is already open.
+- Adds Open & send form now for a deliberately early manual invitation.
+- Keeps Studio Ninja automation suppression enabled after the one manual email.
+- Prevents duplicate Final Wedding Timings panels during overlapping refreshes.
 
 V8.20 final wedding timings:
 

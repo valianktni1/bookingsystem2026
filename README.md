@@ -1,9 +1,18 @@
-# Mark's Business Studio — Version 8.20
+# Mark's Business Studio — Version 8.20.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.20, including browser-history
+build includes every cumulative feature through V8.20.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.20.1 manual timings send fix
+
+The Final Wedding Timings panel now always provides a deliberate manual send
+action. For Studio Ninja imports this sends only the selected timings email and
+keeps the booking's general automation lock in place. A pre-cutoff wedding can
+be opened and emailed manually without enabling any other client automation.
+The panel also removes any stale copy before rendering, preventing duplicate
+Final Wedding Timings sections when overlapping Journey refreshes complete.
 
 ## Version 8.20 final wedding timings
 
