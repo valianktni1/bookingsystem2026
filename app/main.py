@@ -82,7 +82,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.21-final-timings-records", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.22-client-updates-dashboard", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -1030,10 +1030,18 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
         ).order_by(Booking.created_at.desc())
     ).unique().all())
     booking_ids = [booking.id for booking in bookings]
-    submissions = set(db.scalars(select(FormSubmission.booking_id).where(
+    submission_rows = list(db.scalars(select(FormSubmission).where(
         FormSubmission.booking_id.in_(booking_ids),
-        FormSubmission.form_type == "booking_form",
-    )).all()) if booking_ids else set()
+        FormSubmission.form_type.in_(("booking_form", FINAL_TIMINGS_FORM_TYPE)),
+    )).all()) if booking_ids else []
+    booking_form_submissions = {
+        row.booking_id: row for row in submission_rows if row.form_type == "booking_form"
+    }
+    final_timings_submissions = {
+        row.booking_id: row for row in submission_rows
+        if row.form_type == FINAL_TIMINGS_FORM_TYPE
+    }
+    submissions = set(booking_form_submissions)
     contracts = {
         row.booking_id: row for row in db.scalars(select(ContractAcceptance).where(
             ContractAcceptance.booking_id.in_(booking_ids)
@@ -1041,6 +1049,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
     } if booking_ids else {}
 
     queues: dict[str, list[dict]] = {
+        "client_updates": [],
         "new_enquiries": [],
         "quotes_waiting": [],
         "accepted_payment": [],
@@ -1058,7 +1067,8 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
     final_calls_due_through = today + timedelta(days=14)
 
     def item(booking: Booking, detail: str, section: str, action: str,
-             *, due: date | None = None, amount: Decimal | float | None = None) -> dict:
+             *, due: date | None = None, amount: Decimal | float | None = None,
+             occurred_at: datetime | None = None, update_type: str | None = None) -> dict:
         return {
             "booking_id": booking.id,
             "title": booking.title,
@@ -1069,6 +1079,8 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             "event_date": booking.event_date.isoformat() if booking.event_date else None,
             "due_date": due.isoformat() if due else None,
             "amount": money(amount) if amount is not None else None,
+            "occurred_at": occurred_at.isoformat() if occurred_at else None,
+            "update_type": update_type,
         }
 
     for booking in bookings:
@@ -1081,6 +1093,37 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             contract.is_legacy_import or contract.supplier_signed_at
         ))
         native_workflow = booking.legacy_source != "studio_ninja" and booking.kind == RecordKind.WEDDING
+        open_task_keys = {
+            task.workflow_key for task in booking.tasks if not task.completed and task.workflow_key
+        }
+
+        booking_form_submission = booking_form_submissions.get(booking.id)
+        if (booking_form_submission
+                and "wbm_review_booking_form" in open_task_keys):
+            queues["client_updates"].append(item(
+                booking,
+                f"Wedding Booking Form submitted · {booking_form_submission.submission_source.replace('_', ' ')}",
+                "Journey", "review_booking_form",
+                occurred_at=booking_form_submission.updated_at,
+                update_type="booking_form",
+            ))
+        final_submission = final_timings_submissions.get(booking.id)
+        if final_submission and "wbm_review_final_timings" in open_task_keys:
+            queues["client_updates"].append(item(
+                booking,
+                "Final Wedding Timings submitted and ready for your review",
+                "Journey", "review_final_timings",
+                occurred_at=final_submission.updated_at,
+                update_type="final_timings",
+            ))
+        if (contract and not contract.is_legacy_import and not contract.supplier_signed_at):
+            queues["client_updates"].append(item(
+                booking,
+                f"Agreement signed by {contract.accepted_name} · your countersignature is needed",
+                "Journey", "countersign",
+                occurred_at=contract.accepted_at,
+                update_type="agreement",
+            ))
 
         if native_workflow and booking.status == RecordStatus.ENQUIRY and not accepted_quote:
             queues["new_enquiries"].append(item(
@@ -1133,6 +1176,9 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                     "Overview", "open_task", due=task.due_at.date(),
                 ))
 
+    queues["client_updates"].sort(
+        key=lambda row: row["occurred_at"] or "", reverse=True
+    )
     for key in ("overdue_payments", "payments_due", "final_calls"):
         queues[key].sort(key=lambda row: row["due_date"] or "9999-12-31")
     return {
@@ -2658,6 +2704,21 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
         for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
                                                   Task.title.ilike("%booking form%"))).all():
             task.completed = True
+        workflow = dict(booking.workflow_state or {})
+        workflow.pop("booking_form_review", None)
+        booking.workflow_state = workflow
+        booking_form_review = db.scalar(select(Task).where(
+            Task.booking_id == booking.id,
+            Task.workflow_key == "wbm_review_booking_form",
+        ).limit(1))
+        if booking_form_review:
+            booking_form_review.completed = False
+        else:
+            db.add(Task(
+                booking_id=booking.id,
+                title="Review submitted Wedding Booking Form",
+                workflow_key="wbm_review_booking_form",
+            ))
     elif payload.form_type == FINAL_TIMINGS_FORM_TYPE:
         workflow = dict(booking.workflow_state or {})
         workflow.pop("final_timings_review", None)
@@ -2712,6 +2773,43 @@ def download_final_timings_pdf(
     return Response(content, media_type="application/pdf", headers={
         "Content-Disposition": f'{disposition}; filename="{document.original_name}"',
     })
+
+
+@app.post("/api/bookings/{booking_id}/booking-form/review")
+def review_booking_form(
+    booking_id: str,
+    admin: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    submission = db.scalar(select(FormSubmission).where(
+        FormSubmission.booking_id == booking.id,
+        FormSubmission.form_type == "booking_form",
+    ).limit(1))
+    if not submission:
+        raise HTTPException(409, "The couple has not submitted their Wedding Booking Form")
+    reviewed_at = datetime.now(timezone.utc)
+    workflow = dict(booking.workflow_state or {})
+    workflow["booking_form_review"] = {
+        "reviewed_at": reviewed_at.isoformat(),
+        "reviewed_by": admin.email,
+        "submission_updated_at": submission.updated_at.isoformat(),
+    }
+    booking.workflow_state = workflow
+    for task in db.scalars(select(Task).where(
+        Task.booking_id == booking.id,
+        Task.workflow_key == "wbm_review_booking_form",
+    )).all():
+        task.completed = True
+    audit(db, "review_booking_form", "booking", booking.id, {
+        "admin": admin.email,
+        "submission_id": submission.id,
+    })
+    db.commit()
+    return {"ok": True, "reviewed_at": reviewed_at.isoformat(),
+            "reviewed_by": admin.email}
 
 
 @app.post("/api/bookings/{booking_id}/final-timings/review")

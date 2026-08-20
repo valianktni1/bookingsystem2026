@@ -1,9 +1,20 @@
-# Mark's Business Studio — Version 8.21
+# Mark's Business Studio — Version 8.22
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.21, including browser-history
+build includes every cumulative feature through V8.22, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.22 new client updates dashboard
+
+Today now begins with one prominent queue for client activity that needs attention:
+new Wedding Booking Form and Final Wedding Timings submissions, native agreements
+signed by the client but awaiting countersignature, and unread mailbox replies
+matched only to the couple's exact email addresses. Every row opens the relevant
+booking section or exact email. Form updates remain until deliberately reviewed;
+emails clear when read and agreements clear through the existing countersign flow.
+This release introduces no new automated messages and leaves Studio Ninja's general
+automation suppression unchanged.
 
 ## Version 8.21 final timings records
 

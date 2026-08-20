@@ -265,6 +265,8 @@
   function renderFormsAndAgreementV895(r, body) {
     const portal = state.currentPortal || {};
     const bookingForm = (portal.submissions || []).find(item => item.form_type === "booking_form");
+    const bookingFormNeedsReview = Boolean(bookingForm && (r.tasks || []).some(task =>
+      task.workflow_key === "wbm_review_booking_form" && !task.completed));
     const contract = portal.contract;
     const fullySigned = Boolean(contract && (contract.is_legacy_import || contract.fully_signed || contract.supplier_signed_at));
     const needsCountersignature = Boolean(contract && !contract.is_legacy_import && !fullySigned);
@@ -273,14 +275,23 @@
     const answerHost = document.createElement("div");
     originalQuestionnairesV895(r, answerHost);
     body.innerHTML = `<section class="forms-status-grid">
-      <article class="${bookingForm ? "complete" : "waiting"}"><i>${bookingForm ? "✓" : "1"}</i><span><small>WEDDING BOOKING FORM</small><strong>${bookingForm ? "Completed" : "Waiting for client"}</strong><em>${bookingForm ? esc(fmtDateTime(bookingForm.submitted_at)) : "Answers will appear below when submitted."}</em></span></article>
+      <article class="${bookingFormNeedsReview ? "waiting" : bookingForm ? "complete" : "waiting"}"><i>${bookingFormNeedsReview ? "!" : bookingForm ? "✓" : "1"}</i><span><small>WEDDING BOOKING FORM</small><strong>${bookingFormNeedsReview ? "Submitted · needs your review" : bookingForm ? "Completed and reviewed" : "Waiting for client"}</strong><em>${bookingForm ? esc(fmtDateTime(bookingForm.updated_at || bookingForm.submitted_at)) : "Answers will appear below when submitted."}</em></span></article>
       <article class="${fullySigned ? "complete" : "waiting"}"><i>${fullySigned ? "✓" : "2"}</i><span><small>AGREEMENT</small><strong>${fullySigned ? (contract.is_legacy_import ? "Original agreement retained" : "Signed by both parties") : needsCountersignature ? "Couple signed · your signature needed" : "Waiting for client"}</strong><em>${fullySigned && !contract.is_legacy_import ? `${esc(contract.accepted_name)} and ${esc(contract.supplier_signed_name || "Mark Adam Powell")}` : contract ? `${esc(contract.accepted_name)} · ${esc(fmtDateTime(contract.accepted_at))}` : "The agreement follows the booking form."}</em></span></article>
     </section>
+    ${bookingFormNeedsReview ? `<section class="v822-booking-form-review"><div><small>NEW CLIENT SUBMISSION</small><strong>Check the couple's Wedding Booking Form below</strong><span>Once you are happy that the details are complete, mark it as reviewed to clear it from Today.</span></div><button class="primary" data-review-booking-form type="button">I've reviewed this booking form</button></section>` : ""}
     ${contract ? `<section class="agreement-summary ${needsCountersignature ? "needs-countersignature" : ""}"><div><small>${fullySigned ? "PROTECTED AGREEMENT" : "COUNTERSIGNATURE REQUIRED"}</small><strong>${esc(contract.version || "Saved agreement")}</strong><span>Client: ${esc(contract.accepted_name)} · ${esc(fmtDateTime(contract.accepted_at))}${fullySigned && !contract.is_legacy_import ? `<br>Supplier: ${esc(contract.supplier_signed_name || "Mark Adam Powell")} · ${esc(fmtDateTime(contract.supplier_signed_at))}` : needsCountersignature ? "<br>The client has signed; Mark has not yet countersigned." : ""}</span></div><div class="agreement-summary-actions">${!contract.is_legacy_import ? `<button class="secondary" data-preview-contract>View agreement</button><a class="secondary" href="/api/bookings/${r.id}/contract.pdf">Download</a>` : ""}${needsCountersignature ? `<button class="primary" data-countersign-contract>Countersign as Mark Adam Powell & email couple</button>` : needsCompletionEmail ? `<button class="primary" data-send-contract-completion>Send signed-agreement email</button>` : `<b>Protected record</b>`}</div></section>` : ""}
     <div class="forms-client-controls"><span>Need to resend their link or correct a submitted item?</span><button id="forms-open-client-area" class="secondary">Open client-area controls</button></div>
     <div class="forms-answer-host">${answerHost.innerHTML}</div>`;
     $("#forms-open-client-area", body).onclick = () => selectRecordTab(r, "Quote");
     if ($("[data-preview-contract]", body)) $("[data-preview-contract]", body).onclick = () => showPdfPreview("Wedding agreement", `/api/bookings/${r.id}/contract.pdf?inline=true`, `/api/bookings/${r.id}/contract.pdf`);
+    if ($("[data-review-booking-form]", body)) $("[data-review-booking-form]", body).onclick = async () => {
+      try {
+        await api(`/api/bookings/${r.id}/booking-form/review`, { method: "POST" });
+        toast("Wedding Booking Form marked as reviewed");
+        await refresh();
+        openDrawer(r.id, "Journey");
+      } catch (error) { toast(error.message, "error"); }
+    };
     if ($("[data-countersign-contract]", body)) $("[data-countersign-contract]", body).onclick = async () => {
       if (!confirm(`Countersign this agreement as Mark Adam Powell and email ${r.client.email}?`)) return;
       try {

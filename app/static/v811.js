@@ -16,6 +16,7 @@
   };
   const slugSections = Object.fromEntries(Object.entries(sectionSlugs).map(([key, value]) => [value, key]));
   const queueCopy = {
+    client_updates: ["New client updates", "Forms, signed agreements and replies waiting for you", "●"],
     overdue_payments: ["Overdue payments", "Payment date has passed", "!"],
     new_enquiries: ["New enquiries", "Review the details and prepare the quote", "◎"],
     quotes_waiting: ["Quotes awaiting acceptance", "The couple has not chosen their package", "✉"],
@@ -388,6 +389,8 @@
       else $(".v811-journey-forms")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     else if (action === "review_forms") $(".v811-journey-forms")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (action === "review_booking_form") $(".v811-journey-forms")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (action === "review_final_timings") $(".v820-final")?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (action === "open_task") $(".overview-task-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
@@ -425,7 +428,10 @@
   function queueItem(row) {
     const due = row.due_date ? ` · ${fmtDate(row.due_date)}` : "";
     const amount = row.amount !== null && row.amount !== undefined ? ` · ${money(row.amount)}` : "";
-    return `<button class="v811-queue-item" data-queue-record="${attr(row.booking_id)}" data-section="${attr(row.section)}" data-action="${attr(row.action)}"><span class="record-avatar ${row.brand}">${esc(row.title.split(/\s+|&/).filter(Boolean).slice(0, 2).map(word => word[0]).join(""))}</span><span><strong>${esc(row.title)}</strong><small>${esc(row.detail)}${esc(due)}${esc(amount)}</small></span><b>Open →</b></button>`;
+    const received = row.occurred_at ? ` · ${fmtDateTime(row.occurred_at)}` : "";
+    const mailData = row.action === "open_email" ? ` data-mail-brand="${attr(row.mail_brand)}" data-mail-uid="${attr(row.mail_uid)}"` : "";
+    const openLabel = row.action === "open_email" ? "Read email" : row.update_type ? "Review" : "Open";
+    return `<button class="v811-queue-item" data-queue-record="${attr(row.booking_id)}" data-section="${attr(row.section)}" data-action="${attr(row.action)}"${mailData}><span class="record-avatar ${row.brand}">${esc(row.title.split(/\s+|&/).filter(Boolean).slice(0, 2).map(word => word[0]).join(""))}</span><span><strong>${esc(row.title)}</strong><small>${esc(row.detail)}${esc(received)}${esc(due)}${esc(amount)}</small></span><b>${openLabel} →</b></button>`;
   }
 
   function queueCard(key, rows) {
@@ -443,7 +449,9 @@
     if (renderNumber !== dashboardRenderNumber || state.view !== "dashboard") return;
     const d = state.dashboard || {};
     const queues = Object.fromEntries(queueOrder.map(key => [key, (data.queues[key] || []).filter(row => state.brand === "all" || row.brand === state.brand)]));
-    const urgent = queues.overdue_payments.length + queues.new_enquiries.length + queues.accepted_payment.length + queues.agreements_waiting.length;
+    const clientUpdateBookings = new Set(queues.client_updates.map(row => row.booking_id));
+    const urgent = queues.client_updates.length + queues.overdue_payments.length + queues.new_enquiries.length + queues.accepted_payment.length
+      + queues.agreements_waiting.filter(row => !clientUpdateBookings.has(row.booking_id)).length;
     const upcoming = filtered(d.upcoming || []);
     const tasks = (d.tasks || []).filter(task => state.brand === "all" || state.records.find(record => record.id === task.booking_id)?.brand === state.brand);
     $("#content").innerHTML = `<section class="v811-today-head"><div><small>YOUR WORKING DAY</small><h2>Today</h2><p>Each item opens the right client and the exact part of their journey.</p></div><b class="${urgent ? "attention" : "clear"}">${urgent ? `${urgent} need attention` : "All clear"}</b></section>
@@ -451,7 +459,13 @@
       <section class="v811-worklists">${queueOrder.filter(key => queues[key].length).map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>Your upcoming dates and private tasks are still shown below.</article>`}</section>
       <section class="dash-grid v811-dashboard-lower"><article class="panel"><div class="panel-title"><div><h2>Upcoming dates</h2><p>Your next bookings and deadlines</p></div><button data-jump="calendar">View all</button></div>${upcoming.length ? upcoming.slice(0, 7).map(recordRow).join("") : `<div class="empty"><strong>No upcoming records</strong>Add a booking or project to get started.</div>`}</article>
       <article class="panel"><div class="panel-title"><div><h2>Private things to do · ${d.open_tasks || 0}</h2><p>These never email a client</p></div><button data-jump="workflows">View all</button></div>${tasks.length ? tasks.slice(0, 7).map(task => taskRow(task, true)).join("") : `<div class="empty"><strong>You're all caught up</strong>No open private tasks.</div>`}</article></section>`;
-    $$('[data-queue-record]', $("#content")).forEach(button => button.onclick = () => openDrawer(button.dataset.queueRecord, button.dataset.section, { action: button.dataset.action }));
+    $$('[data-queue-record]', $("#content")).forEach(button => button.onclick = () => {
+      if (button.dataset.action === "open_email" && window.openInboxMessageFromDashboard) {
+        window.openInboxMessageFromDashboard(button.dataset.mailBrand, button.dataset.mailUid);
+      } else {
+        openDrawer(button.dataset.queueRecord, button.dataset.section, { action: button.dataset.action });
+      }
+    });
     $$('[data-queue-jump]', $("#content")).forEach(button => button.onclick = () => $(`#queue-${button.dataset.queueJump}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
     wireRecords();
     $$('[data-action="toggle-task"]', $("#content")).forEach(button => button.onclick = () => toggleTask(button.closest("[data-task]")));
@@ -460,8 +474,27 @@
   renderDashboard = function () {
     const renderNumber = ++dashboardRenderNumber;
     $("#content").innerHTML = `<div class="panel loading">Building today's working queues…</div>`;
-    const request = workflowQueueCache ? Promise.resolve(workflowQueueCache) : api("/api/workflow-queues").then(data => (workflowQueueCache = data));
-    request.then(data => renderTodayDashboard(data, renderNumber)).catch(error => showError(error));
+    const workflowRequest = workflowQueueCache ? Promise.resolve(workflowQueueCache) : api("/api/workflow-queues").then(data => (workflowQueueCache = data));
+    const mailRequest = api("/api/mail/messages?unread_only=true&limit=30").catch(() => ({ messages: [] }));
+    Promise.all([workflowRequest, mailRequest]).then(([data, mail]) => {
+      const emailUpdates = (mail.messages || []).filter(message => message.unread && message.booking).map(message => ({
+        booking_id: message.booking.id,
+        title: message.booking.title,
+        detail: `Email reply · ${message.subject || "No subject"} · ${message.from_email}`,
+        section: "Activity",
+        action: "open_email",
+        brand: message.booking.brand,
+        event_date: message.booking.event_date,
+        due_date: null,
+        amount: null,
+        occurred_at: message.date,
+        update_type: "email_reply",
+        mail_brand: message.brand,
+        mail_uid: message.uid,
+      }));
+      const merged = {...data, queues: {...data.queues, client_updates: [...(data.queues.client_updates || []), ...emailUpdates].sort((a,b) => String(b.occurred_at || "").localeCompare(String(a.occurred_at || "")))}};
+      renderTodayDashboard(merged, renderNumber);
+    }).catch(error => showError(error));
   };
 
   async function loadSearchIndex() {

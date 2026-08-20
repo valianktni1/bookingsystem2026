@@ -1,5 +1,16 @@
-BookingSystem2026 - Final Timings Records
-Build: 2026.08.20-final-timings-records-v8.21
+BookingSystem2026 - New Client Updates Dashboard
+Build: 2026.08.20-client-updates-dashboard-v8.22
+
+V8.22 new client updates dashboard:
+
+- Adds one prominent New client updates queue at the top of Today.
+- Shows newly submitted Wedding Booking Forms and Final Wedding Timings Forms.
+- Shows client-signed native agreements waiting for your countersignature.
+- Adds unread, exactly matched client email replies without exposing unrelated mail.
+- Opens each update at the exact booking form, timings form, agreement or email.
+- Keeps form submissions visible until you deliberately mark them reviewed; opening
+  an email marks it read and countersigning an agreement completes its existing flow.
+- Sends no new automatic emails and leaves Studio Ninja automation suppression intact.
 
 V8.21 final timings records:
 

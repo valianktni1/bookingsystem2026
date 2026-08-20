@@ -1,5 +1,15 @@
+import os
 from datetime import date, timedelta
 from pathlib import Path
+
+
+TEST_ROOT = Path(__file__).parent
+os.environ["DATABASE_URL"] = f"sqlite:///{TEST_ROOT / 'test-v898.db'}"
+os.environ["STORAGE_ROOT"] = str(TEST_ROOT / "v898-storage")
+os.environ["COOKIE_SECURE"] = "false"
+os.environ["ADMIN_EMAIL"] = "mark@example.com"
+os.environ["ADMIN_PASSWORD"] = "SecureTestPassword!123"
+os.environ["SESSION_SECRET"] = "v898-test-session-secret-at-least-32-characters"
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -7,9 +17,6 @@ from sqlalchemy import select
 from app.database import SessionLocal, engine
 from app.main import app
 from app.models import Booking, Invoice
-
-
-TEST_ROOT = Path(__file__).parent
 
 
 def login(client):
@@ -20,8 +27,8 @@ def login(client):
 
 def reset_database():
     engine.dispose()
-    (TEST_ROOT / "test.db").unlink(missing_ok=True)
-    (TEST_ROOT / "test.db-journal").unlink(missing_ok=True)
+    (TEST_ROOT / "test-v898.db").unlink(missing_ok=True)
+    (TEST_ROOT / "test-v898.db-journal").unlink(missing_ok=True)
 
 
 def booking_payload(wedding_day):
@@ -151,3 +158,9 @@ def test_testing_mode_marks_records_routes_email_and_allows_test_cleanup(monkeyp
             "reason": "Completed safe end-to-end test", "confirmation": "DELETE Real & Address",
         })
         assert removed.status_code == 200
+
+
+def teardown_module():
+    engine.dispose()
+    (TEST_ROOT / "test-v898.db").unlink(missing_ok=True)
+    (TEST_ROOT / "test-v898.db-journal").unlink(missing_ok=True)

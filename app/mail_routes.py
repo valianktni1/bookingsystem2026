@@ -50,33 +50,48 @@ def _booking_match(db: Session, email: str, brand: Brand) -> Booking | None:
     email = (email or "").strip().lower()
     if not email:
         return None
-    rows = db.scalars(select(Booking).options(selectinload(Booking.client)).join(Client).where(
-        Booking.brand == brand,
-        func.lower(Client.email) == email,
-    )).all()
-    if not rows:
-        return None
-
-    def priority(item: Booking):
-        cancelled = item.status == RecordStatus.CANCELLED
-        past = bool(item.event_date and item.event_date < date.today())
-        distance = abs((item.event_date - date.today()).days) if item.event_date else 999_999
-        return cancelled, past, distance, item.created_at
-
-    return sorted(rows, key=priority)[0]
+    return _booking_matches(db, {email}, brand).get(email)
 
 
 def _booking_matches(db: Session, emails: set[str], brand: Brand) -> dict[str, Booking]:
     wanted = {email.strip().lower() for email in emails if email and email.strip()}
     if not wanted:
         return {}
-    rows = db.scalars(select(Booking).options(selectinload(Booking.client)).join(Client).where(
+    rows = list(db.scalars(select(Booking).options(selectinload(Booking.client)).join(Client).where(
         Booking.brand == brand,
         func.lower(Client.email).in_(wanted),
-    )).all()
+    )).all())
+    booking_forms = list(db.scalars(select(FormSubmission).join(
+        Booking, Booking.id == FormSubmission.booking_id
+    ).where(
+        Booking.brand == brand,
+        FormSubmission.form_type == "booking_form",
+    )).all())
+    form_booking_ids = {
+        submission.booking_id for submission in booking_forms
+        if wanted.intersection({
+            str((submission.data or {}).get("primary_email") or "").strip().lower(),
+            str((submission.data or {}).get("partner_email") or "").strip().lower(),
+        })
+    }
+    if form_booking_ids:
+        rows.extend(db.scalars(select(Booking).options(selectinload(Booking.client)).where(
+            Booking.id.in_(form_booking_ids)
+        )).all())
+    rows = list({row.id: row for row in rows}.values())
     grouped: dict[str, list[Booking]] = {}
     for row in rows:
-        grouped.setdefault(row.client.email.lower(), []).append(row)
+        addresses = {row.client.email.lower()}
+        for submission in booking_forms:
+            if submission.booking_id != row.id:
+                continue
+            addresses.update({
+                str((submission.data or {}).get("primary_email") or "").strip().lower(),
+                str((submission.data or {}).get("partner_email") or "").strip().lower(),
+            })
+        for address in addresses.intersection(wanted):
+            if address:
+                grouped.setdefault(address, []).append(row)
 
     def priority(item: Booking):
         cancelled = item.status == RecordStatus.CANCELLED

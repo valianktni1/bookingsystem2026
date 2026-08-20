@@ -19,7 +19,7 @@ from app.database import SessionLocal, engine
 from app.email_service import build_email_message
 from app.main import app
 from app.models import (Booking, Brand, BusinessProfile, Client, ContractAcceptance,
-                        ReminderLog)
+                        ReminderLog, Task)
 
 
 def booking_payload(brand="wbm", title="Sophie & James"):
@@ -214,7 +214,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
                                  "google_calendar_configured": False,
-                                     "build": "2026.08.20-final-timings-records-v8.21"}
+                                     "build": "2026.08.20-client-updates-dashboard-v8.22"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -362,6 +362,12 @@ def test_phase_two_b_flow(monkeypatch):
             }
         })
         assert form.status_code == 200
+        with SessionLocal() as db:
+            booking_form_review = db.scalar(select(Task).where(
+                Task.booking_id == wedding_data["id"],
+                Task.workflow_key == "wbm_review_booking_form",
+            ))
+            assert booking_form_review is not None and booking_form_review.completed is False
         accepted = client.post(f"/api/client/{token}/contract", json={
             "accepted_name": "Sophie Taylor", "accepted_email": "wbm@example.com", "agreed": True
         })
@@ -610,7 +616,9 @@ def test_phase_two_b_flow(monkeypatch):
         dashboard = client.get("/api/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json()["confirmed"] == 1
-        assert dashboard.json()["open_tasks"] == 8
+        # The submitted Wedding Booking Form now remains as one private review
+        # item until Mark deliberately marks it reviewed.
+        assert dashboard.json()["open_tasks"] == 9
 
         upload = client.post(
             f"/api/bookings/{wedding_data['id']}/documents?category=contract",

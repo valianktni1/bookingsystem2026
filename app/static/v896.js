@@ -136,6 +136,14 @@
     }
   }
 
+  window.openInboxMessageFromDashboard = async function (brand, uid) {
+    state.mailUnreadOnly = false;
+    state.mailSelected = null;
+    state.mailLoaded = false;
+    await navigate("mail");
+    await openMailMessage(brand, uid);
+  };
+
   function sentReplyCard(reply) {
     return `<article class="mail-sent-reply"><header><strong>You replied</strong><time>${esc(mailDateLong(reply.sent_at))}</time></header><p>${esc(reply.body).replace(/\n/g, "<br>")}</p><small>${reply.copied_to_sent ? "Saved in Hostinger Sent" : "Saved safely in this booking system"}</small></article>`;
   }

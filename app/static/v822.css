@@ -1,0 +1,7 @@
+/* V8.22 - prominent new client updates dashboard and review actions. */
+.v811-queue-cards>button[data-queue-jump="client_updates"]{grid-column:span 2;border-color:#d8bd7b;background:linear-gradient(135deg,#fffaf0,#fff)}
+.v811-queue-cards>button[data-queue-jump="client_updates"].has-items{border-color:#c7922e;background:linear-gradient(135deg,#fff3d6,#fffaf0);box-shadow:0 8px 24px #9a6c1821}
+.v811-queue-cards>button[data-queue-jump="client_updates"] i{color:#fff;background:#b78228}.v811-queue-cards>button[data-queue-jump="client_updates"] strong{color:#7d5417}
+#queue-client_updates{grid-column:1/-1;border:2px solid #d9b567}#queue-client_updates .panel-title{background:#fff9e9}#queue-client_updates .panel-title b{background:#b78228}
+.v822-booking-form-review{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:13px;padding:14px 16px;border:1px solid #d9b567;border-radius:10px;background:#fff8e7}.v822-booking-form-review small,.v822-booking-form-review strong,.v822-booking-form-review span{display:block}.v822-booking-form-review small{color:#9a691e;font-size:8px;font-weight:900;letter-spacing:.1em}.v822-booking-form-review strong{margin-top:3px;font-size:12px}.v822-booking-form-review span{margin-top:4px;color:#75664f;font-size:9px;line-height:1.45}.v822-booking-form-review button{flex:0 0 auto}
+@media(max-width:700px){.v811-queue-cards>button[data-queue-jump="client_updates"]{grid-column:auto}.v822-booking-form-review{align-items:stretch;flex-direction:column}.v822-booking-form-review button{width:100%}}
