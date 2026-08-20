@@ -241,7 +241,7 @@
     const directions = venueDirections(r);
     const facts = workspaceFacts(r, state.currentPortal);
     const tasks = [...(r.tasks || [])].sort((a, b) => Number(a.completed) - Number(b.completed) || String(a.due_at || "9999").localeCompare(String(b.due_at || "9999")));
-    const legacy = r.legacy_source === "studio_ninja" ? `<section class="legacy-banner"><strong>Imported safely from Studio Ninja · manual communication only</strong><span>Original reference: ${esc(r.legacy_id || "Not supplied")}</span><em>This booking remains fully visible, while automatic emails and reminders stay permanently paused.</em></section>` : "";
+    const legacy = r.legacy_source === "studio_ninja" ? `<section class="legacy-banner"><strong>Imported safely from Studio Ninja · protected communication</strong><span>Original reference: ${esc(r.legacy_id || "Not supplied")}</span><em>All general automatic emails stay blocked. The only exception is the 30-day Final Wedding Timings invitation for weddings after 20 October 2026.</em></section>` : "";
     const voidNotice = facts.voidInvoices.length ? `<button class="record-void-notice" data-overview-tab="Payments"><span><strong>${facts.voidInvoices.length} voided invoice${facts.voidInvoices.length === 1 ? "" : "s"} retained</strong><small>They remain visible for your records and have no outstanding balance.</small></span><b>View payments →</b></button>` : "";
     body.innerHTML = `${legacy}${voidNotice}<div class="record-overview-grid">
       <section class="record-overview-main">

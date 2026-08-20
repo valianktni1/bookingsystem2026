@@ -235,6 +235,7 @@
       record_payment: "Payment recorded",
       delete_payment: "Payment entry removed",
       submit_form: "Wedding Booking Form submitted",
+      review_final_timings: "Final Wedding Timings reviewed",
       accept_contract: "Agreement signed by the client",
       countersign_contract: "Agreement countersigned",
       send_contract_completion_email: "Completed agreement emailed",
@@ -283,7 +284,10 @@
     const auditEvents = (r.activity || [])
       .filter(event => !["add_note", "delete_note", "send_email", "send_client_email", "send_manual_email"].includes(event.action))
       .map(event => ({
-        at: event.created_at, type: "audit", label: activityLabel(event.action), detail: activityDetail(event.details),
+        at: event.created_at, type: "audit",
+        label: event.action === "submit_form" && event.details?.form_type === "final_timings"
+          ? "Final Wedding Timings submitted" : activityLabel(event.action),
+        detail: activityDetail(event.details),
       }));
     const events = [...emailEvents, ...noteEvents, ...auditEvents]
       .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));

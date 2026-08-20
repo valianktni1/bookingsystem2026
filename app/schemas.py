@@ -152,7 +152,7 @@ class PortalCreateIn(BaseModel):
 
 
 class PublicFormIn(BaseModel):
-    form_type: str = Field(pattern="^booking_form$")
+    form_type: str = Field(pattern="^(booking_form|final_timings)$")
     data: dict
 
 

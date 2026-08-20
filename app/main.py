@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 from starlette.background import BackgroundTask
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -28,6 +29,10 @@ from .email_service import preview_template_email, send_template_email, smtp_cre
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
 from .google_calendar import (google_calendar_configured, register_google_calendar_routes,
                               sync_booking_calendar_safely)
+from .final_timings import (FORM_TYPE as FINAL_TIMINGS_FORM_TYPE,
+                            booking_coverage_allowance, final_timings_unlocked,
+                            studio_ninja_final_timings_email_due,
+                            validated_final_timings)
 from .migrations import apply_safe_migrations
 from .legacy_archive_import import register_legacy_archive_import_routes
 from .legacy_import import register_legacy_import_routes
@@ -77,7 +82,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.18-thirty-day-check-in", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.20-final-wedding-timings", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -109,6 +114,7 @@ def issue_client_email_url(db: Session, booking: Booking, template_key: str,
         "balance_due_1": "invoices",
         "balance_overdue_2": "invoices",
         "contract_reminder": "agreement",
+        "check_in_30": "timings",
     }
     tab = tabs.get(template_key)
     base = f"{settings.app_url.rstrip('/')}/client/{raw}"
@@ -1643,6 +1649,8 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         EmailTemplate.is_active.is_(True),
         EmailTemplate.template_key.notin_(("new_enquiry_admin", "contract_completed")),
     ).order_by(EmailTemplate.display_name)).all()
+    final_submission = next((x for x in submissions if x.form_type == FINAL_TIMINGS_FORM_TYPE), None)
+    final_workflow = (booking.workflow_state or {}).get("final_timings_review") or {}
     return {
         "submissions": [{"id": x.id, "form_type": x.form_type, "data": x.data,
                          "submission_source": x.submission_source,
@@ -1661,6 +1669,13 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "quote_preparation": quote_preparation_json(booking),
         "automation_suppressed": booking.automation_suppressed,
         "final_details_unlocked": final_details_unlocked(db, booking),
+        "final_timings": {
+            "available": final_timings_unlocked(db, booking),
+            "submitted": bool(final_submission),
+            "reviewed_at": final_workflow.get("reviewed_at"),
+            "reviewed_by": final_workflow.get("reviewed_by"),
+            "coverage": booking_coverage_allowance(db, booking),
+        },
         "email_templates": [{"template_key": item.template_key,
                              "display_name": item.display_name}
                             for item in client_templates],
@@ -1715,7 +1730,7 @@ WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
     "quote_followup_final": ("automatic", "Automatic final quote follow-up nine days after a successful quote"),
     "deposit_due_1": ("automatic", "Automatic booking-fee reminder on its due date"),
     "check_in_120": ("automatic", "Automatic friendly check-in 120 days before the wedding"),
-    "check_in_30": ("automatic", "Automatic final check-in 30 days before the wedding, including the Monday telephone-call date"),
+    "check_in_30": ("automatic", "Automatic final-timings invitation 30 days before the wedding, including the Monday telephone-call date. This is the only automatic email permitted for eligible Studio Ninja imports after 20 October 2026"),
     "balance_due_7": ("automatic", "Automatic final-balance reminder seven days before it is due"),
     "balance_due_1": ("automatic", "Automatic final-balance reminder one day before it is due"),
     "balance_overdue_2": ("automatic", "Automatic overdue reminder every two days while a balance remains"),
@@ -2517,6 +2532,14 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
     form_values = dict(payload.data)
     form_snapshot = None
     form_template_updated_at = None
+    if payload.form_type == FINAL_TIMINGS_FORM_TYPE:
+        if not final_timings_unlocked(db, booking):
+            raise HTTPException(409, "Your Final Wedding Timings Form opens 30 days before your wedding")
+        try:
+            form_values = validated_final_timings(db, booking, form_values)
+        except ValidationError as exc:
+            message = exc.errors()[0].get("msg", "Please check the timings form")
+            raise HTTPException(422, str(message).removeprefix("Value error, ")) from exc
     if (payload.form_type == "booking_form" and booking.brand == Brand.WBM
             and booking.kind == RecordKind.WEDDING and not booking.legacy_source):
         template = wedding_booking_template(db)
@@ -2578,11 +2601,63 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
         for task in db.scalars(select(Task).where(Task.booking_id == booking.id,
                                                   Task.title.ilike("%booking form%"))).all():
             task.completed = True
+    elif payload.form_type == FINAL_TIMINGS_FORM_TYPE:
+        workflow = dict(booking.workflow_state or {})
+        workflow.pop("final_timings_review", None)
+        booking.workflow_state = workflow
+        review_task = db.scalar(select(Task).where(
+            Task.booking_id == booking.id,
+            Task.workflow_key == "wbm_review_final_timings",
+        ).limit(1))
+        if review_task:
+            review_task.completed = False
+        else:
+            db.add(Task(
+                booking_id=booking.id,
+                title="Review final wedding timings",
+                workflow_key="wbm_review_final_timings",
+            ))
     audit(db, "submit_form", "booking", booking.id, {"form_type": payload.form_type})
     db.commit()
     if payload.form_type == "booking_form":
         sync_booking_calendar_safely(db, booking)
     return {"ok": True, "submitted_at": row.submitted_at.isoformat()}
+
+
+@app.post("/api/bookings/{booking_id}/final-timings/review")
+def review_final_timings(
+    booking_id: str,
+    admin: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(404, "Record not found")
+    submission = db.scalar(select(FormSubmission).where(
+        FormSubmission.booking_id == booking.id,
+        FormSubmission.form_type == FINAL_TIMINGS_FORM_TYPE,
+    ).limit(1))
+    if not submission:
+        raise HTTPException(409, "The couple has not submitted their Final Wedding Timings Form")
+    reviewed_at = datetime.now(timezone.utc)
+    workflow = dict(booking.workflow_state or {})
+    workflow["final_timings_review"] = {
+        "reviewed_at": reviewed_at.isoformat(),
+        "reviewed_by": admin.email,
+        "submission_updated_at": submission.updated_at.isoformat(),
+    }
+    booking.workflow_state = workflow
+    for task in db.scalars(select(Task).where(
+        Task.booking_id == booking.id,
+        Task.workflow_key == "wbm_review_final_timings",
+    )).all():
+        task.completed = True
+    audit(db, "review_final_timings", "booking", booking.id, {
+        "admin": admin.email,
+        "submission_id": submission.id,
+    })
+    db.commit()
+    return {"ok": True, "reviewed_at": reviewed_at.isoformat(), "reviewed_by": admin.email}
 
 
 @app.post("/api/client/{token}/contract")
@@ -2764,9 +2839,17 @@ def run_due_reminders(db: Session) -> dict:
                                                   selectinload(Booking.quotes))
                           .where(Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED)).all()
     for booking in bookings:
-        if not automations_allowed(booking):
-            continue
         reminders: list[tuple[str, str, str | None, int]] = []
+        is_studio_ninja = booking.legacy_source == "studio_ninja"
+        if is_studio_ninja:
+            # Hard safety boundary: this is the sole automatic communication
+            # ever permitted for a Studio Ninja import. Do not add the normal
+            # reminder workflow to this branch.
+            if not studio_ninja_final_timings_email_due(booking, today):
+                continue
+            reminders.append(("check_in_30", "check_in_30", "timings", 365))
+        elif not automations_allowed(booking):
+            continue
         has_balance = any(invoice.status not in ("void", "cancelled") and invoice.paid < invoice.total
                           for invoice in booking.invoices)
         is_wbm_wedding = booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
@@ -2774,7 +2857,7 @@ def run_due_reminders(db: Session) -> dict:
 
         # Quote chasing is based on the most recent successfully sent initial quote.
         # It stops immediately when a package has been accepted.
-        if (is_wbm_wedding and not accepted_quote
+        if (not is_studio_ninja and is_wbm_wedding and not accepted_quote
                 and booking.status in (RecordStatus.ENQUIRY, RecordStatus.QUOTED)):
             quote_sent_at = db.scalar(select(EmailLog.sent_at).where(
                 EmailLog.booking_id == booking.id,
@@ -2788,7 +2871,7 @@ def run_due_reminders(db: Session) -> dict:
                 if days_since_quote == 9:
                     reminders.append(("quote_followup_final", "quote_followup_final", "quote", 365))
 
-        if is_wbm_wedding and accepted_quote:
+        if not is_studio_ninja and is_wbm_wedding and accepted_quote:
             accepted_invoice = next(
                 (invoice for invoice in booking.invoices if invoice.id == accepted_quote.invoice_id),
                 None,
@@ -2798,15 +2881,15 @@ def run_due_reminders(db: Session) -> dict:
                     and accepted_invoice.deposit_due_date == today):
                 reminders.append(("deposit_due_1", "deposit_due_1", "invoices", 365))
 
-        if is_wbm_wedding and booking.event_date and booking.status in (
+        if not is_studio_ninja and is_wbm_wedding and booking.event_date and booking.status in (
                 RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS):
             days_to_wedding = (booking.event_date - today).days
             if days_to_wedding == 120:
                 reminders.append(("check_in_120", "check_in_120", None, 0))
             if days_to_wedding == 30:
-                reminders.append(("check_in_30", "check_in_30", None, 0))
+                reminders.append(("check_in_30", "check_in_30", "timings", 365))
 
-        if is_wbm_wedding and booking.balance_due_date and has_balance:
+        if not is_studio_ninja and is_wbm_wedding and booking.balance_due_date and has_balance:
             days_to_balance = (booking.balance_due_date - today).days
             if days_to_balance == 7:
                 reminders.append(("balance_due_7", "balance_due_7", "invoices", 365))

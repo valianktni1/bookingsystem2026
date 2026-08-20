@@ -1,5 +1,15 @@
-BookingSystem2026 - Dashboard Payment Total
-Build: 2026.08.20-dashboard-payment-total-v8.19
+BookingSystem2026 - Final Wedding Timings
+Build: 2026.08.20-final-wedding-timings-v8.20
+
+V8.20 final wedding timings:
+
+- Adds the client Final Wedding Timings Form and private run sheet.
+- Checks 4-hour Bronze and 8-hour Silver-or-higher coverage with 15 minutes grace.
+- Uses spare included coverage to recommend an earlier preparation start where useful.
+- Creates a private review task and reopens it after any couple update.
+- Makes no automatic package, invoice, price or Calendar change.
+- Keeps Studio Ninja automation blocked except for this one 30-day form invitation,
+  and only for weddings after 20 October 2026.
 
 V8.19 dashboard payment total:
 

@@ -1,9 +1,23 @@
-# Mark's Business Studio — Version 8.19
+# Mark's Business Studio — Version 8.20
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.19, including browser-history
+build includes every cumulative feature through V8.20, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.20 final wedding timings
+
+The secure client area now includes a five-step Final Wedding Timings Form that
+opens 30 days before each confirmed wedding, or earlier when opened manually.
+It creates a private run sheet, checks Bronze against four hours and Silver or
+higher packages against eight hours, uses spare included time sensibly for
+preparations, and flags genuine overruns only after the 15-minute grace period.
+It never changes a package, invoice or charge automatically.
+
+Studio Ninja imports retain their general automation lock. The sole exception
+is the Final Wedding Timings invitation at 30 days, and only for weddings after
+20 October 2026. Every other automatic email remains blocked unless explicitly
+changed in a later version.
 
 ## Version 8.19 dashboard payment total
 

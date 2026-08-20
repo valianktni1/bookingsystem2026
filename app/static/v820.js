@@ -1,0 +1,60 @@
+/* V8.20 — private Final Wedding Timings review and Studio Ninja safety display. */
+(() => {
+  "use strict";
+  const baseRenderTabV820 = renderTab;
+  const baseRecordNextActionV820 = recordNextAction;
+
+  recordNextAction=function(r,portal){
+    const review=(r.tasks||[]).find(task=>task.workflow_key==="wbm_review_final_timings"&&!task.completed);
+    if(review)return {title:"Review the couple’s final wedding timings",detail:"Their completed run sheet is ready. Check the coverage and preparation travel before the final call.",tab:"Journey",label:"Review timings"};
+    return baseRecordNextActionV820(r,portal);
+  };
+
+  function durationText(value) {
+    const minutes=Math.max(0,Number(value||0)),hours=Math.floor(minutes/60),remainder=minutes%60;
+    return [hours?`${hours} hr${hours===1?"":"s"}`:"",remainder?`${remainder} min`:""].filter(Boolean).join(" ")||"0 min";
+  }
+  function answer(data,key,fallback="Not supplied") {
+    const value=data?.[key];
+    if(value===true)return "Yes";if(value===false)return "No";
+    return value===null||value===undefined||String(value).trim()===""?fallback:String(value);
+  }
+  function dateAfterStudioNinjaCutoff(value) { return Boolean(value && value > "2026-10-20"); }
+
+  function waitingPanel(r, portal) {
+    const isLegacy=r.legacy_source==="studio_ninja",eligible=isLegacy&&dateAfterStudioNinjaCutoff(r.event_date),available=Boolean(portal.final_timings?.available);
+    const safety=isLegacy
+      ? eligible
+        ? '<div class="v820-safety"><strong>Studio Ninja safety rule</strong><span>This Final Wedding Timings invitation is the one permitted automatic email. It sends 30 days before this wedding. Every other automatic Studio Ninja email remains blocked.</span></div>'
+        : '<div class="v820-safety manual"><strong>Studio Ninja — manual only</strong><span>This wedding is not after 20 October 2026, so no automatic email will be sent. You can still open the form and deliberately send the link yourself.</span></div>'
+      : '<p>The 30-day check-in opens this form and sends the couple directly to it. Your edited email template remains in use.</p>';
+    return `<section class="v820-waiting"><div><small>STEP 4 · WEDDING-DAY RUN SHEET</small><h3>Final Wedding Timings</h3><p>${available?"The form is open and waiting for the couple to submit it.":"It opens automatically 30 days before the wedding. You can open it earlier when needed."}</p></div><span class="v820-state ${available?"ready":"scheduled"}">${available?"Ready for couple":"Scheduled"}</span>${safety}${available?"":'<button class="secondary" data-open-final-timings type="button">Open form early</button>'}</section>`;
+  }
+
+  function submittedPanel(r, portal, submission) {
+    const values=submission.data||{},calc=values._calculation||{},reviewed=portal.final_timings?.reviewed_at;
+    const status=calc.status==="over"?`Over by ${durationText(calc.over_standard_minutes)}`:calc.status==="within_grace"?"Within 15-minute grace":calc.status==="package_review"?"Package needs checking":"Fits included coverage";
+    const timeline=(calc.timeline||[]).map(item=>`<div><b>${esc(item.time)}</b><span><strong>${esc(item.event)}</strong><small>${esc(item.detail||"")}</small></span></div>`).join("");
+    return `<section class="v820-submitted"><header><div><small>FINAL WEDDING TIMINGS · SUBMITTED ${esc(fmtDateTime(submission.submitted_at))}</small><h3>Your working run sheet</h3></div><span class="v820-state ${calc.coverage_warning?"warning":"ready"}">${esc(status)}</span></header>
+      <div class="v820-coverage"><article><small>SUGGESTED START</small><strong>${esc(calc.suggested_start||"Check")}</strong></article><article><small>EXPECTED FINISH</small><strong>${esc(calc.expected_finish||"Check")}</strong></article><article><small>EXPECTED COVERAGE</small><strong>${durationText(calc.coverage_minutes)}</strong></article><article><small>PACKAGE ALLOWANCE</small><strong>${calc.package_allowance_minutes==null?"Check package":durationText(calc.package_allowance_minutes)}</strong></article></div>
+      ${calc.coverage_warning?`<div class="v820-alert"><strong>Coverage warning</strong><span>These timings exceed the included coverage by ${durationText(calc.over_standard_minutes)}. The form suggests ${calc.additional_hours_suggested} extra hour${calc.additional_hours_suggested===1?"":"s"}, but nothing has been charged or changed.</span></div>`:""}
+      ${calc.travel_warning?`<div class="v820-alert private"><strong>Private preparation/travel check</strong><span>Only ${durationText(calc.prep_window_minutes)} remains for preparation photographs before leaving at ${esc(calc.prep_departure)} to arrive 15 minutes before the ceremony. This warning is shown to you, not the couple.</span></div>`:""}
+      ${calc.earlier_start_minutes?`<div class="v820-note"><strong>Spare coverage used sensibly</strong><span>The suggested start is ${durationText(calc.earlier_start_minutes)} earlier, using spare included time without creating an overrun.</span></div>`:""}
+      <div class="v820-grid"><section><h4>Run sheet</h4><div class="v820-timeline">${timeline||"No timeline calculated"}</div></section><section><h4>Contacts & notes</h4><dl><dt>Day contact</dt><dd>${esc(answer(values,"day_contact"))} · ${esc(answer(values,"day_mobile"))}</dd><dt>Coordinator</dt><dd>${esc(answer(values,"coordinator"))}</dd><dt>Formal groups</dt><dd>${esc(answer(values,"group_count"))}</dd><dt>Extra stops</dt><dd>${esc(answer(values,"extra_stops"))}</dd><dt>Important details</dt><dd>${esc(answer(values,"important_notes"))}</dd><dt>Preparation notes</dt><dd>${esc(answer(values,"prep_notes"))}</dd></dl></section></div>
+      <footer>${reviewed?`<span class="v820-reviewed">✓ Reviewed ${esc(fmtDateTime(reviewed))}</span>`:'<button class="primary" data-review-final-timings type="button">I’ve reviewed these timings</button>'}<span>Couple updates reopen your private review task.</span></footer></section>`;
+  }
+
+  function appendFinalTimings(r, body) {
+    if(r.kind!=="wedding")return;
+    const portal=state.currentPortal||{},submission=(portal.submissions||[]).find(item=>item.form_type==="final_timings");
+    const host=body.querySelector(".v811-journey");
+    if(!host)return;
+    host.insertAdjacentHTML("beforeend",`<section class="v811-journey-block v820-final"><header><div><small>STEP 4</small><h3>Final wedding timings</h3></div><span>Coverage check and private run sheet</span></header><div>${submission?submittedPanel(r,portal,submission):waitingPanel(r,portal)}</div></section>`);
+    const open=body.querySelector("[data-open-final-timings]");
+    if(open)open.onclick=async()=>{if(!confirm("Open the Final Wedding Timings Form early for this couple?"))return;try{await api(`/api/bookings/${r.id}/final-details`,{method:"POST",body:JSON.stringify({unlocked:true,reason:"Opened early from the Final Wedding Timings panel"})});toast("Final Wedding Timings Form opened");await refresh();openDrawer(r.id,"Journey")}catch(error){toast(error.message,"error")}};
+    const review=body.querySelector("[data-review-final-timings]");
+    if(review)review.onclick=async()=>{try{await api(`/api/bookings/${r.id}/final-timings/review`,{method:"POST"});toast("Final wedding timings marked as reviewed");await refresh();openDrawer(r.id,"Journey")}catch(error){toast(error.message,"error")}};
+  }
+
+  renderTab=async function(r,tab,target=null){await baseRenderTabV820(r,tab,target);if(tab==="Journey")appendFinalTimings(r,target||document.querySelector("#drawer-body"))};
+})();

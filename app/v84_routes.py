@@ -60,8 +60,10 @@ def register_v84_routes(app: FastAPI) -> None:
         if payload.enabled and booking.legacy_source == "studio_ninja":
             raise HTTPException(
                 409,
-                "Studio Ninja bookings are permanently manual-communication-only. "
-                "Use a protected one-off link or email instead.",
+                "Studio Ninja general automation remains permanently blocked. "
+                "The sole exception is the protected 30-day Final Wedding Timings invitation "
+                "for weddings after 20 October 2026; use a protected one-off link or email "
+                "for anything else.",
             )
         if payload.enabled and payload.confirmation != "ACTIVATE CLIENT EMAILS":
             raise HTTPException(422, "Type ACTIVATE CLIENT EMAILS exactly to confirm")
