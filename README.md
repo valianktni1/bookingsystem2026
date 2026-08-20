@@ -1,9 +1,18 @@
-# Mark's Business Studio — Version 8.16
+# Mark's Business Studio — Version 8.17
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.16, including browser-history
+build includes every cumulative feature through V8.17, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.17 workflow clarity
+
+The Today screen now shows every open payment due during the next 60 days,
+without changing when any payment reminder is sent. The WBM template manager
+labels the real workflow use of every template. Temporary Hostinger `454 4.3.0`
+email refusals are explained clearly, and the latest failed signed-agreement
+confirmation can be deliberately retried from Activity or Journey without
+resetting or changing the protected agreement.
 
 ## Version 8.16 client communication
 

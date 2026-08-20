@@ -77,7 +77,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.16-client-communication", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.17-workflow-clarity", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -997,7 +997,11 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
         "final_calls": [],
     }
     today = date.today()
-    due_soon = today + timedelta(days=14)
+    # Payment planning is useful further ahead than the short operational task
+    # window. Keep final-detail calls at 14 days while showing Mark every open
+    # payment due during the next 60 days.
+    payments_due_through = today + timedelta(days=60)
+    final_calls_due_through = today + timedelta(days=14)
 
     def item(booking: Booking, detail: str, section: str, action: str,
              *, due: date | None = None, amount: Decimal | float | None = None) -> dict:
@@ -1060,7 +1064,8 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             if balance <= 0 or not due:
                 continue
             detail = f"{invoice.number} · {money(balance):,.2f} remaining"
-            target = "overdue_payments" if due < today else "payments_due" if due <= due_soon else None
+            target = ("overdue_payments" if due < today else
+                      "payments_due" if due <= payments_due_through else None)
             if target:
                 queues[target].append(item(
                     booking, detail, "Payments", "record_payment", due=due, amount=balance,
@@ -1068,7 +1073,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
 
         for task in booking.tasks:
             if (task.workflow_key == "wbm_final_details_call" and not task.completed
-                    and task.due_at and task.due_at.date() <= due_soon):
+                    and task.due_at and task.due_at.date() <= final_calls_due_through):
                 queues["final_calls"].append(item(
                     booking, "Private 30-day final-details telephone call",
                     "Overview", "open_task", due=task.due_at.date(),
@@ -1702,6 +1707,44 @@ def require_booking_journey_unlocked(db: Session, booking: Booking) -> None:
         )
 
 
+WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
+    "quote": ("action", "Used when you press Prepare & send quote"),
+    "booking_link": ("manual", "Manual option when you deliberately send a booking link"),
+    "contract_reminder": ("manual", "Manual reminder offered when the form is complete but the agreement is unsigned"),
+    "quote_followup_1": ("automatic", "Automatic quote follow-up one day after a successful quote"),
+    "quote_followup_final": ("automatic", "Automatic final quote follow-up nine days after a successful quote"),
+    "deposit_due_1": ("automatic", "Automatic booking-fee reminder on its due date"),
+    "check_in_120": ("automatic", "Automatic friendly check-in 120 days before the wedding"),
+    "balance_due_7": ("automatic", "Automatic final-balance reminder seven days before it is due"),
+    "balance_due_1": ("automatic", "Automatic final-balance reminder one day before it is due"),
+    "balance_overdue_2": ("automatic", "Automatic overdue reminder every two days while a balance remains"),
+    "payment_received": ("action", "Used when you record a payment and its confirmation is sent"),
+    "enquiry_received": ("automatic", "Automatic acknowledgement after a website enquiry"),
+    "new_enquiry_admin": ("automatic", "Automatic private notification to Mark after a website enquiry"),
+    "quote_accepted": ("automatic", "Automatic confirmation after the couple accepts their package"),
+    "contract_completed": ("automatic", "Automatic confirmation after both agreement signatures; manually retryable"),
+    "final_questionnaire": ("obsolete", "Not used - final details are completed by telephone"),
+    "balance_due_14": ("obsolete", "Not used - replaced by the seven-day balance reminder"),
+    "balance_due_10": ("obsolete", "Not used - replaced by the seven-day balance reminder"),
+}
+
+
+def email_template_usage(template: EmailTemplate) -> dict:
+    if template.brand == Brand.WBM:
+        kind, label = WBM_TEMPLATE_USAGE.get(
+            template.template_key,
+            ("manual", "Custom manual option available from Email client"),
+        )
+    else:
+        kind, label = ("manual", "Available when you deliberately email this client")
+    if not template.is_active:
+        return {
+            "usage_kind": "inactive",
+            "usage_label": f"Inactive - nothing can send this template. {label}",
+        }
+    return {"usage_kind": kind, "usage_label": label}
+
+
 @app.get("/api/communications/templates")
 def list_templates(brand: Brand | None = None, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     stmt = select(EmailTemplate).order_by(EmailTemplate.brand, EmailTemplate.display_name)
@@ -1718,7 +1761,7 @@ def list_templates(brand: Brand | None = None, _: Admin = Depends(current_admin)
             }, "reminders_enabled": settings.reminders_enabled,
             "templates": [{"id": x.id, "brand": x.brand.value, "template_key": x.template_key,
                            "display_name": x.display_name, "subject": x.subject, "body": x.body,
-                           "is_active": x.is_active} for x in rows],
+                           "is_active": x.is_active, **email_template_usage(x)} for x in rows],
             "contracts": [{"id": x.id, "brand": x.brand.value, "title": x.title, "version": x.version,
                            "body": x.body, "is_active": x.is_active} for x in contracts]}
 

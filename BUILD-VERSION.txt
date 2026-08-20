@@ -1,5 +1,5 @@
-BookingSystem2026 - Client Communication
-Build: 2026.08.20-client-communication-v8.16
+BookingSystem2026 - Workflow Clarity
+Build: 2026.08.20-workflow-clarity-v8.17
 
 V8.14 complete one-click backup:
 
@@ -257,3 +257,15 @@ friendly quote wording and branded quote button.
   historic delivery records remain visible even when their body was not stored.
 - Existing bookings and invoice data remain unchanged. Studio Ninja automation
   locks, Testing Mode, Calendar, availability, Accounts sync and backups remain intact.
+
+2026.08.20-workflow-clarity-v8.17
+
+- The Today screen shows open payments due during the next 60 days instead of
+  14 days; automatic reminder dates remain completely unchanged.
+- Every Email templates row identifies whether it is automatic, sent after a
+  deliberate workflow action, available manually, inactive or obsolete.
+- A Hostinger 454 temporary refusal is explained in plain language in Activity.
+- The latest failed signed-agreement confirmation has a deliberate Retry email
+  button; retrying does not reset or alter the signed agreement.
+- Existing bookings, invoices, payment schedules, Calendar, availability,
+  Accounts settings, Studio Ninja locks and Testing Mode remain unchanged.

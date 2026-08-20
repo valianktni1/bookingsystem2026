@@ -22,7 +22,7 @@
     accepted_payment: ["Accepted · payment needed", "Record the first payment when it arrives", "£"],
     forms_waiting: ["Booking forms outstanding", "Secured couples still completing their details", "✓"],
     agreements_waiting: ["Agreements outstanding", "Waiting for a signature or countersignature", "✎"],
-    payments_due: ["Payments due soon", "Due within the next 14 days", "£"],
+    payments_due: ["Payments due soon", "Due within the next 60 days", "£"],
     final_calls: ["Final-detail calls", "Private telephone reminders due soon", "☎"],
   };
   const queueOrder = Object.keys(queueCopy);
@@ -259,13 +259,23 @@
       .map(key => `${baseStatusTextV811(key)}: ${details[key]}`).join(" · ");
   }
 
+  function friendlyEmailFailure(error) {
+    const raw = String(error || "");
+    if (/\b454\b.*\b4\.3\.0\b.*try again later/i.test(raw)) {
+      return "Hostinger temporarily refused this message and asked the system to try again later. The booking action still completed safely.";
+    }
+    return raw;
+  }
+
   function renderActivityV811(r, body) {
     const portal = state.currentPortal || {};
+    const latestContractEmail = (portal.emails || []).find(email => email.template_key === "contract_completed");
     const emailEvents = (portal.emails || []).map(email => ({
       at: email.sent_at,
       type: email.status === "sent" ? "sent" : "failed",
       label: email.status === "sent" ? "Email sent successfully" : "Email failed",
-      detail: `${email.subject} · ${email.recipient}${email.error ? ` · ${email.error}` : ""}`,
+      detail: `${email.subject} · ${email.recipient}${email.error ? ` · ${friendlyEmailFailure(email.error)}` : ""}`,
+      retryContractCompletion: email === latestContractEmail && email.status === "failed",
     }));
     const noteEvents = (r.booking_notes || []).map(note => ({
       at: note.created_at, type: "note", label: "Private note", detail: note.body, noteId: note.id,
@@ -280,7 +290,7 @@
     const legacy = (r.legacy_timeline || []).map(event => `<div class="v811-timeline-event legacy"><i></i><span><strong>${esc(baseStatusTextV811(event.title || event.type || event.event || "Studio Ninja activity"))}</strong><small>${esc(event.date || event.at || event.occurred_at || "Date retained in the original record")}${event.detail ? ` · ${esc(event.detail)}` : ""}</small></span></div>`).join("");
     body.innerHTML = `<form id="note-form" class="composer v811-note-composer"><textarea id="note-body" rows="3" placeholder="Add a private note…" required></textarea><button class="primary" type="submit">Add note</button></form>
       <section class="v811-activity-heading"><div><small>COMPLETE CLIENT HISTORY</small><h3>Activity timeline</h3><p>Emails show their real sent or failed result, alongside payments, forms, agreements, notes and changes.</p></div><b>${events.length}</b></section>
-      <div class="v811-timeline">${events.map(event => `<div class="v811-timeline-event ${event.type}" ${event.noteId ? `data-note="${attr(event.noteId)}"` : ""}><i>${event.type === "sent" ? "✓" : event.type === "failed" ? "!" : event.type === "note" ? "✎" : ""}</i><span><strong>${esc(event.label)}</strong><small>${esc(fmtDateTime(event.at))}${event.detail ? ` · ${esc(event.detail)}` : ""}</small></span>${event.noteId ? `<button class="mini danger-text" data-delete-note type="button">Delete</button>` : ""}</div>`).join("") || `<div class="empty"><strong>No activity recorded yet</strong>The history will build automatically as this booking progresses.</div>`}</div>
+      <div class="v811-timeline">${events.map(event => `<div class="v811-timeline-event ${event.type}" ${event.noteId ? `data-note="${attr(event.noteId)}"` : ""}><i>${event.type === "sent" ? "✓" : event.type === "failed" ? "!" : event.type === "note" ? "✎" : ""}</i><span><strong>${esc(event.label)}</strong><small>${esc(fmtDateTime(event.at))}${event.detail ? ` · ${esc(event.detail)}` : ""}</small></span>${event.retryContractCompletion ? `<button class="mini v817-retry-email" data-retry-contract-email type="button">Retry email</button>` : ""}${event.noteId ? `<button class="mini danger-text" data-delete-note type="button">Delete</button>` : ""}</div>`).join("") || `<div class="empty"><strong>No activity recorded yet</strong>The history will build automatically as this booking progresses.</div>`}</div>
       ${legacy ? `<h3 class="section-title">Imported Studio Ninja timeline</h3><div class="v811-timeline">${legacy}</div>` : ""}`;
     $("#note-form", body).onsubmit = async event => {
       event.preventDefault();
@@ -295,6 +305,21 @@
       toast("Private note deleted");
       await refresh();
       openDrawer(r.id, "Activity");
+    });
+    $$('[data-retry-contract-email]', body).forEach(button => button.onclick = async () => {
+      if (!confirm(`Retry the signed-agreement confirmation email to ${r.client.email}?`)) return;
+      button.disabled = true;
+      button.textContent = "Sending…";
+      try {
+        await api(`/api/bookings/${r.id}/contract/completion-email`, { method: "POST" });
+        toast("Signed-agreement confirmation emailed");
+        await refresh();
+        openDrawer(r.id, "Activity");
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "Retry email";
+        toast(error.message, "error");
+      }
     });
   }
 

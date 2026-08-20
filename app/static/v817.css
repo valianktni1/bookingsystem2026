@@ -1,0 +1,11 @@
+/* V8.17 - sixty-day payment planning and clearer email workflow usage. */
+.v817-template-legend{display:flex;flex-wrap:wrap;gap:8px 14px;padding:11px 15px;border-block:1px solid var(--line);color:var(--muted);background:#f8fbfb;font-size:8px;line-height:1.45}
+.v817-template-legend span{display:flex;align-items:center;gap:6px}
+.v817-template-legend b,.v817-template-usage>b{display:inline-block;padding:3px 6px;border-radius:999px;font-size:7px;font-weight:900;letter-spacing:.06em;white-space:nowrap}
+.v817-template-legend b.automatic,.v817-template-usage>b.automatic{color:#0e675c;background:#def2ed}
+.v817-template-legend b.action,.v817-template-usage>b.action{color:#72551c;background:#f8eacb}
+.v817-template-legend b.manual,.v817-template-usage>b.manual{color:#405c71;background:#e7f0f6}
+.v817-template-usage{display:flex!important;align-items:center;gap:7px;line-height:1.45}
+.v817-template-usage>b.obsolete,.v817-template-usage>b.inactive{color:#7c4c47;background:#f5e3e0}
+.v817-retry-email{border-color:#d7b45f!important;color:#67470f!important;background:#fff9e8!important;white-space:nowrap}
+@media(max-width:600px){.v817-template-legend{display:grid}.v817-template-usage{align-items:flex-start!important;flex-direction:column}.v811-timeline-event .v817-retry-email{grid-column:2;justify-self:start}}
