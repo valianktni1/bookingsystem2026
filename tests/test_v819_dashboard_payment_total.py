@@ -17,4 +17,4 @@ def test_payment_due_card_keeps_count_and_adds_filtered_amount_total():
 
 def test_v819_build_identifier_is_exposed_by_health_endpoint():
     backup_py = (ROOT / "app" / "backup.py").read_text()
-    assert 'BACKUP_BUILD = "2026.08.20-reliable-backup-v8.23.1"' in backup_py
+    assert 'BACKUP_BUILD = "2026.08.21-final-timings-mobile-fix-v8.23.2"' in backup_py

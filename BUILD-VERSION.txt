@@ -1,5 +1,18 @@
-BookingSystem2026 - Reliable Complete Backup
-Build: 2026.08.20-reliable-backup-v8.23.1
+BookingSystem2026 - Final Wedding Timings Mobile Reliability
+Build: 2026.08.21-final-timings-mobile-fix-v8.23.2
+
+V8.23.2 Final Wedding Timings mobile reliability:
+
+- Prevents a required question on an earlier hidden step from silently blocking
+  the final submit button on iPhone and other mobile browsers.
+- Returns the couple to the exact incomplete step and shows a clear error.
+- Retains in-progress answers and the current step through a page refresh for the
+  duration of the browser session.
+- Shows Sending securely while the request is active and prevents duplicate sends.
+- Retains the draft after a network or server failure and clears it only after the
+  server confirms a successful submission.
+- Preserves every V8.23.1 feature and changes no booking, invoice, email, Calendar,
+  Accounts or Studio Ninja automation workflow.
 
 V8.23.1 reliable complete backup:
 

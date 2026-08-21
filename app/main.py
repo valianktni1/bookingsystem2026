@@ -87,7 +87,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.23.1-reliable-backup", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.23.2-final-timings-mobile-fix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:

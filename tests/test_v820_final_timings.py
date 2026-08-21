@@ -255,7 +255,7 @@ def test_v820_assets_and_old_final_questionnaire_remain_blocked():
     index = (root / "app/static/index.html").read_text()
     client_html = (root / "app/static/client.html").read_text()
     assert "/static/v820.js?v=final-timings-records-v8-21" in index
-    assert "/static/client-v820.js?v=final-timings-records-v8-21" in client_html
+    assert "/static/client-v820.js?v=final-timings-mobile-v8-23-2" in client_html
     assert "only automatic email permitted" in (root / "app/main.py").read_text()
     assert 'pattern="^(booking_form|final_timings)$"' in (root / "app/schemas.py").read_text()
     admin_js = (root / "app/static/v820.js").read_text()
@@ -266,6 +266,24 @@ def test_v820_assets_and_old_final_questionnaire_remain_blocked():
     assert "View complete form" in admin_js
     assert "View / download PDF" in admin_js
     assert "A PDF copy is retained automatically in Files" in admin_js
+
+
+def test_v8232_mobile_submission_cannot_fail_silently_and_restores_draft():
+    root = Path(__file__).parents[1]
+    client_html = (root / "app/static/client.html").read_text()
+    client_js = (root / "app/static/client-v820.js").read_text()
+    client_css = (root / "app/static/client-v820.css").read_text()
+
+    assert "/static/client-v820.css?v=final-timings-mobile-v8-23-2" in client_html
+    assert '<form id="final-timings-form" novalidate>' in client_js
+    assert "sessionStorage.setItem(timingsDraftKey()" in client_js
+    assert "sessionStorage.removeItem(timingsDraftKey())" in client_js
+    assert "const invalid=firstInvalid();" in client_js
+    assert "steps.indexOf(step)" in client_js
+    assert "Sending securely…" in client_js
+    assert "if(submitting)return" in client_js
+    assert 'role="alert"' in client_js
+    assert '[aria-invalid="true"]' in client_css
 
 
 def teardown_module():

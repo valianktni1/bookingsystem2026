@@ -1,9 +1,20 @@
-# Mark's Business Studio — Version 8.23.1
+# Mark's Business Studio — Version 8.23.2
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.23.1, including browser-history
+build includes every cumulative feature through V8.23.2, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.23.2 Final Wedding Timings mobile reliability
+
+The five-step client form no longer relies on the phone browser's silent native
+validation at the final button. It checks every visible conditional question,
+returns the couple to the exact step needing attention and displays a clear
+message. In-progress answers and the current step are retained for the browser
+session so a refresh does not send the couple back to an empty form. The final
+button displays `Sending securely…`, prevents duplicate presses and retains the
+draft when a network or server request fails. No booking, invoice, email,
+Calendar, Accounts or Studio Ninja automation behaviour is changed.
 
 ## Version 8.23.1 reliable complete backup
 
