@@ -212,7 +212,7 @@ A £150 deposit secures your date."""),
         "quote_followup_final": ("Quote follow-up - final check", "A final quick check about your wedding quote", "Hi {client_first_name},\n\nI just wanted to make one final quick check that you received your Weddings By Mark quote and were able to open it.\n\nYou can view it here whenever you are ready:\n{portal_url}\n\nIf your plans have changed, that is completely fine. If you would like any help choosing a package or have a question, simply reply and I will be happy to help.\n\nThanks,\nMark\nWeddings By Mark"),
         "deposit_due_1": ("Booking fee reminder", "A little reminder about your wedding booking fee", "Hi {client_first_name},\n\nThank you again for choosing Weddings By Mark. I just wanted to send a friendly reminder that the booking fee shown on your invoice is now due. Your date is secured as soon as I receive your first payment, even if you are paying the booking fee in more than one transfer.\n\nYour bank-transfer payment reference is **{payment_reference}**.\n\nYou can view your invoice and bank details here:\n{portal_url}\n\nIf the transfer is already on its way, please ignore this message and I will update your invoice as soon as it reaches me.\n\nThanks,\nMark\nWeddings By Mark"),
         "check_in_120": ("Wedding check-in - 120 days before", "Checking in with you both!", "Hi {client_first_name},\n\nI hope you are both well and that the wedding plans are coming along nicely. With your wedding getting closer, I just wanted to check in and see how everything is going.\n\nThere is nothing you need to complete today. If any plans, timings or contact details have changed, or if there is anything you would like to ask me, just reply to this email.\n\nI am really looking forward to your day.\n\nThanks,\nMark\nWeddings By Mark"),
-        "check_in_30": ("Wedding check-in - 30 days before", "Your wedding is only one month away!", "Hi {client_first_name},\n\nI hope you are both well and getting excited now that your wedding is only one month away! I just wanted to check in again and make sure everything is going smoothly.\n\nPlease complete your Final Wedding Timings Form using your secure booking link below. It brings your venues, preparations, key timings and wedding-day contact details together so I can prepare your run sheet.\n\n[COMPLETE YOUR FINAL WEDDING TIMINGS]({portal_url})\n\nI will give you a ring on {final_call_date} to go through the final details and everything we have discussed, so we can make sure nothing has been overlooked. If that day is not convenient, just let me know and we can arrange another suitable time.\n\nI am really looking forward to capturing your wedding day.\n\nThanks,\nMark\nWeddings By Mark\n{business_phone}"),
+        "check_in_30": ("30-day check-in & Final Wedding Timings", "Your wedding is one month away – final timings", "Hi {client_first_name},\n\nI hope you are both well and getting excited now that your wedding is only one month away! I just wanted to check in again and make sure everything is going smoothly.\n\nWhen you have a moment, I would really appreciate it if you could complete your Final Wedding Timings Form using the button below. It brings your preparation venue, ceremony, reception, key timings and wedding-day contact details together so I can prepare properly for your day.\n\n[COMPLETE YOUR FINAL WEDDING TIMINGS]({portal_url})\n\nI will give you a ring on {final_call_date} at around 6pm to go through the final details and everything we have discussed, so we can make sure nothing has been overlooked. If that day is not convenient, just let me know and we can arrange another suitable time.\n\nI am really looking forward to capturing your wedding day.\n\nThanks,\nMark\nWeddings By Mark\n{business_phone}"),
         "balance_due_7": ("Final balance reminder - 7 days before", "A little reminder about your wedding balance", "Hi {client_first_name},\n\nI hope you are both well and the wedding plans are coming along nicely.\n\nJust a friendly reminder that the remaining balance for your wedding is due on {balance_due_date}. There is no need to do anything today; I simply like to give everyone a little notice.\n\nYour bank-transfer payment reference is **{payment_reference}**.\n\nYou can view your invoice and bank details here:\n{portal_url}\n\nIf you have already made the transfer, please ignore this email and I will update your booking as soon as it reaches me.\n\nThanks,\nMark\nWeddings By Mark"),
         "balance_due_10": ("Final balance reminder - 10 days before", "A little reminder about your wedding balance", "Hi {client_first_name},\n\nI hope you are both well and the wedding plans are coming along nicely.\n\nJust a friendly reminder that the remaining balance for your wedding is due on {balance_due_date}. There is no need to do anything today; I simply like to give everyone plenty of notice.\n\nYou can view your invoice, bank details and payment reference here:\n{portal_url}\n\nIf you have already made the transfer, please ignore this email and I will update your booking as soon as it reaches me.\n\nThanks,\nMark\nWeddings By Mark"),
         "balance_due_1": ("Final balance reminder - day before", "Your wedding balance is due tomorrow", "Hi {client_first_name},\n\nI hope you are both well. Just a quick friendly reminder that the remaining balance for your wedding is due tomorrow, {balance_due_date}.\n\nYour bank-transfer payment reference is **{payment_reference}**.\n\nYou can view your invoice and bank details here:\n{portal_url}\n\nIf the transfer is already on its way, please ignore this message and I will update your booking when it arrives.\n\nThanks,\nMark\nWeddings By Mark"),
@@ -238,11 +238,32 @@ A £150 deposit secures your date."""),
             ))
             if not existing_template and (fresh_install or key in ("contract_completed", "check_in_30")):
                 db.add(EmailTemplate(brand=brand, template_key=key, display_name=name, subject=subject, body=body))
-            elif (existing_template and brand == Brand.WBM and key == "check_in_30"
-                  and "{portal_url}" not in existing_template.body):
+            elif existing_template and brand == Brand.WBM and key == "check_in_30":
+                # Make the single combined 30-day template easy to recognise,
+                # while preserving Mark's edited subject and wording. Only the
+                # former shipped defaults are upgraded in place.
+                if existing_template.display_name == "Wedding check-in - 30 days before":
+                    existing_template.display_name = name
+                if existing_template.subject == "Your wedding is only one month away!":
+                    existing_template.subject = subject
+                former_invitation = (
+                    "Please complete your Final Wedding Timings Form using your secure booking "
+                    "link below. It brings your venues, preparations, key timings and wedding-day "
+                    "contact details together so I can prepare your run sheet."
+                )
+                if former_invitation in existing_template.body:
+                    existing_template.body = existing_template.body.replace(
+                        former_invitation,
+                        "When you have a moment, I would really appreciate it if you could complete "
+                        "your Final Wedding Timings Form using the button below. It brings your "
+                        "preparation venue, ceremony, reception, key timings and wedding-day contact "
+                        "details together so I can prepare properly for your day.",
+                        1,
+                    )
+
                 # Preserve every user edit (including the chosen call time) and
-                # only replace the obsolete no-form paragraph. If that exact
-                # original text is no longer present, append the form link.
+                # add the form button only when an older custom version has no
+                # portal link at all.
                 old_paragraph = (
                     "There is nothing you need to fill in. If any plans, timings, venues or "
                     "contact details have changed, or there is anything you would like me to "
@@ -254,12 +275,13 @@ A £150 deposit secures your date."""),
                     "contact details together so I can prepare your run sheet.\n\n"
                     "[COMPLETE YOUR FINAL WEDDING TIMINGS]({portal_url})"
                 )
-                if old_paragraph in existing_template.body:
-                    existing_template.body = existing_template.body.replace(
-                        old_paragraph, invitation, 1
-                    )
-                else:
-                    existing_template.body = f"{existing_template.body.rstrip()}\n\n{invitation}"
+                if "{portal_url}" not in existing_template.body:
+                    if old_paragraph in existing_template.body:
+                        existing_template.body = existing_template.body.replace(
+                            old_paragraph, invitation, 1
+                        )
+                    else:
+                        existing_template.body = f"{existing_template.body.rstrip()}\n\n{invitation}"
 
     # The historical ``final_questionnaire`` remains obsolete. V8.20 uses the
     # separately validated ``final_timings`` submission and the editable

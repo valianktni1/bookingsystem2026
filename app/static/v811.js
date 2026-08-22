@@ -454,13 +454,20 @@
     const clientUpdateBookings = new Set(queues.client_updates.map(row => row.booking_id));
     const urgent = queues.client_updates.length + queues.overdue_payments.length + queues.new_enquiries.length + queues.accepted_payment.length
       + queues.agreements_waiting.filter(row => !clientUpdateBookings.has(row.booking_id)).length;
-    const upcoming = filtered(d.upcoming || []);
+    const upcomingSource = state.brand === "ivory"
+      ? (d.upcoming || []).filter(record => record.kind === "digital")
+      : (d.upcoming_weddings || d.upcoming || []);
+    const upcoming = filtered(upcomingSource);
+    const upcomingTitle = state.brand === "ivory" ? "Upcoming projects" : "Upcoming weddings";
+    const upcomingHelp = state.brand === "ivory"
+      ? "Your next project dates and deadlines"
+      : "Your next wedding dates, in order";
     const tasks = (d.tasks || []).filter(task => state.brand === "all" || state.records.find(record => record.id === task.booking_id)?.brand === state.brand);
     $("#content").innerHTML = `<section class="v811-today-head"><div><small>YOUR WORKING DAY</small><h2>Today</h2><p>Each item opens the right client and the exact part of their journey.</p></div><b class="${urgent ? "attention" : "clear"}">${urgent ? `${urgent} need attention` : "All clear"}</b></section>
+      <section class="panel v824-upcoming-weddings"><div class="panel-title"><div><h2>${esc(upcomingTitle)}</h2><p>${esc(upcomingHelp)}</p></div><button data-jump="calendar">View all</button></div>${upcoming.length ? upcoming.slice(0, 7).map(recordRow).join("") : `<div class="empty"><strong>No upcoming records</strong>Your next dated booking will appear here.</div>`}</section>
       <section class="v811-queue-cards">${queueOrder.map(key => queueCard(key, queues[key])).join("")}</section>
       <section class="v811-worklists">${queueOrder.filter(key => queues[key].length).map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>Your upcoming dates and private tasks are still shown below.</article>`}</section>
-      <section class="dash-grid v811-dashboard-lower"><article class="panel"><div class="panel-title"><div><h2>Upcoming dates</h2><p>Your next bookings and deadlines</p></div><button data-jump="calendar">View all</button></div>${upcoming.length ? upcoming.slice(0, 7).map(recordRow).join("") : `<div class="empty"><strong>No upcoming records</strong>Add a booking or project to get started.</div>`}</article>
-      <article class="panel"><div class="panel-title"><div><h2>Private things to do · ${d.open_tasks || 0}</h2><p>These never email a client</p></div><button data-jump="workflows">View all</button></div>${tasks.length ? tasks.slice(0, 7).map(task => taskRow(task, true)).join("") : `<div class="empty"><strong>You're all caught up</strong>No open private tasks.</div>`}</article></section>`;
+      <section class="dash-grid v811-dashboard-lower v824-dashboard-tasks"><article class="panel"><div class="panel-title"><div><h2>Private things to do · ${d.open_tasks || 0}</h2><p>These never email a client</p></div><button data-jump="workflows">View all</button></div>${tasks.length ? tasks.slice(0, 7).map(task => taskRow(task, true)).join("") : `<div class="empty"><strong>You're all caught up</strong>No open private tasks.</div>`}</article></section>`;
     $$('[data-queue-record]', $("#content")).forEach(button => button.onclick = () => {
       if (button.dataset.action === "open_email" && window.openInboxMessageFromDashboard) {
         window.openInboxMessageFromDashboard(button.dataset.mailBrand, button.dataset.mailUid);

@@ -55,6 +55,11 @@ def test_editable_template_and_automatic_thirty_day_delivery(monkeypatch):
         templates = client.get("/api/communications/templates?brand=wbm").json()["templates"]
         template = next(row for row in templates if row["template_key"] == "check_in_30")
         assert template["usage_kind"] == "automatic"
+        assert template["display_name"] == "30-day check-in & Final Wedding Timings"
+        assert template["subject"] == "Your wedding is one month away – final timings"
+        assert "I would really appreciate it" in template["body"]
+        assert "[COMPLETE YOUR FINAL WEDDING TIMINGS]({portal_url})" in template["body"]
+        assert "at around 6pm" in template["body"]
         assert "{final_call_date}" in template["body"]
 
         edited_body = template["body"] + "\n\nI cannot wait to see you both!"
@@ -94,6 +99,13 @@ def test_editable_template_and_automatic_thirty_day_delivery(monkeypatch):
         assert expected_call_text in delivered[0][2]
         assert "{final_call_date}" not in delivered[0][2]
         assert "I cannot wait to see you both!" in delivered[0][2]
+
+    # A later restart/bootstrap must not overwrite Mark's saved wording.
+    with TestClient(app) as client:
+        login(client)
+        templates = client.get("/api/communications/templates?brand=wbm").json()["templates"]
+        preserved = next(row for row in templates if row["template_key"] == "check_in_30")
+        assert preserved["body"] == edited_body
 
 
 def test_monday_wedding_uses_previous_monday():

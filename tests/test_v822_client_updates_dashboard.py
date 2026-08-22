@@ -165,6 +165,41 @@ def test_exact_partner_email_matches_booking_but_unrelated_email_does_not():
             assert "unrelated@example.com" not in matches
 
 
+def test_dashboard_upcoming_weddings_are_booked_wbm_jobs_only_and_date_ordered():
+    reset_database()
+    with TestClient(app) as client:
+        login(client)
+        with SessionLocal() as db:
+            later = add_booking(db, "Dashboard Later Wedding", "later@example.com")
+            later.event_date = date.today() + timedelta(days=20)
+
+            sooner = add_booking(db, "Dashboard Sooner Wedding", "sooner@example.com")
+            sooner.status = RecordStatus.IN_PROGRESS
+            sooner.event_date = date.today() + timedelta(days=10)
+
+            enquiry = add_booking(db, "Dashboard Enquiry", "enquiry@example.com")
+            enquiry.status = RecordStatus.ENQUIRY
+            enquiry.event_date = date.today() + timedelta(days=5)
+
+            cancelled = add_booking(db, "Dashboard Cancelled", "cancelled@example.com")
+            cancelled.status = RecordStatus.CANCELLED
+            cancelled.event_date = date.today() + timedelta(days=3)
+
+            ivory = add_booking(db, "Dashboard Ivory Project", "ivory@example.com")
+            ivory.brand = Brand.IVORY
+            ivory.kind = RecordKind.DIGITAL
+            ivory.event_date = date.today() + timedelta(days=1)
+            db.commit()
+
+        response = client.get("/api/dashboard")
+        assert response.status_code == 200
+        dashboard_titles = [
+            row["title"] for row in response.json()["upcoming_weddings"]
+            if row["title"].startswith("Dashboard ")
+        ]
+        assert dashboard_titles == ["Dashboard Sooner Wedding", "Dashboard Later Wedding"]
+
+
 def test_v822_dashboard_assets_and_exact_actions_are_wired():
     root = Path(__file__).parents[1]
     index = (root / "app/static/index.html").read_text()
@@ -173,7 +208,7 @@ def test_v822_dashboard_assets_and_exact_actions_are_wired():
     mail_js = (root / "app/static/v896.js").read_text()
     css = (root / "app/static/v822.css").read_text()
     assert "/static/v822.css?v=client-updates-dashboard-v8-22" in index
-    assert "/static/v811.js?v=final-call-pack-v8-23" in index
+    assert "/static/v811.js?v=dashboard-timings-email-v8-24" in index
     assert "/static/v895.js?v=client-updates-dashboard-v8-22" in index
     assert "/static/v896.js?v=client-updates-dashboard-v8-22" in index
     assert "New client updates" in dashboard_js

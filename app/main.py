@@ -87,7 +87,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.23.2-final-timings-mobile-fix", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.24-dashboard-timings-email", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -1156,13 +1156,26 @@ def dashboard(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
                                  Booking.status != RecordStatus.CANCELLED,
                                  Booking.event_date >= date.today())
                           .order_by(Booking.event_date).limit(8)).all()
+    upcoming_weddings = db.scalars(
+        select(Booking).options(selectinload(Booking.client)).where(
+            Booking.archived_at.is_(None),
+            Booking.brand == Brand.WBM,
+            Booking.kind == RecordKind.WEDDING,
+            Booking.status.in_((RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)),
+            Booking.event_date >= date.today(),
+        ).order_by(Booking.event_date).limit(8)
+    ).all()
     tasks = db.scalars(select(Task).options(selectinload(Task.booking))
                        .join(Booking).where(Task.completed.is_(False),
                                             Booking.archived_at.is_(None),
                                             Booking.status != RecordStatus.CANCELLED,
                                             visible_task_condition())
                        .order_by(Task.due_at.asc().nullslast()).limit(10)).all()
-    counts.update({"upcoming": [booking_json(x) for x in upcoming], "tasks": [task_json(t) for t in tasks]})
+    counts.update({
+        "upcoming": [booking_json(x) for x in upcoming],
+        "upcoming_weddings": [booking_json(x) for x in upcoming_weddings],
+        "tasks": [task_json(t) for t in tasks],
+    })
     return counts
 
 
@@ -1989,7 +2002,7 @@ WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
     "quote_followup_final": ("automatic", "Automatic final quote follow-up nine days after a successful quote"),
     "deposit_due_1": ("automatic", "Automatic booking-fee reminder on its due date"),
     "check_in_120": ("automatic", "Automatic friendly check-in 120 days before the wedding"),
-    "check_in_30": ("automatic", "Automatic final-timings invitation 30 days before the wedding, including the Monday telephone-call date. This is the only automatic email permitted for eligible Studio Ninja imports after 20 October 2026"),
+    "check_in_30": ("automatic", "One combined editable 30-day check-in and Final Wedding Timings invitation, including the Monday telephone-call date. This is the only automatic email permitted for eligible Studio Ninja imports after 20 October 2026"),
     "balance_due_7": ("automatic", "Automatic final-balance reminder seven days before it is due"),
     "balance_due_1": ("automatic", "Automatic final-balance reminder one day before it is due"),
     "balance_overdue_2": ("automatic", "Automatic overdue reminder every two days while a balance remains"),

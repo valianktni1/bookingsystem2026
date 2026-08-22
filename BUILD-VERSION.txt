@@ -1,3 +1,26 @@
+BookingSystem2026 - Dashboard & Combined 30-Day Email
+Build: 2026.08.22-dashboard-timings-email-v8.24
+
+V8.24 dashboard and combined 30-day email:
+
+- Moves Upcoming Weddings directly below the Today heading, before the working
+  queues, and shows booked Weddings By Mark jobs in wedding-date order.
+- Excludes enquiries, cancelled records and Ivory Digital projects from the
+  Upcoming Weddings list.
+- Clearly names the existing editable template "30-day check-in & Final Wedding
+  Timings" in Email Templates.
+- Combines the friendly 30-day check-in and the Final Wedding Timings request in
+  one email with a prominent button opening the form directly.
+- Keeps both the subject and complete email wording editable.
+- Preserves existing user-edited wording, including the chosen around-6pm call
+  time, during an upgrade or restart.
+- Sends one 30-day email only; it does not add a second timings email.
+- Retains the Studio Ninja safety boundary: no general imported-booking
+  automation, with only the already-approved eligible timings invitation for
+  weddings after 20 October 2026.
+- Preserves every V8.23.2 feature and changes no invoice, payment, Calendar,
+  Accounts, client form or stored booking data.
+
 BookingSystem2026 - Final Wedding Timings Mobile Reliability
 Build: 2026.08.21-final-timings-mobile-fix-v8.23.2
 

@@ -15,6 +15,13 @@ def test_payment_due_card_keeps_count_and_adds_filtered_amount_total():
     assert ".v819-payment-total" in dashboard_css
 
 
-def test_v819_build_identifier_is_exposed_by_health_endpoint():
+def test_current_build_identifier_is_exposed_by_health_endpoint():
     backup_py = (ROOT / "app" / "backup.py").read_text()
-    assert 'BACKUP_BUILD = "2026.08.21-final-timings-mobile-fix-v8.23.2"' in backup_py
+    assert 'BACKUP_BUILD = "2026.08.22-dashboard-timings-email-v8.24"' in backup_py
+
+
+def test_upcoming_weddings_are_before_the_work_queues():
+    dashboard_js = (ROOT / "app" / "static" / "v811.js").read_text()
+
+    assert "d.upcoming_weddings" in dashboard_js
+    assert dashboard_js.index("v824-upcoming-weddings") < dashboard_js.index("v811-queue-cards")
