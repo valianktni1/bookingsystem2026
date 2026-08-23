@@ -5,6 +5,7 @@ import re
 import secrets
 import shutil
 import uuid
+from collections import Counter
 from contextlib import suppress
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
@@ -87,7 +88,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.25-quote-email-review", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.26-same-date-booking-warning", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -1362,6 +1363,17 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
 def list_bookings(brand: Brand | None = None, kind: RecordKind | None = None,
                   archived: bool = False, q: str | None = Query(default=None, max_length=100),
                   _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    # Count genuine active WBM jobs independently of the current search/filter,
+    # so finding one member of a same-date pair never hides its warning.
+    active_wedding_dates = db.scalars(select(Booking.event_date).where(
+        Booking.archived_at.is_(None),
+        Booking.brand == Brand.WBM,
+        Booking.kind == RecordKind.WEDDING,
+        Booking.status.in_((RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)),
+        Booking.is_test.is_(False),
+        Booking.event_date.is_not(None),
+    )).all()
+    active_date_counts = Counter(active_wedding_dates)
     stmt = select(Booking).options(selectinload(Booking.client)).order_by(Booking.event_date.asc().nullslast(), Booking.created_at.desc())
     stmt = stmt.where(Booking.archived_at.is_not(None) if archived else Booking.archived_at.is_(None))
     if brand:
@@ -1372,7 +1384,23 @@ def list_bookings(brand: Brand | None = None, kind: RecordKind | None = None,
         term = f"%{q.strip()}%"
         stmt = stmt.join(Client).where(or_(Booking.title.ilike(term), Booking.venue_or_project.ilike(term),
                                            Client.email.ilike(term), Client.company_name.ilike(term)))
-    return [booking_json(x) for x in db.scalars(stmt).unique().all()]
+    rows = db.scalars(stmt).unique().all()
+    result = []
+    for row in rows:
+        data = booking_json(row)
+        is_active_wedding = (
+            row.archived_at is None
+            and row.brand == Brand.WBM
+            and row.kind == RecordKind.WEDDING
+            and row.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)
+            and not row.is_test
+            and row.event_date is not None
+        )
+        data["same_date_active_booking_count"] = (
+            int(active_date_counts.get(row.event_date, 0)) if is_active_wedding else 0
+        )
+        result.append(data)
+    return result
 
 
 @app.post("/api/bookings", status_code=201)

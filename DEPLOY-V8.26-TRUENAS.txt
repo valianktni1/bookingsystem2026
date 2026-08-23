@@ -1,0 +1,25 @@
+BOOKINGSYSTEM2026 V8.26 - SAME-DATE WEDDING WARNING
+
+1. Extract the V8.26 ZIP and publish its complete contents to the main branch
+   of valianktni1/bookingsystem2026 using GitHub Desktop.
+
+2. In the TrueNAS shell, run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc \
+  > bookingapp-before-v826-2026-08-23.dump
+
+ls -lh bookingapp-before-v826-2026-08-23.dump
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+3. The health response must contain:
+
+"build":"2026.08.23-same-date-booking-warning-v8.26"
+
+No YAML, environment-variable or manual database migration change is needed.

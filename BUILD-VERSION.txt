@@ -1,3 +1,22 @@
+BookingSystem2026 - Same-Date Wedding Warning
+Build: 2026.08.23-same-date-booking-warning-v8.26
+
+V8.26 private same-date wedding warning:
+
+- Adds a clear red caution symbol beside the date of every active WBM wedding
+  when two or more genuine bookings share that date.
+- Shows the number of active weddings involved, for example 2 weddings or 3
+  weddings, and lightly highlights the affected rows.
+- Keeps the warning accurate while searching or filtering the bookings list.
+- Counts confirmed and in-progress WBM weddings only.
+- Excludes enquiries, unaccepted quotes, cancelled weddings, Testing Mode
+  records, archived records and Ivory Digital projects from the clash count.
+- Removes the warning automatically when a shared booking is cancelled, archived
+  or moved to another date.
+- Keeps the warning completely private to the admin booking list; couples never
+  see it and it sends no email or notification.
+- Preserves every V8.25 quote-review, V8.24 dashboard and V8.23.2 mobile fix.
+
 BookingSystem2026 - Personal Quote Email Review
 Build: 2026.08.22-quote-email-review-v8.25
 
