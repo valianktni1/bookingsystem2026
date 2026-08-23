@@ -157,6 +157,15 @@ class PortalCreateIn(BaseModel):
     manual_reason: str | None = Field(default=None, max_length=1000)
 
 
+class QuoteSendIn(BaseModel):
+    expires_days: int = Field(default=90, ge=1, le=3650)
+    # Optional for backwards compatibility with a browser that still has the
+    # previous JavaScript cached during deployment. The V8.25 composer always
+    # sends both fields after Mark has reviewed them.
+    subject: str | None = Field(default=None, min_length=1, max_length=240)
+    body: str | None = Field(default=None, min_length=1, max_length=20000)
+
+
 class PublicFormIn(BaseModel):
     form_type: str = Field(pattern="^(booking_form|final_timings)$")
     data: dict

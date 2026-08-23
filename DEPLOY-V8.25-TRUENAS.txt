@@ -1,0 +1,25 @@
+BOOKINGSYSTEM2026 V8.25 - PERSONAL QUOTE EMAIL REVIEW
+
+1. Extract the V8.25 ZIP and publish its complete contents to the main branch
+   of valianktni1/bookingsystem2026 using GitHub Desktop.
+
+2. In the TrueNAS shell, run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc \
+  > bookingapp-before-v825-2026-08-22.dump
+
+ls -lh bookingapp-before-v825-2026-08-22.dump
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+3. The health response must contain:
+
+"build":"2026.08.22-quote-email-review-v8.25"
+
+No YAML, environment-variable or manual database migration change is needed.

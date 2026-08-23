@@ -173,22 +173,40 @@ function sendOneManualPortalEmail(r,body,url){
   const templateLabel=$("#portal-email-template")?.selectedOptions?.[0]?.textContent||statusText(templateKey);
   showModal("Send one manual email",`<div class="manual-email-warning full"><strong>${esc(templateLabel)}</strong><span>Recipient: ${esc(r.client.email)}</span><small>Only this one email will be sent. Automatic reminders remain permanently paused.</small></div><label class="full">Reason<input id="manual-email-reason" value="One-off email sent manually by Mark" required></label><label class="full">Type SEND ONE MANUAL EMAIL<input id="manual-email-confirm" autocomplete="off" required></label>`,async()=>{await api(`/api/bookings/${r.id}/emails/send`,{method:"POST",body:JSON.stringify({template_key:templateKey,portal_url:url,manual_reason:value("#manual-email-reason").trim(),manual_confirmation:value("#manual-email-confirm").trim()})});closeModal();toast("One manual email sent; automatic messages remain off");renderQuotePortal(r,body)},"Check the recipient and selected template carefully before confirming.")
 }
-async function prepareAndSendQuote(r,body,d){
+async function reviewAndSendQuoteEmail(r,body){
+  try{
+    const centre=await api(`/api/bookings/${r.id}/email-centre`);
+    const template=(centre.templates||[]).find(item=>item.template_key==="quote");
+    if(!template)throw new Error("The saved Quote email template is missing or inactive");
+    showModal("Review quote email",`<div class="client-email-recipient full"><small>TO</small><strong>${esc(centre.recipient)}</strong>${centre.is_test?`<span>Testing Mode redirected this away from ${esc(centre.original_recipient)}</span>`:""}</div><div class="quote-email-one-off full"><strong>Your saved Quote email template remains unchanged</strong><span>Edit this temporary copy to answer anything this particular couple has asked. These changes apply to this email only.</span></div><label class="full">Subject<input id="quote-email-subject" maxlength="240" value="${attr(template.subject)}" required></label><label class="full">Email wording<textarea id="quote-email-body" rows="17" maxlength="20000" required>${esc(template.body)}</textarea><small class="field-help">The couple's tracked quote link is added when the email sends. Placeholders such as {client_first_name} are filled automatically.</small></label>`,async()=>{
+      const sendButton=$("#dynamic-form button[type='submit']");
+      sendButton.disabled=true;sendButton.textContent="Sending…";
+      try{
+        const result=await api(`/api/bookings/${r.id}/quote/send`,{method:"POST",body:JSON.stringify({expires_days:90,subject:value("#quote-email-subject").trim(),body:value("#quote-email-body").trim()})});
+        state.portalLinks[r.id]=result.url;closeModal();
+        if(result.email_sent)toast("Quote email sent; your master template was not changed");
+        else toast(`Quote link created, but email was not sent: ${result.email_error}`,"error");
+        renderQuotePortal(r,body);
+      }catch(error){sendButton.disabled=false;sendButton.textContent="Send quote now";throw error}
+    },`Review the exact email for ${centre.client_name}. Nothing is sent until you press Send quote now.`);
+    $("#dynamic-form footer .primary").textContent="Send quote now";
+  }catch(e){toast(e.message,"error")}
+}
+async function prepareQuote(r,body,d){
   try{
     const catalog=await api("/api/catalog?brand=wbm"),prepared=d.quote_preparation||{required_addons:[],discounts:[]};
     const required=Object.fromEntries(prepared.required_addons.map(x=>[x.addon_id,x]));
     const discounts=Object.fromEntries(prepared.discounts.map(x=>[x.addon_id,x]));
     const addOns=catalog.addons.filter(x=>!x.is_discount),privateDiscounts=catalog.addons.filter(x=>x.is_discount);
     const rows=(items,current,kind)=>items.map(item=>`<label class="quote-prep-row full"><input type="checkbox" name="${kind}" value="${item.id}" ${current[item.id]?"checked":""}><span><strong>${esc(item.name)}</strong><small>${kind==="required_quote_item"?"Required and locked for the couple":"Private code; the couple sees the applied deduction"}</small></span><span class="money-input">£<input type="number" min="0" step="0.01" data-price="${item.id}" value="${current[item.id]?.price??item.price}"></span></label>`).join("");
-    showModal("Prepare and send quote",`<div class="full quote-prep-note"><strong>Required items</strong><span>Use this for travel expenses or anything the couple must have. You can change the amount for this wedding.</span></div>${rows(addOns,required,"required_quote_item")||`<p class="full muted">No active add-ons available.</p>`}<div class="full quote-prep-note discount-note"><strong>Private discounts</strong><span>Only you can select these. The accepted quote and invoice show the deduction.</span></div>${rows(privateDiscounts,discounts,"discount_quote_item")||`<p class="full muted">Create a Private discount code in Packages & pricing when you need one.</p>`}`,async()=>{
+    showModal("Prepare quote",`<div class="full quote-prep-note"><strong>Required items</strong><span>Use this for travel expenses or anything the couple must have. You can change the amount for this wedding.</span></div>${rows(addOns,required,"required_quote_item")||`<p class="full muted">No active add-ons available.</p>`}<div class="full quote-prep-note discount-note"><strong>Private discounts</strong><span>Only you can select these. The accepted quote and invoice show the deduction.</span></div>${rows(privateDiscounts,discounts,"discount_quote_item")||`<p class="full muted">Create a Private discount code in Packages & pricing when you need one.</p>`}`,async()=>{
       const collect=name=>$$(`input[name="${name}"]:checked`,$("#modal")).map(input=>({addon_id:input.value,price:Number($(`[data-price="${input.value}"]`,$("#modal")).value)}));
       await api(`/api/bookings/${r.id}/quote/preparation`,{method:"PUT",body:JSON.stringify({required_addons:collect("required_quote_item"),discounts:collect("discount_quote_item")})});
-      const result=await api(`/api/bookings/${r.id}/quote/send`,{method:"POST",body:JSON.stringify({expires_days:90})});
-      state.portalLinks[r.id]=result.url;closeModal();
-      if(result.email_sent)toast("Prepared quote email sent");else toast(`Quote link created, but email was not sent: ${result.email_error}`,"error");
-      renderQuotePortal(r,body);
-    },"Check the required charges and private discounts, then send the couple their package choices.");
-    $("#dynamic-form footer .primary").textContent="Save & send quote";
+      closeModal();toast("Quote saved — nothing has been emailed");
+      await renderQuotePortal(r,body);
+      await reviewAndSendQuoteEmail(r,body);
+    },"Check the required charges and private discounts. Saving this step does not email the couple.");
+    $("#dynamic-form footer .primary").textContent="Save quote & review email";
   }catch(e){toast(e.message,"error")}
 }
 function clientTemplateOptions(d){return (d.email_templates||[]).map(t=>`<option value="${attr(t.template_key)}">${esc(t.display_name)}</option>`).join("")}
@@ -206,16 +224,21 @@ async function renderQuotePortal(r,body){
     const bookingForm=d.submissions.find(x=>x.form_type==="booking_form");
     const isLegacy=r.legacy_source==="studio_ninja";
     const safety=isLegacy?`<section class="automation-card paused manual-only-card"><span><strong>Studio Ninja · protected communication</strong><small>General emails, payment confirmations and reminders remain off. Only the eligible 30-day Final Wedding Timings invitation may send automatically.</small></span><em>PROTECTED</em></section>`:"";
-    body.innerHTML=`${safety}${!isLegacy?workflowEmailProof(d,r):""}<section class="quote-send-card ${d.quote?"accepted":""}"><div><small>INITIAL CUSTOMER JOURNEY</small><h3>${d.quote?"Package quote accepted":"Create and send their package quote"}</h3><p>${d.quote?`${esc(d.quote.line_items[0]?.name||"Package")} · ${money(d.quote.total)} · Invoice ${esc(d.quote.invoice_number||"created")}`:`This creates a secure link, emails ${esc(r.client.email)} and opens the couple directly on the package choices.`}</p></div>${d.quote?`<span class="quote-done">✓ Accepted</span>`:`<button id="send-quote" class="primary">Create & send quote</button>`}</section>
-      ${url?`<div class="portal-link"><input id="portal-url" readonly value="${attr(url)}"><a class="secondary portal-preview" href="${attr(url)}" target="_blank" rel="noopener">Preview</a><button id="copy-link" class="secondary">Copy</button></div>`:`<div class="quote-help">${isLegacy?"Create a manual portal link only when you are ready. Nothing will be emailed automatically.":"Press <strong>Create & send quote</strong>. Their wedding booking link will appear here automatically."}</div>`}
+    const quoteSent=latestEmailLog(d,"quote")?.status==="sent";
+    const quotePrepared=Boolean(d.quote_preparation?.prepared);
+    const quoteHeading=d.quote?"Package quote accepted":quoteSent?"Quote sent — waiting for their choice":quotePrepared?"Quote ready — not sent":"Prepare their package quote";
+    const quoteDetail=d.quote?`${esc(d.quote.line_items[0]?.name||"Package")} · ${money(d.quote.total)} · Invoice ${esc(d.quote.invoice_number||"created")}`:quoteSent?`The personalised quote email was sent to ${esc(r.client.email)}. You can see whether they open its link above.`:quotePrepared?`The quote details are safely saved. Review your usual Quote email and add anything personal before sending.`:`Choose any required extras or private discount. Saving the quote will not email ${esc(r.client.email)}.`;
+    const quoteAction=d.quote?`<span class="quote-done">✓ Accepted</span>`:quoteSent?`<span class="quote-done">✓ Sent</span>`:quotePrepared?`<div class="quote-send-actions"><button id="edit-quote" class="secondary">Edit quote</button><button id="send-quote" class="primary">Review email &amp; send</button></div>`:`<button id="send-quote" class="primary">Prepare quote</button>`;
+    body.innerHTML=`${safety}${!isLegacy?workflowEmailProof(d,r):""}<section class="quote-send-card ${d.quote||quoteSent?"accepted":quotePrepared?"ready":""}"><div><small>INITIAL CUSTOMER JOURNEY</small><h3>${quoteHeading}</h3><p>${quoteDetail}</p></div>${quoteAction}</section>
+      ${url?`<div class="portal-link"><input id="portal-url" readonly value="${attr(url)}"><a class="secondary portal-preview" href="${attr(url)}" target="_blank" rel="noopener">Preview</a><button id="copy-link" class="secondary">Copy</button></div>`:`<div class="quote-help">${isLegacy?"Create a manual portal link only when you are ready. Nothing will be emailed automatically.":quoteSent?"The quote has been sent. Its secure link is recorded in the email history.":quotePrepared?"The quote is saved but has not been emailed. Press <strong>Review email &amp; send</strong> when you are ready.":"Press <strong>Prepare quote</strong> to start. Nothing is emailed until you review the message and press Send quote now."}</div>`}
       <div class="section-actions compact"><div><h3>${isLegacy?"Manual client access":"Other client messages"}</h3><p>${isLegacy?"Create or send only when you deliberately choose to":"Choose any active template; the correct account link is always included"}</p></div><button id="generate-link" class="secondary">${isLegacy?"Create manual portal link":"Generate general portal link"}</button></div>
       ${url?`<div class="portal-email"><select id="portal-email-template">${clientTemplateOptions(d)}</select><button id="send-portal-email" class="secondary">${isLegacy?"Review & send one manual email":"Send selected email"}</button></div>`:""}
       <section class="portal-progress"><article><i class="${d.quote?"complete":""}">${d.quote?"✓":"1"}</i><span><strong>Package quote</strong><small>${d.quote?`Accepted ${fmtDateTime(d.quote.accepted_at)}`:"Waiting for package selection"}</small></span></article><article><i class="${bookingForm?"complete":""}">${bookingForm?"✓":"2"}</i><span><strong>Wedding Booking Form / questionnaire</strong><small>${bookingForm?`Submitted ${fmtDateTime(bookingForm.submitted_at)}`:"Waiting"}</small></span></article><article><i class="${d.contract?.fully_signed?"complete":""}">${d.contract?.fully_signed?"✓":"3"}</i><span><strong>Agreement</strong><small>${d.contract?.fully_signed?`Signed by ${esc(d.contract.accepted_name)} and ${esc(d.contract.supplier_signed_name||"Mark Adam Powell")}`:d.contract?`Client signed · awaiting Mark's countersignature`:"Waiting for client"}</small></span></article></section>
       <h3 class="section-title">Email history</h3><div class="activity-list">${d.emails.map(e=>`<div><i></i><span><strong>${esc(statusText(e.template_key))} · ${esc(e.status)}</strong><small>${esc(e.subject)} · ${fmtDateTime(e.sent_at)}</small></span></div>`).join("")||`<p class="muted" style="padding:14px">No emails sent from this record yet.</p>`}</div><div data-couple-conversation></div>`;
     const preparedItems=[...(d.quote_preparation?.required_addons||[]).map(x=>`${esc(x.name)} ${money(x.price)} required`),...(d.quote_preparation?.discounts||[]).map(x=>`${esc(x.name)} −${money(x.price)}`)];
     if(preparedItems.length&&!d.quote)body.querySelector(".quote-send-card")?.insertAdjacentHTML("beforebegin",`<section class="prepared-quote-summary"><strong>Prepared quote adjustments</strong><span>${preparedItems.join(" · ")}</span></section>`);
-    if($("#send-quote"))$("#send-quote").textContent="Prepare & send quote";
-    if($("#send-quote"))$("#send-quote").onclick=()=>prepareAndSendQuote(r,body,d);
+    if($("#send-quote"))$("#send-quote").onclick=()=>quotePrepared?reviewAndSendQuoteEmail(r,body):prepareQuote(r,body,d);
+    if($("#edit-quote"))$("#edit-quote").onclick=()=>prepareQuote(r,body,d);
     $("#generate-link").onclick=isLegacy?()=>createManualPortalLink(r,body):async()=>{const x=await api(`/api/bookings/${r.id}/portal`,{method:"POST",body:JSON.stringify({expires_days:90})});state.portalLinks[r.id]=x.url;toast("General portal link generated");renderQuotePortal(r,body)};
     if(url){$("#copy-link").onclick=async()=>{await navigator.clipboard.writeText(url);toast("Wedding booking link copied")};$("#send-portal-email").onclick=isLegacy?()=>sendOneManualPortalEmail(r,body,url):async()=>{try{await api(`/api/bookings/${r.id}/emails/send`,{method:"POST",body:JSON.stringify({template_key:value("#portal-email-template"),portal_url:url})});toast("Email sent");renderQuotePortal(r,body)}catch(e){toast(e.message,"error")}}}
     loadBookingConversation(r,body);

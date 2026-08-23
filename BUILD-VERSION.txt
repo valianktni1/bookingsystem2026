@@ -1,3 +1,24 @@
+BookingSystem2026 - Personal Quote Email Review
+Build: 2026.08.22-quote-email-review-v8.25
+
+V8.25 personal quote email review:
+
+- Splits quote preparation and quote email delivery into two deliberate steps.
+- Saving package extras or private discounts now saves the quote and sends no
+  client email.
+- Opens the existing saved Quote email template as a temporary editable copy
+  before anything is sent.
+- Allows a one-off subject or message addition for an individual couple, such as
+  answering a question from their enquiry.
+- Never writes those one-off changes back to the master Quote email template.
+- Shows Quote ready - not sent when a prepared quote is awaiting email review.
+- Provides separate Edit quote and Review email & send actions.
+- Starts quote status, access tracking and follow-up timing only after a
+  successful deliberate send.
+- Keeps the invoice creation point unchanged: an invoice is created only when
+  the couple accepts their package.
+- Retains Studio Ninja automation suppression and every V8.24/V8.23.2 safety fix.
+
 BookingSystem2026 - Dashboard & Combined 30-Day Email
 Build: 2026.08.22-dashboard-timings-email-v8.24
 

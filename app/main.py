@@ -52,7 +52,7 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       BookingFormTemplateIn, EnquiryFormTemplateIn,
                       InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
-                      ClientEmailComposeIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn,
+                      ClientEmailComposeIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn, QuoteSendIn,
                       FinalCallPackIn, SendEmailIn, TaskIn, TaskPatch,
                       TemplateTestIn, TestingModeIn)
 from .security import create_token, current_admin, verify_password
@@ -87,7 +87,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.24-dashboard-timings-email", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.25-quote-email-review", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 def money(value) -> float:
@@ -1974,6 +1974,8 @@ def contract_acceptance_json(acceptance: ContractAcceptance) -> dict:
 def quote_preparation_json(booking: Booking) -> dict:
     raw = (booking.workflow_state or {}).get("quote_preparation") or {}
     return {
+        "prepared": bool(raw),
+        "prepared_at": raw.get("updated_at"),
         "required_addons": [item for item in (raw.get("required_addons") or []) if isinstance(item, dict)],
         "discounts": [item for item in (raw.get("discounts") or []) if isinstance(item, dict)],
     }
@@ -1995,7 +1997,7 @@ def require_booking_journey_unlocked(db: Session, booking: Booking) -> None:
 
 
 WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
-    "quote": ("action", "Used when you press Prepare & send quote"),
+    "quote": ("action", "Loaded into the final Review quote email window. Personal changes apply to that couple only and never alter this saved template"),
     "booking_link": ("manual", "Manual option when you deliberately send a booking link"),
     "contract_reminder": ("manual", "Manual reminder offered when the form is complete but the agreement is unsigned"),
     "quote_followup_1": ("automatic", "Automatic quote follow-up one day after a successful quote"),
@@ -2272,7 +2274,7 @@ def save_quote_preparation(booking_id: str, payload: QuotePreparationIn,
 
 
 @app.post("/api/bookings/{booking_id}/quote/send")
-def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
+def create_and_send_quote(booking_id: str, payload: QuoteSendIn,
                           _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(Booking.id == booking_id))
     if not booking:
@@ -2316,8 +2318,18 @@ def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
         email_log.error = email_error
     else:
         try:
+            # Use a one-email copy. Personal wording entered for this couple is
+            # deliberately never written back to the saved master template.
+            composed_template = EmailTemplate(
+                brand=template.brand,
+                template_key=template.template_key,
+                display_name=template.display_name,
+                subject=(payload.subject.strip() if payload.subject else template.subject),
+                body=(payload.body.strip() if payload.body else template.body),
+                is_active=True,
+            )
             subject, email_body = send_booking_template_email(
-                db, booking, profile, template, tracked_quote_url
+                db, booking, profile, composed_template, tracked_quote_url
             )
             email_sent = True
             email_log.subject = subject
@@ -2334,10 +2346,14 @@ def create_and_send_quote(booking_id: str, payload: PortalCreateIn,
             email_log.status = "failed"
             email_log.error = email_error[:2000]
     audit(db, "send_quote", "booking", booking.id,
-          {"email_sent": email_sent, "expires_at": row.expires_at.isoformat()})
+          {"email_sent": email_sent,
+           "personalised_for_this_quote": bool(payload.subject or payload.body),
+           "master_template_unchanged": True,
+           "expires_at": row.expires_at.isoformat()})
     db.commit()
     return {"url": quote_url, "expires_at": row.expires_at.isoformat(),
-            "email_sent": email_sent, "email_error": email_error, "subject": subject}
+            "email_sent": email_sent, "email_error": email_error, "subject": subject,
+            "master_template_unchanged": True}
 
 
 @app.post("/api/bookings/{booking_id}/emails/send")
