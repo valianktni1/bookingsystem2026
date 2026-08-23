@@ -22,7 +22,8 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db
-from .models import Admin, AuditLog, Booking, Brand, Quote, RecordKind, RecordStatus, SystemSetting
+from .models import (Admin, AuditLog, Booking, Brand, Invoice, Payment, Quote,
+                     RecordKind, RecordStatus, SystemSetting)
 from .security import current_admin
 
 settings = get_settings()
@@ -141,9 +142,17 @@ def _native_wedding(booking: Booking) -> bool:
 def _should_have_event(db: Session, booking: Booking) -> bool:
     if not _native_wedding(booking) or booking.status == RecordStatus.CANCELLED:
         return False
-    return (
-        booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED)
-        or _accepted_quote(db, booking)
+    # Selecting a package creates a provisional invoice; it does not secure
+    # the date. A native wedding reaches Google only after a genuine payment
+    # exists. Imported Studio Ninja records are intentionally outside this sync.
+    has_payment = db.scalar(select(Payment.id).join(
+        Invoice, Invoice.id == Payment.invoice_id
+    ).where(Invoice.booking_id == booking.id).limit(1)) is not None
+    return bool(
+        has_payment
+        and booking.status in (
+            RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED
+        )
     )
 
 
@@ -230,6 +239,16 @@ def sync_booking_calendar_safely(db: Session, booking: Booking) -> dict:
     current = _booking_calendar_state(booking)
     event_id = current.get("event_id")
     should_exist = _should_have_event(db, booking)
+    # A create request can reach Google and then time out before the response is
+    # saved locally. If the booking is subsequently cancelled or unsecured, use
+    # the same deterministic ID for a harmless delete (Google returns 404 when
+    # no event was ever created) so an uncertain remote event cannot survive.
+    uncertain_create = (
+        current.get("status") in {"pending", "error"}
+        and current.get("desired_action") in {"create", "update"}
+    )
+    if not event_id and not should_exist and uncertain_create:
+        event_id = _deterministic_event_id(booking)
     wants_delete = bool(event_id) and (booking.status == RecordStatus.CANCELLED or not should_exist or not booking.event_date)
 
     if not should_exist and not wants_delete:
@@ -310,6 +329,29 @@ def sync_booking_calendar_safely(db: Session, booking: Booking) -> dict:
                       {"desired_action": desired_action, "error": message})
         db.commit()
         return failed
+
+
+def retry_pending_calendar_syncs(db: Session) -> dict:
+    """Retry only previously pending/failed one-way calendar work."""
+    if not google_calendar_configured() or not _connection(db):
+        return {"checked": 0, "synced": 0, "removed": 0, "failed": 0}
+    rows = db.scalars(select(Booking).where(
+        Booking.brand == Brand.WBM,
+        Booking.kind == RecordKind.WEDDING,
+        Booking.legacy_source.is_(None),
+        Booking.is_test.is_(False),
+    )).all()
+    candidates = [row for row in rows if _booking_calendar_state(row).get("status") in {
+        "pending", "pending_delete", "error",
+    }]
+    results = [sync_booking_calendar_safely(db, row) for row in candidates]
+    return {
+        "checked": len(results),
+        "synced": sum(row.get("status") == "synced" for row in results),
+        "removed": sum(row.get("status") == "removed" for row in results),
+        "failed": sum(row.get("status") in {"pending", "pending_delete", "error"}
+                      for row in results),
+    }
 
 
 def google_calendar_status(db: Session) -> dict:

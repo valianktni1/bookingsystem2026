@@ -287,7 +287,7 @@ function renderFinance(r,body){
   $$('[data-preview-invoice]',body).forEach(button=>button.onclick=()=>showPdfPreview(`Invoice ${button.dataset.invoiceNumber}`,`/api/invoices/${button.dataset.previewInvoice}/pdf?inline=true`,`/api/invoices/${button.dataset.previewInvoice}/pdf`));
   $$('[data-payment-invoice]',body).forEach(b=>b.onclick=()=>recordPayment(r,b.dataset.paymentInvoice,Number(b.dataset.balance)));
   $$('[data-due-invoice]',body).forEach(b=>b.onclick=()=>changeInvoiceDueDate(r,b.dataset.dueInvoice,b.dataset.dueDate,b.dataset.standardDue));
-  $$('[data-action="delete-payment"]',body).forEach(b=>b.onclick=async()=>{if(!confirm("Remove this payment entry?"))return;await api(`/api/payments/${b.closest("[data-payment]").dataset.payment}`,{method:"DELETE"});toast("Payment removed");openDrawer(r.id,"Finance")});
+  $$('[data-action="delete-payment"]',body).forEach(b=>b.onclick=async()=>{if(!confirm("Remove this payment entry? If it is the only recorded payment, the wedding will return to provisional and its calendar/date-checker reservation will be removed."))return;await api(`/api/payments/${b.closest("[data-payment]").dataset.payment}`,{method:"DELETE"});toast("Payment removed and booking state recalculated");openDrawer(r.id,"Finance")});
 }
 function changeInvoiceDueDate(r,invoiceId,currentDue,standardDue){
   const help=standardDue?`The usual 45-day date is ${fmtDate(standardDue)}. Changing this affects only this couple and reschedules their payment reminders.`:`This changes only this invoice and its payment reminders.`;

@@ -18,7 +18,8 @@ from app.database import SessionLocal, engine
 from app.google_calendar import (calendar_event_payload, decrypt_refresh_token,
                                  encrypt_refresh_token, sync_booking_calendar_safely)
 from app.main import app
-from app.models import Booking, Brand, Client, Quote, RecordKind, RecordStatus
+from app.models import (Booking, Brand, Client, Invoice, Payment, Quote,
+                        RecordKind, RecordStatus)
 
 
 class FakeResponse:
@@ -97,6 +98,25 @@ def test_one_google_event_is_created_updated_then_removed_while_booking_remains(
             db.add(booking)
             db.flush()
             db.add(Quote(booking_id=booking.id, status="accepted", total=Decimal("1299")))
+            db.commit()
+
+            provisional = sync_booking_calendar_safely(db, booking)
+            assert provisional.get("event_id") is None
+            assert calls == []
+
+            invoice = Invoice(
+                booking_id=booking.id, brand=Brand.WBM, sequence=9901,
+                number="WBM09901", issue_date=date(2026, 8, 23),
+                total=Decimal("1299"), paid=Decimal("100"), status="part_paid",
+            )
+            db.add(invoice)
+            db.flush()
+            db.add(Payment(
+                invoice_id=invoice.id, amount=Decimal("100"),
+                paid_date=date(2026, 8, 23), payment_type="bank_transfer",
+            ))
+            booking.status = RecordStatus.CONFIRMED
+            booking.deposit_paid_date = date(2026, 8, 23)
             db.commit()
 
             created = sync_booking_calendar_safely(db, booking)

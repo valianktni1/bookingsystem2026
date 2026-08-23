@@ -1,3 +1,34 @@
+BookingSystem2026 - Reliability and Safety
+Build: 2026.08.23-reliability-safety-v8.27
+
+V8.27 reliability and safety:
+
+- Makes a genuine first payment the single rule that secures a native WBM
+  wedding date. Accepting a quote alone remains provisional and does not block
+  the public date checker or create a Google Calendar event.
+- Reverses that secured state safely when the only payment is deleted: the
+  booking remains retained, returns to its appropriate provisional stage, the
+  date checker is released and the calendar event is removed.
+- Adds durable reminder attempts, controlled retry windows and visible failed
+  communication records, without enabling any new Studio Ninja automation.
+- Adds a private Communication problems queue with deliberate Retry now actions
+  where the exact retained email wording can be resent safely.
+- Recovers interrupted outgoing-email records after a restart instead of leaving
+  them indefinitely in an uncertain sending state.
+- Retries pending or failed native Google Calendar work in the background and
+  uses a stable event identifier to prevent duplicate events after timeouts.
+- Uses the ceremony time submitted in Final Wedding Timings for subsequent
+  Google Calendar updates.
+- Prevents rapid duplicate public enquiries for the same email and wedding date,
+  while saving the enquiry before slower notification delivery is attempted.
+- Adds login throttling and protective browser response headers.
+- Tightens trusted proxy defaults without changing the existing Google Calendar,
+  Accounts, Studio Ninja, email or backup credentials.
+- Clarifies client and email wording: selecting a package is not described as
+  securing the wedding; the first received payment is what secures the date.
+- Preserves all V8.26 same-date warnings, V8.25 quote review, V8.24 dashboard,
+  V8.23.2 mobile fix and V8.14 complete-backup functionality.
+
 BookingSystem2026 - Same-Date Wedding Warning
 Build: 2026.08.23-same-date-booking-warning-v8.26
 

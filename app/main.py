@@ -29,10 +29,11 @@ from .booking_forms import public_booking_form, validate_booking_answers, valida
 from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
-from .email_service import preview_template_email, send_template_email, smtp_credentials, smtp_ready
+from .email_service import (preview_template_email, send_rendered_email,
+                            send_template_email, smtp_credentials, smtp_ready)
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
 from .google_calendar import (google_calendar_configured, register_google_calendar_routes,
-                              sync_booking_calendar_safely)
+                              retry_pending_calendar_syncs, sync_booking_calendar_safely)
 from .final_timings import (FORM_TYPE as FINAL_TIMINGS_FORM_TYPE,
                             booking_coverage_allowance, final_timings_unlocked,
                             studio_ninja_final_timings_email_due,
@@ -45,7 +46,8 @@ from .legacy_import import register_legacy_import_routes
 from .mail_routes import register_mail_routes
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
-                     EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, PackageOption, Payment,
+                     EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, LoginAttempt,
+                     PackageOption, Payment,
                      Quote, RecordKind, RecordStatus, ReminderLog, SystemSetting, Task)
 from .pdf import contract_acceptance_pdf, final_timings_pdf, invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
@@ -77,18 +79,41 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         bootstrap(db)
+        interrupted = db.scalars(select(EmailLog).where(EmailLog.status == "sending")).all()
+        for email in interrupted:
+            email.status = "failed"
+            email.error = "The application restarted before delivery could be confirmed"
+        if interrupted:
+            db.commit()
     reminder_task = asyncio.create_task(reminder_loop())
+    calendar_retry_task = asyncio.create_task(calendar_retry_loop())
     accounts_task = asyncio.create_task(accounts_sync_loop())
     yield
     reminder_task.cancel()
+    calendar_retry_task.cancel()
     accounts_task.cancel()
     with suppress(asyncio.CancelledError):
         await reminder_task
     with suppress(asyncio.CancelledError):
+        await calendar_retry_task
+    with suppress(asyncio.CancelledError):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.26-same-date-booking-warning", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.27-reliability-safety", lifespan=lifespan, docs_url=None, redoc_url=None)
+
+
+@app.middleware("http")
+async def protective_response_headers(request: Request, call_next):
+    """Apply low-risk browser protections without changing the existing UI."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if settings.app_env.lower() == "production":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 def money(value) -> float:
@@ -683,24 +708,21 @@ def website_date_is_booked(db: Session, wedding_date: date) -> bool:
     Archived active jobs remain protected so hiding a record cannot accidentally
     advertise its date as available.
     """
-    accepted_quote = select(Quote.id).where(
-        Quote.booking_id == Booking.id,
-        Quote.status == "accepted",
-    ).exists()
+    genuine_payment = select(Payment.id).join(
+        Invoice, Invoice.id == Payment.invoice_id
+    ).where(Invoice.booking_id == Booking.id).exists()
     booking_id = db.scalar(select(Booking.id).where(
         Booking.brand == Brand.WBM,
         Booking.kind == RecordKind.WEDDING,
         Booking.event_date == wedding_date,
         Booking.is_test.is_(False),
         Booking.status != RecordStatus.CANCELLED,
-        or_(
-            Booking.status.in_([
-                RecordStatus.CONFIRMED,
-                RecordStatus.IN_PROGRESS,
-                RecordStatus.COMPLETED,
-            ]),
-            accepted_quote,
-        ),
+        Booking.status.in_([
+            RecordStatus.CONFIRMED,
+            RecordStatus.IN_PROGRESS,
+            RecordStatus.COMPLETED,
+        ]),
+        or_(Booking.legacy_source.is_not(None), genuine_payment),
     ).limit(1))
     return booking_id is not None
 
@@ -844,6 +866,22 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
     recent.append(datetime.now(timezone.utc))
     ENQUIRY_HITS[client_ip] = recent
 
+    duplicate_cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+    duplicate = db.scalar(select(Booking.id).join(Client).where(
+        Booking.brand == Brand.WBM,
+        Booking.kind == RecordKind.WEDDING,
+        Booking.event_date == payload.event_date,
+        Booking.created_at >= duplicate_cutoff,
+        Client.email == str(payload.email).lower(),
+    ).limit(1))
+    if duplicate:
+        return {
+            "ok": True,
+            "portal_created": True,
+            "duplicate_ignored": True,
+            "message": "Thank you - your enquiry has already been received.",
+        }
+
     client = Client(first_name=payload.primary_first_name.strip(), last_name="",
                     partner_name=payload.partner_first_name.strip(), email=str(payload.email).lower(),
                     phone=payload.phone.strip() if payload.phone else None)
@@ -874,6 +912,10 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
           {"title": title, "event_date": payload.event_date.isoformat(),
            "heard_about_us": payload.heard_about_us,
            "portal_expires_at": portal_row.expires_at.isoformat()})
+    # The enquiry itself is durable before any comparatively slow SMTP work.
+    # A repeated tap can now see and reuse this submission instead of creating
+    # another client, booking, invoice journey or set of emails.
+    db.commit()
 
     acknowledgement = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
                                                             EmailTemplate.template_key == "enquiry_received",
@@ -894,10 +936,12 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                                 recipient=recipient, subject=subject, body=email_body, status="sent"))
             except Exception as exc:
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
-                                recipient=client_email_recipient(db, booking), subject=acknowledgement.subject,
-                                status="failed", error=str(exc)[:2000]))
+                                recipient=client_email_recipient(db, booking),
+                                subject=getattr(exc, "rendered_subject", acknowledgement.subject),
+                                body=getattr(exc, "rendered_body", None), status="failed",
+                                error=str(exc)[:2000], last_attempt_at=datetime.now(timezone.utc)))
         if admin_notification:
-            notification_recipient = "mark@perfectweddingsbymark.uk"
+            notification_recipient = settings.admin_email
             try:
                 subject, email_body = send_template_email(
                     booking, profile, admin_notification,
@@ -918,8 +962,10 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                                 body=email_body, status="sent"))
             except Exception as exc:
                 db.add(EmailLog(booking_id=booking.id, template_key=admin_notification.template_key,
-                                recipient=notification_recipient, subject=admin_notification.subject,
-                                status="failed", error=str(exc)[:2000]))
+                                recipient=notification_recipient,
+                                subject=getattr(exc, "rendered_subject", admin_notification.subject),
+                                body=getattr(exc, "rendered_body", None), status="failed",
+                                error=str(exc)[:2000], last_attempt_at=datetime.now(timezone.utc)))
     db.commit()
     return {"ok": True, "portal_created": True,
             "message": "Thank you - your enquiry has been received."}
@@ -927,9 +973,41 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
 
 @app.post("/api/auth/login")
 def login(payload: LoginIn, response: Response, db: Session = Depends(get_db)):
-    admin = db.scalar(select(Admin).where(Admin.email == payload.email.lower()))
+    email = payload.email.lower()
+    now = datetime.now(timezone.utc)
+    attempt = db.get(LoginAttempt, email)
+    if attempt and attempt.locked_until:
+        locked_until = attempt.locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if locked_until > now:
+            retry_after = max(1, int((locked_until - now).total_seconds()))
+            raise HTTPException(
+                status_code=429,
+                detail="Too many unsuccessful sign-in attempts. Please wait and try again.",
+                headers={"Retry-After": str(retry_after)},
+            )
+    admin = db.scalar(select(Admin).where(Admin.email == email))
     if not admin or not verify_password(payload.password, admin.password_hash):
+        window = timedelta(minutes=settings.login_failure_window_minutes)
+        if not attempt:
+            attempt = LoginAttempt(
+                email=email, failed_count=1, first_failed_at=now, last_failed_at=now
+            )
+            db.add(attempt)
+        else:
+            first_failed = attempt.first_failed_at
+            if first_failed.tzinfo is None:
+                first_failed = first_failed.replace(tzinfo=timezone.utc)
+            attempt.failed_count = (attempt.failed_count + 1 if now - first_failed <= window else 1)
+            attempt.first_failed_at = first_failed if now - first_failed <= window else now
+            attempt.last_failed_at = now
+        if attempt.failed_count >= settings.login_max_failures:
+            attempt.locked_until = now + timedelta(minutes=settings.login_lock_minutes)
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email or password is incorrect")
+    if attempt:
+        db.delete(attempt)
     response.set_cookie("booking_session", create_token(admin), httponly=True, secure=settings.cookie_secure,
                         samesite="strict", max_age=settings.session_hours * 3600, path="/")
     audit(db, "login", "admin", admin.id)
@@ -1220,6 +1298,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
     } if booking_ids else {}
 
     queues: dict[str, list[dict]] = {
+        "communication_failures": [],
         "client_updates": [],
         "new_enquiries": [],
         "quotes_waiting": [],
@@ -1347,8 +1426,57 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                     "Journey", "open_final_call_pack", due=task.due_at.date(),
                 ))
 
+    bookings_by_id = {booking.id: booking for booking in bookings}
+    failed_email_rows = db.scalars(select(EmailLog).where(
+        EmailLog.booking_id.in_(booking_ids), EmailLog.status == "failed"
+    ).order_by(EmailLog.sent_at.desc())).all() if booking_ids else []
+    for failed_email in failed_email_rows:
+        # A later successful delivery of the same message type resolves the
+        # older failure without erasing its audit history.
+        recovered = db.scalar(select(EmailLog.id).where(
+            EmailLog.booking_id == failed_email.booking_id,
+            EmailLog.template_key == failed_email.template_key,
+            EmailLog.status == "sent",
+            EmailLog.sent_at > failed_email.sent_at,
+        ).limit(1))
+        booking = bookings_by_id.get(failed_email.booking_id)
+        if recovered or not booking:
+            continue
+        row = item(
+            booking,
+            f"{failed_email.subject} · {failed_email.error or 'Delivery failed'}",
+            "Activity", "retry_communication" if failed_email.body else "review_communication",
+            occurred_at=failed_email.sent_at,
+            update_type="email_failure",
+        )
+        row.update({"failure_kind": "email", "failure_id": failed_email.id,
+                    "retryable": bool(failed_email.body)})
+        queues["communication_failures"].append(row)
+
+    failed_reminders = db.scalars(select(ReminderLog).where(
+        ReminderLog.booking_id.in_(booking_ids), ReminderLog.status == "failed"
+    )).all() if booking_ids else []
+    for reminder in failed_reminders:
+        booking = bookings_by_id.get(reminder.booking_id)
+        if not booking:
+            continue
+        row = item(
+            booking,
+            f"{_reminder_template_key(reminder.reminder_key).replace('_', ' ').title()} · "
+            f"{reminder.error or 'Delivery failed'}",
+            "Activity", "retry_communication",
+            due=reminder.scheduled_for,
+            update_type="reminder_failure",
+        )
+        row.update({"failure_kind": "reminder", "failure_id": reminder.id,
+                    "retryable": True})
+        queues["communication_failures"].append(row)
+
     queues["client_updates"].sort(
         key=lambda row: row["occurred_at"] or "", reverse=True
+    )
+    queues["communication_failures"].sort(
+        key=lambda row: row["occurred_at"] or row["due_date"] or "", reverse=True
     )
     for key in ("overdue_payments", "payments_due", "final_calls"):
         queues[key].sort(key=lambda row: row["due_date"] or "9999-12-31")
@@ -1715,6 +1843,9 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
           {"invoice": invoice.number, "amount": money(payload.amount), "auto_confirmed": auto_confirmed})
     db.commit()
 
+    # Refresh relationship collections so the response immediately contains
+    # the payment just recorded, even when this invoice previously had none.
+    db.expire_all()
     invoice = full_invoice(db, invoice.id)
     booking = invoice.booking
     sync_booking_calendar_safely(db, booking)
@@ -1766,8 +1897,11 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
         except Exception as exc:
             payment_email_error = str(exc)
             db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
-                            recipient=client_email_recipient(db, booking), subject=template.subject,
-                            status="failed", error=payment_email_error[:2000]))
+                            recipient=client_email_recipient(db, booking),
+                            subject=getattr(exc, "rendered_subject", template.subject),
+                            body=getattr(exc, "rendered_body", None), status="failed",
+                            error=payment_email_error[:2000],
+                            last_attempt_at=datetime.now(timezone.utc)))
         db.commit()
 
     result = invoice_json(full_invoice(db, invoice.id))
@@ -1787,11 +1921,34 @@ def delete_payment(payment_id: str, _: Admin = Depends(current_admin), db: Sessi
     invoice = db.get(Invoice, payment.invoice_id)
     if invoice.status in ("void", "cancelled"):
         raise HTTPException(409, "Payment history on a closed invoice is retained")
+    booking = db.get(Booking, invoice.booking_id)
     invoice.paid = max(Decimal("0"), invoice.paid - payment.amount)
     invoice.status = invoice_status(invoice.total, invoice.paid)
     db.delete(payment)
-    audit(db, "delete_payment", "booking", invoice.booking_id, {"invoice": invoice.number})
+    db.flush()
+    remaining_payment_date = db.scalar(select(Payment.paid_date).join(
+        Invoice, Invoice.id == Payment.invoice_id
+    ).where(Invoice.booking_id == invoice.booking_id).order_by(Payment.paid_date).limit(1))
+    state_reversed = False
+    if booking:
+        booking.deposit_paid_date = remaining_payment_date
+        if (remaining_payment_date is None
+                and not booking.legacy_source
+                and booking.kind == RecordKind.WEDDING
+                and booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)):
+            accepted_quote = db.scalar(select(Quote.id).where(
+                Quote.booking_id == booking.id, Quote.status == "accepted"
+            ).limit(1))
+            booking.status = RecordStatus.QUOTED if accepted_quote else RecordStatus.ENQUIRY
+            state_reversed = True
+    audit(db, "delete_payment", "booking", invoice.booking_id, {
+        "invoice": invoice.number,
+        "state_reversed_to": booking.status.value if state_reversed and booking else None,
+        "remaining_payment_date": remaining_payment_date.isoformat() if remaining_payment_date else None,
+    })
     db.commit()
+    if booking:
+        sync_booking_calendar_safely(db, booking)
 
 
 @app.get("/api/invoices/{invoice_id}/pdf")
@@ -1950,8 +2107,11 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
                          "submitted_at": x.submitted_at.isoformat(),
                          "updated_at": x.updated_at.isoformat()} for x in submissions],
         "contract": (contract_acceptance_json(acceptance) if acceptance else None),
-        "emails": [{"template_key": x.template_key, "recipient": x.recipient, "subject": x.subject,
+        "emails": [{"id": x.id, "template_key": x.template_key,
+                    "recipient": x.recipient, "subject": x.subject,
                     "status": x.status, "error": x.error,
+                    "retryable": bool(x.status == "failed" and x.body and not booking.legacy_source),
+                    "retry_count": int(x.retry_count or 0),
                     "link_tracking_enabled": bool(x.tracking_token_hash),
                     "first_link_accessed_at": (x.first_link_accessed_at.isoformat()
                                                 if x.first_link_accessed_at else None),
@@ -2373,6 +2533,9 @@ def create_and_send_quote(booking_id: str, payload: QuoteSendIn,
             email_error = str(exc)
             email_log.status = "failed"
             email_log.error = email_error[:2000]
+            email_log.subject = getattr(exc, "rendered_subject", email_log.subject)
+            email_log.body = getattr(exc, "rendered_body", None)
+            email_log.last_attempt_at = datetime.now(timezone.utc)
     audit(db, "send_quote", "booking", booking.id,
           {"email_sent": email_sent,
            "personalised_for_this_quote": bool(payload.subject or payload.body),
@@ -2435,8 +2598,10 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
         }
     except Exception as exc:
         db.add(EmailLog(booking_id=booking.id, template_key=template.template_key,
-                        recipient=client_email_recipient(db, booking), subject=template.subject,
-                        status="failed", error=str(exc)[:2000]))
+                        recipient=client_email_recipient(db, booking),
+                        subject=getattr(exc, "rendered_subject", template.subject),
+                        body=getattr(exc, "rendered_body", None), status="failed",
+                        error=str(exc)[:2000], last_attempt_at=datetime.now(timezone.utc)))
         db.commit()
         raise HTTPException(503, str(exc))
 
@@ -2581,9 +2746,11 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
             booking_id=booking.id,
             template_key=template_key,
             recipient=recipient,
-            subject=payload.subject.strip(),
+            subject=getattr(exc, "rendered_subject", payload.subject.strip()),
+            body=getattr(exc, "rendered_body", None),
             status="failed",
             error=str(exc)[:2000],
+            last_attempt_at=datetime.now(timezone.utc),
         ))
         db.commit()
         raise HTTPException(503, str(exc))
@@ -2827,8 +2994,10 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
             acceptance_email_sent = True
         except Exception as exc:
             db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
-                            recipient=client_email_recipient(db, booking), subject=acceptance_template.subject,
-                            status="failed", error=str(exc)[:2000]))
+                            recipient=client_email_recipient(db, booking),
+                            subject=getattr(exc, "rendered_subject", acceptance_template.subject),
+                            body=getattr(exc, "rendered_body", None), status="failed",
+                            error=str(exc)[:2000], last_attempt_at=datetime.now(timezone.utc)))
     audit(db, "accept_quote", "booking", booking.id,
           {"package": package.name, "addons": [x.name for x in addons],
            "total": money(total), "invoice": number,
@@ -2934,6 +3103,12 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
                 workflow_key="wbm_review_booking_form",
             ))
     elif payload.form_type == FINAL_TIMINGS_FORM_TYPE:
+        # The final submitted ceremony time is now the authoritative calendar
+        # time while all other original booking-form answers remain untouched.
+        booking.form_data = {
+            **(booking.form_data or {}),
+            "ceremony_time": str(form_values.get("ceremony_time") or "")[:5],
+        }
         workflow = dict(booking.workflow_state or {})
         workflow.pop("final_timings_review", None)
         booking.workflow_state = workflow
@@ -2956,7 +3131,7 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
         "pdf_document_id": final_document.id if final_document else None,
     })
     db.commit()
-    if payload.form_type == "booking_form":
+    if payload.form_type in ("booking_form", FINAL_TIMINGS_FORM_TYPE):
         sync_booking_calendar_safely(db, booking)
     return {"ok": True, "submitted_at": row.submitted_at.isoformat(),
             "updated_at": row.updated_at.isoformat(),
@@ -3236,8 +3411,10 @@ def send_contract_completion_email(db: Session, booking: Booking) -> tuple[bool,
     except Exception as exc:
         error = str(exc)
         db.add(EmailLog(booking_id=booking.id, template_key="contract_completed",
-                        recipient=recipient, subject=template.subject,
-                        status="failed", error=error[:2000]))
+                        recipient=recipient,
+                        subject=getattr(exc, "rendered_subject", template.subject),
+                        body=getattr(exc, "rendered_body", None), status="failed",
+                        error=error[:2000], last_attempt_at=datetime.now(timezone.utc)))
         return False, error
 
 
@@ -3324,104 +3501,185 @@ def public_contract_pdf(token: str, inline: bool = Query(False), db: Session = D
                              f'{"inline" if inline else "attachment"}; filename="signed-agreement.pdf"'})
 
 
-def run_due_reminders(db: Session) -> dict:
-    today = date.today()
-    sent, skipped, failed = 0, 0, 0
-    bookings = db.scalars(select(Booking).options(selectinload(Booking.client),
-                                                  selectinload(Booking.invoices),
-                                                  selectinload(Booking.quotes))
-                          .where(Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED)).all()
-    for booking in bookings:
-        reminders: list[tuple[str, str, str | None, int]] = []
-        is_studio_ninja = booking.legacy_source == "studio_ninja"
-        if is_studio_ninja:
-            # Hard safety boundary: this is the sole automatic communication
-            # ever permitted for a Studio Ninja import. Do not add the normal
-            # reminder workflow to this branch.
-            if not studio_ninja_final_timings_email_due(booking, today):
-                continue
-            reminders.append(("check_in_30", "check_in_30", "timings", 365))
-        elif not automations_allowed(booking):
-            continue
-        has_balance = any(invoice.status not in ("void", "cancelled") and invoice.paid < invoice.total
-                          for invoice in booking.invoices)
-        is_wbm_wedding = booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
-        accepted_quote = next((quote for quote in booking.quotes if quote.status == "accepted"), None)
+def _reminder_template_key(reminder_key: str) -> str:
+    return "balance_overdue_2" if reminder_key.startswith("balance_overdue_") else reminder_key
 
-        # Quote chasing is based on the most recent successfully sent initial quote.
-        # It stops immediately when a package has been accepted.
-        if (not is_studio_ninja and is_wbm_wedding and not accepted_quote
-                and booking.status in (RecordStatus.ENQUIRY, RecordStatus.QUOTED)):
-            quote_sent_at = db.scalar(select(EmailLog.sent_at).where(
-                EmailLog.booking_id == booking.id,
-                EmailLog.template_key == "quote",
-                EmailLog.status == "sent",
-            ).order_by(EmailLog.sent_at.desc()).limit(1))
-            if quote_sent_at:
-                days_since_quote = (today - quote_sent_at.date()).days
-                if days_since_quote == 1:
-                    reminders.append(("quote_followup_1", "quote_followup_1", "quote", 365))
-                if days_since_quote == 9:
-                    reminders.append(("quote_followup_final", "quote_followup_final", "quote", 365))
 
-        if not is_studio_ninja and is_wbm_wedding and accepted_quote:
-            accepted_invoice = next(
-                (invoice for invoice in booking.invoices if invoice.id == accepted_quote.invoice_id),
-                None,
-            )
-            if (accepted_invoice and accepted_invoice.status not in ("void", "cancelled")
-                    and money(accepted_invoice.paid) <= 0
-                    and accepted_invoice.deposit_due_date == today):
-                reminders.append(("deposit_due_1", "deposit_due_1", "invoices", 365))
+def _attempt_reminder(db: Session, booking: Booking, reminder: ReminderLog) -> bool:
+    """Attempt one durable reminder and retain enough state for safe retry."""
+    template_key = _reminder_template_key(reminder.reminder_key)
+    now = datetime.now(timezone.utc)
+    reminder.status = "sending"
+    reminder.retry_count = int(reminder.retry_count or 0) + 1
+    reminder.last_attempt_at = now
+    reminder.next_attempt_at = None
+    db.commit()
+    template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == booking.brand,
+        EmailTemplate.template_key == template_key,
+        EmailTemplate.is_active.is_(True),
+    ))
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    try:
+        if not template:
+            raise RuntimeError("Reminder template is inactive or missing")
+        if not profile:
+            raise RuntimeError("Business profile is missing")
+        portal_url = issue_client_email_url(db, booking, template_key, 365)
+        recipient = client_email_recipient(db, booking)
+        subject, email_body = send_booking_template_email(
+            db, booking, profile, template, portal_url
+        )
+        reminder.status = "sent"
+        reminder.sent_at = now
+        reminder.error = None
+        db.add(EmailLog(
+            booking_id=booking.id,
+            template_key=template_key,
+            recipient=recipient,
+            subject=subject,
+            body=email_body,
+            status="sent",
+            retry_count=max(0, reminder.retry_count - 1),
+            last_attempt_at=now,
+        ))
+        audit(db, "send_scheduled_email", "booking", booking.id, {
+            "template": template_key,
+            "attempt": reminder.retry_count,
+            "scheduled_for": reminder.scheduled_for.isoformat(),
+        })
+        db.commit()
+        return True
+    except Exception as exc:
+        delay_factor = min(24, 2 ** max(0, reminder.retry_count - 1))
+        reminder.status = "failed"
+        reminder.error = str(exc)[:2000]
+        reminder.next_attempt_at = now + timedelta(
+            minutes=settings.email_retry_minutes * delay_factor
+        )
+        audit(db, "scheduled_email_failed", "booking", booking.id, {
+            "template": template_key,
+            "attempt": reminder.retry_count,
+            "error": reminder.error,
+            "next_attempt_at": reminder.next_attempt_at.isoformat(),
+        })
+        db.commit()
+        return False
 
-        if not is_studio_ninja and is_wbm_wedding and booking.event_date and booking.status in (
-                RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS):
-            days_to_wedding = (booking.event_date - today).days
-            if days_to_wedding == 120:
-                reminders.append(("check_in_120", "check_in_120", None, 0))
-            if days_to_wedding == 30:
-                reminders.append(("check_in_30", "check_in_30", "timings", 365))
 
-        if not is_studio_ninja and is_wbm_wedding and booking.balance_due_date and has_balance:
-            days_to_balance = (booking.balance_due_date - today).days
-            if days_to_balance == 7:
-                reminders.append(("balance_due_7", "balance_due_7", "invoices", 365))
-            if days_to_balance == 1:
-                reminders.append(("balance_due_1", "balance_due_1", "invoices", 365))
+def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str, date]]:
+    """Return the one currently relevant stage of each reminder journey."""
+    is_studio_ninja = booking.legacy_source == "studio_ninja"
+    if is_studio_ninja:
+        # This remains the sole automatic Studio Ninja communication. The
+        # catch-up window ends on the wedding day and never enables anything else.
+        if not (
+            booking.brand == Brand.WBM
+            and booking.kind == RecordKind.WEDDING
+            and booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)
+            and booking.event_date
+            and booking.event_date > date(2026, 10, 20)
+            and 23 <= (booking.event_date - today).days <= 30
+        ):
+            return []
+        return [("check_in_30", booking.event_date - timedelta(days=30))]
+    if not automations_allowed(booking):
+        return []
+
+    reminders: list[tuple[str, date]] = []
+    is_wbm_wedding = booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
+    if not is_wbm_wedding:
+        return reminders
+    accepted_quote = next((quote for quote in booking.quotes if quote.status == "accepted"), None)
+
+    if not accepted_quote and booking.status in (RecordStatus.ENQUIRY, RecordStatus.QUOTED):
+        quote_sent_at = db.scalar(select(EmailLog.sent_at).where(
+            EmailLog.booking_id == booking.id,
+            EmailLog.template_key == "quote",
+            EmailLog.status == "sent",
+        ).order_by(EmailLog.sent_at.desc()).limit(1))
+        if quote_sent_at:
+            days_since_quote = (today - quote_sent_at.date()).days
+            if 1 <= days_since_quote < 9:
+                reminders.append(("quote_followup_1", quote_sent_at.date() + timedelta(days=1)))
+            elif 9 <= days_since_quote <= 16:
+                reminders.append(("quote_followup_final", quote_sent_at.date() + timedelta(days=9)))
+
+    if accepted_quote:
+        accepted_invoice = next(
+            (invoice for invoice in booking.invoices if invoice.id == accepted_quote.invoice_id),
+            None,
+        )
+        if (accepted_invoice and accepted_invoice.status not in ("void", "cancelled")
+                and money(accepted_invoice.paid) <= 0
+                and accepted_invoice.deposit_due_date
+                and accepted_invoice.deposit_due_date <= today
+                and (today - accepted_invoice.deposit_due_date).days <= 7):
+            reminders.append(("deposit_due_1", accepted_invoice.deposit_due_date))
+
+    if booking.event_date and booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS):
+        days_to_wedding = (booking.event_date - today).days
+        if 113 <= days_to_wedding <= 120:
+            reminders.append(("check_in_120", booking.event_date - timedelta(days=120)))
+        elif 23 <= days_to_wedding <= 30:
+            reminders.append(("check_in_30", booking.event_date - timedelta(days=30)))
+
+    has_balance = any(
+        invoice.status not in ("void", "cancelled") and invoice.paid < invoice.total
+        for invoice in booking.invoices
+    )
+    if booking.balance_due_date and has_balance:
+        days_to_balance = (booking.balance_due_date - today).days
+        if 2 <= days_to_balance <= 7:
+            reminders.append(("balance_due_7", booking.balance_due_date - timedelta(days=7)))
+        elif 0 <= days_to_balance <= 1:
+            reminders.append(("balance_due_1", booking.balance_due_date - timedelta(days=1)))
+        else:
             overdue_days = -days_to_balance
             if overdue_days >= 2 and overdue_days % 2 == 0:
-                reminders.append((f"balance_overdue_{overdue_days}", "balance_overdue_2", "invoices", 365))
+                reminders.append((f"balance_overdue_{overdue_days}", today))
+    return reminders
 
-        for reminder_key, template_key, portal_tab, expires_days in reminders:
-            if db.scalar(select(ReminderLog).where(ReminderLog.booking_id == booking.id,
-                                                   ReminderLog.reminder_key == reminder_key,
-                                                   ReminderLog.scheduled_for == today)):
+
+def run_due_reminders(db: Session) -> dict:
+    today = date.today()
+    now = datetime.now(timezone.utc)
+    sent, skipped, failed = 0, 0, 0
+    bookings = db.scalars(select(Booking).options(
+        selectinload(Booking.client), selectinload(Booking.invoices), selectinload(Booking.quotes)
+    ).where(
+        Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED
+    )).all()
+    for booking in bookings:
+        for reminder_key, scheduled_for in _due_reminders(db, booking, today):
+            reminder = db.scalar(select(ReminderLog).where(
+                ReminderLog.booking_id == booking.id,
+                ReminderLog.reminder_key == reminder_key,
+                ReminderLog.scheduled_for == scheduled_for,
+            ))
+            if reminder and reminder.status == "sent":
                 skipped += 1
                 continue
-            reminder = ReminderLog(booking_id=booking.id, reminder_key=reminder_key, scheduled_for=today)
-            db.add(reminder)
-            template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == booking.brand,
-                                                             EmailTemplate.template_key == template_key,
-                                                             EmailTemplate.is_active.is_(True)))
-            profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
-            try:
-                if not template:
-                    raise RuntimeError("Reminder template is inactive or missing")
-                portal_url = issue_client_email_url(
-                    db, booking, template_key, max(365, expires_days)
+            if reminder and reminder.next_attempt_at:
+                next_attempt = reminder.next_attempt_at
+                if next_attempt.tzinfo is None:
+                    next_attempt = next_attempt.replace(tzinfo=timezone.utc)
+                if next_attempt > now:
+                    skipped += 1
+                    continue
+            if not reminder:
+                reminder = ReminderLog(
+                    booking_id=booking.id,
+                    reminder_key=reminder_key,
+                    scheduled_for=scheduled_for,
+                    status="pending",
                 )
-                recipient = client_email_recipient(db, booking)
-                subject, email_body = send_booking_template_email(
-                    db, booking, profile, template, portal_url
-                )
-                reminder.status, reminder.sent_at = "sent", datetime.now(timezone.utc)
-                db.add(EmailLog(booking_id=booking.id, template_key=template_key, recipient=recipient,
-                                subject=subject, body=email_body, status="sent"))
+                db.add(reminder)
+                db.commit()
+            if _attempt_reminder(db, booking, reminder):
                 sent += 1
-            except Exception as exc:
-                reminder.status, reminder.error = "failed", str(exc)[:2000]
+            else:
                 failed += 1
-            db.commit()
     return {"sent": sent, "skipped": skipped, "failed": failed}
 
 
@@ -3432,12 +3690,96 @@ def run_reminders_now(_: Admin = Depends(current_admin), db: Session = Depends(g
     return run_due_reminders(db)
 
 
+@app.post("/api/communications/failures/{failure_kind}/{failure_id}/retry")
+def retry_failed_communication(
+    failure_kind: str,
+    failure_id: str,
+    _: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    """Deliberately retry one visible failed communication, never an import."""
+    if failure_kind == "reminder":
+        reminder = db.get(ReminderLog, failure_id)
+        if not reminder or reminder.status != "failed":
+            raise HTTPException(404, "Failed reminder not found")
+        booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(
+            Booking.id == reminder.booking_id
+        ))
+        if not booking or booking.status == RecordStatus.CANCELLED:
+            raise HTTPException(409, "This booking is no longer eligible for client email")
+        if booking.legacy_source == "studio_ninja" and reminder.reminder_key != "check_in_30":
+            raise HTTPException(409, "Studio Ninja communication protection remains active")
+        if not booking.legacy_source and not automations_allowed(booking):
+            raise HTTPException(409, "Client communication is paused for this booking")
+        if not _attempt_reminder(db, booking, reminder):
+            raise HTTPException(503, reminder.error or "The reminder could not be sent")
+        return {"ok": True, "status": "sent", "attempts": reminder.retry_count}
+
+    if failure_kind != "email":
+        raise HTTPException(422, "Unknown communication failure type")
+    email = db.get(EmailLog, failure_id)
+    if not email or email.status != "failed":
+        raise HTTPException(404, "Failed email not found")
+    if not email.body:
+        raise HTTPException(
+            409,
+            "The exact wording was not retained by the older version. Open the client Email Centre instead.",
+        )
+    booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(
+        Booking.id == email.booking_id
+    ))
+    if not booking or booking.status == RecordStatus.CANCELLED:
+        raise HTTPException(409, "This booking is no longer eligible for client email")
+    if booking.legacy_source or not automations_allowed(booking):
+        raise HTTPException(409, "Protected or paused bookings cannot be retried from this queue")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    if not profile:
+        raise HTTPException(409, "Business profile is missing")
+    now = datetime.now(timezone.utc)
+    email.retry_count = int(email.retry_count or 0) + 1
+    email.last_attempt_at = now
+    db.commit()
+    try:
+        send_rendered_email(booking, profile, email.recipient, email.subject, email.body)
+    except Exception as exc:
+        email.error = str(exc)[:2000]
+        email.next_attempt_at = now + timedelta(minutes=settings.email_retry_minutes)
+        db.commit()
+        raise HTTPException(503, email.error) from exc
+    email.status = "recovered"
+    email.next_attempt_at = None
+    db.add(EmailLog(
+        booking_id=booking.id,
+        template_key=email.template_key,
+        recipient=email.recipient,
+        subject=email.subject,
+        body=email.body,
+        status="sent",
+        retry_count=email.retry_count,
+        last_attempt_at=now,
+        sent_at=now,
+    ))
+    audit(db, "retry_failed_email", "booking", booking.id, {
+        "template": email.template_key, "attempt": email.retry_count,
+    })
+    db.commit()
+    return {"ok": True, "status": "sent", "attempts": email.retry_count}
+
+
 async def reminder_loop():
     while True:
         await asyncio.sleep(max(1, settings.reminder_scan_hours) * 3600)
         if settings.reminders_enabled and smtp_ready():
             with SessionLocal() as db:
                 await asyncio.to_thread(run_due_reminders, db)
+
+
+async def calendar_retry_loop():
+    while True:
+        await asyncio.sleep(settings.google_calendar_retry_minutes * 60)
+        if google_calendar_configured():
+            with SessionLocal() as db:
+                await asyncio.to_thread(retry_pending_calendar_syncs, db)
 
 
 register_v82_routes(app)

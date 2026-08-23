@@ -16,6 +16,7 @@
   };
   const slugSections = Object.fromEntries(Object.entries(sectionSlugs).map(([key, value]) => [value, key]));
   const queueCopy = {
+    communication_failures: ["Communication problems", "Emails that need a retry or your review", "!"],
     client_updates: ["New client updates", "Forms, signed agreements and replies waiting for you", "●"],
     overdue_payments: ["Overdue payments", "Payment date has passed", "!"],
     new_enquiries: ["New enquiries", "Review the details and prepare the quote", "◎"],
@@ -274,10 +275,11 @@
     const latestContractEmail = (portal.emails || []).find(email => email.template_key === "contract_completed");
     const emailEvents = (portal.emails || []).map(email => ({
       at: email.sent_at,
-      type: email.status === "sent" ? "sent" : "failed",
-      label: email.status === "sent" ? "Email sent successfully" : "Email failed",
+      type: email.status === "sent" || email.status === "recovered" ? "sent" : "failed",
+      label: email.status === "sent" ? "Email sent successfully" : email.status === "recovered" ? "Earlier email failure recovered" : "Email failed",
       detail: `${email.subject} · ${email.recipient}${email.error ? ` · ${friendlyEmailFailure(email.error)}` : ""}`,
       retryContractCompletion: email === latestContractEmail && email.status === "failed",
+      retryEmailId: email.status === "failed" && email.retryable ? email.id : null,
     }));
     const noteEvents = (r.booking_notes || []).map(note => ({
       at: note.created_at, type: "note", label: "Private note", detail: note.body, noteId: note.id,
@@ -295,7 +297,7 @@
     const legacy = (r.legacy_timeline || []).map(event => `<div class="v811-timeline-event legacy"><i></i><span><strong>${esc(baseStatusTextV811(event.title || event.type || event.event || "Studio Ninja activity"))}</strong><small>${esc(event.date || event.at || event.occurred_at || "Date retained in the original record")}${event.detail ? ` · ${esc(event.detail)}` : ""}</small></span></div>`).join("");
     body.innerHTML = `<form id="note-form" class="composer v811-note-composer"><textarea id="note-body" rows="3" placeholder="Add a private note…" required></textarea><button class="primary" type="submit">Add note</button></form>
       <section class="v811-activity-heading"><div><small>COMPLETE CLIENT HISTORY</small><h3>Activity timeline</h3><p>Emails show their real sent or failed result, alongside payments, forms, agreements, notes and changes.</p></div><b>${events.length}</b></section>
-      <div class="v811-timeline">${events.map(event => `<div class="v811-timeline-event ${event.type}" ${event.noteId ? `data-note="${attr(event.noteId)}"` : ""}><i>${event.type === "sent" ? "✓" : event.type === "failed" ? "!" : event.type === "note" ? "✎" : ""}</i><span><strong>${esc(event.label)}</strong><small>${esc(fmtDateTime(event.at))}${event.detail ? ` · ${esc(event.detail)}` : ""}</small></span>${event.retryContractCompletion ? `<button class="mini v817-retry-email" data-retry-contract-email type="button">Retry email</button>` : ""}${event.noteId ? `<button class="mini danger-text" data-delete-note type="button">Delete</button>` : ""}</div>`).join("") || `<div class="empty"><strong>No activity recorded yet</strong>The history will build automatically as this booking progresses.</div>`}</div>
+      <div class="v811-timeline">${events.map(event => `<div class="v811-timeline-event ${event.type}" ${event.noteId ? `data-note="${attr(event.noteId)}"` : ""}><i>${event.type === "sent" ? "✓" : event.type === "failed" ? "!" : event.type === "note" ? "✎" : ""}</i><span><strong>${esc(event.label)}</strong><small>${esc(fmtDateTime(event.at))}${event.detail ? ` · ${esc(event.detail)}` : ""}</small></span>${event.retryEmailId && !event.retryContractCompletion ? `<button class="mini v817-retry-email" data-retry-email="${attr(event.retryEmailId)}" type="button">Retry email</button>` : ""}${event.retryContractCompletion ? `<button class="mini v817-retry-email" data-retry-contract-email type="button">Retry email</button>` : ""}${event.noteId ? `<button class="mini danger-text" data-delete-note type="button">Delete</button>` : ""}</div>`).join("") || `<div class="empty"><strong>No activity recorded yet</strong>The history will build automatically as this booking progresses.</div>`}</div>
       ${legacy ? `<h3 class="section-title">Imported Studio Ninja timeline</h3><div class="v811-timeline">${legacy}</div>` : ""}`;
     $("#note-form", body).onsubmit = async event => {
       event.preventDefault();
@@ -318,6 +320,21 @@
       try {
         await api(`/api/bookings/${r.id}/contract/completion-email`, { method: "POST" });
         toast("Signed-agreement confirmation emailed");
+        await refresh();
+        openDrawer(r.id, "Activity");
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = "Retry email";
+        toast(error.message, "error");
+      }
+    });
+    $$('[data-retry-email]', body).forEach(button => button.onclick = async () => {
+      if (!confirm(`Retry this exact email to ${r.client.email}?`)) return;
+      button.disabled = true;
+      button.textContent = "Sending…";
+      try {
+        await api(`/api/communications/failures/email/${encodeURIComponent(button.dataset.retryEmail)}/retry`, {method:"POST"});
+        toast("Email sent successfully");
         await refresh();
         openDrawer(r.id, "Activity");
       } catch (error) {
@@ -432,8 +449,9 @@
     const amount = row.amount !== null && row.amount !== undefined ? ` · ${money(row.amount)}` : "";
     const received = row.occurred_at ? ` · ${fmtDateTime(row.occurred_at)}` : "";
     const mailData = row.action === "open_email" ? ` data-mail-brand="${attr(row.mail_brand)}" data-mail-uid="${attr(row.mail_uid)}"` : "";
-    const openLabel = row.action === "open_email" ? "Read email" : row.update_type ? "Review" : "Open";
-    return `<button class="v811-queue-item" data-queue-record="${attr(row.booking_id)}" data-section="${attr(row.section)}" data-action="${attr(row.action)}"${mailData}><span class="record-avatar ${row.brand}">${esc(row.title.split(/\s+|&/).filter(Boolean).slice(0, 2).map(word => word[0]).join(""))}</span><span><strong>${esc(row.title)}</strong><small>${esc(row.detail)}${esc(received)}${esc(due)}${esc(amount)}</small></span><b>${openLabel} →</b></button>`;
+    const failureData = row.failure_id ? ` data-failure-kind="${attr(row.failure_kind)}" data-failure-id="${attr(row.failure_id)}"` : "";
+    const openLabel = row.action === "open_email" ? "Read email" : row.action === "retry_communication" ? "Retry now" : row.update_type ? "Review" : "Open";
+    return `<button class="v811-queue-item" data-queue-record="${attr(row.booking_id)}" data-section="${attr(row.section)}" data-action="${attr(row.action)}"${mailData}${failureData}><span class="record-avatar ${row.brand}">${esc(row.title.split(/\s+|&/).filter(Boolean).slice(0, 2).map(word => word[0]).join(""))}</span><span><strong>${esc(row.title)}</strong><small>${esc(row.detail)}${esc(received)}${esc(due)}${esc(amount)}</small></span><b>${openLabel} →</b></button>`;
   }
 
   function queueCard(key, rows) {
@@ -452,7 +470,7 @@
     const d = state.dashboard || {};
     const queues = Object.fromEntries(queueOrder.map(key => [key, (data.queues[key] || []).filter(row => state.brand === "all" || row.brand === state.brand)]));
     const clientUpdateBookings = new Set(queues.client_updates.map(row => row.booking_id));
-    const urgent = queues.client_updates.length + queues.overdue_payments.length + queues.new_enquiries.length + queues.accepted_payment.length
+    const urgent = queues.communication_failures.length + queues.client_updates.length + queues.overdue_payments.length + queues.new_enquiries.length + queues.accepted_payment.length
       + queues.agreements_waiting.filter(row => !clientUpdateBookings.has(row.booking_id)).length;
     const upcomingSource = state.brand === "ivory"
       ? (d.upcoming || []).filter(record => record.kind === "digital")
@@ -471,6 +489,13 @@
     $$('[data-queue-record]', $("#content")).forEach(button => button.onclick = () => {
       if (button.dataset.action === "open_email" && window.openInboxMessageFromDashboard) {
         window.openInboxMessageFromDashboard(button.dataset.mailBrand, button.dataset.mailUid);
+      } else if (button.dataset.action === "retry_communication") {
+        if (!confirm("Retry this client email now?")) return;
+        button.disabled = true;
+        button.querySelector("b").textContent = "Retrying…";
+        api(`/api/communications/failures/${encodeURIComponent(button.dataset.failureKind)}/${encodeURIComponent(button.dataset.failureId)}/retry`, {method:"POST"})
+          .then(async()=>{workflowQueueCache=null;toast("Email sent successfully");await refresh();renderDashboard()})
+          .catch(error=>{button.disabled=false;button.querySelector("b").textContent="Retry now →";toast(error.message,"error")});
       } else {
         openDrawer(button.dataset.queueRecord, button.dataset.section, { action: button.dataset.action });
       }

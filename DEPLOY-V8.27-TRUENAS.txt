@@ -1,0 +1,26 @@
+BOOKINGSYSTEM2026 V8.27 - RELIABILITY AND SAFETY
+
+1. Extract the V8.27 ZIP and publish its complete contents to the main branch
+   of valianktni1/bookingsystem2026 using GitHub Desktop.
+
+2. In the TrueNAS shell, run exactly:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc \
+  > bookingapp-before-v827-2026-08-23.dump
+
+ls -lh bookingapp-before-v827-2026-08-23.dump
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+3. The health response must contain:
+
+"build":"2026.08.23-reliability-safety-v8.27"
+
+No YAML change, new environment secret or manual database migration is needed.
+The application performs only additive database migration at startup.

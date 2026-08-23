@@ -269,15 +269,44 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
             f"SMTP is not configured for {profile.display_name}. "
             "Add that brand's SMTP username and mailbox password to the Dockge YAML."
         )
+    subject, body = render_template_content(
+        booking, profile, template, portal_url, extra_values
+    )
+    message = build_email_message(booking, profile, subject, body, username,
+                                  recipient=recipient, reply_to=reply_to)
+    try:
+        send_email_message(message, booking.brand)
+    except Exception as exc:
+        # Callers can durably retain the exact attempted wording, allowing a
+        # deliberate retry without silently changing to a newer template.
+        exc.rendered_subject = subject
+        exc.rendered_body = body
+        raise
+    return subject, body
+
+
+def render_template_content(booking: Booking, profile: BusinessProfile,
+                            template: EmailTemplate, portal_url: str | None = None,
+                            extra_values: dict[str, str] | None = None) -> tuple[str, str]:
+    """Render editable template wording without contacting the mail server."""
     values = template_values(booking, profile, portal_url, extra_values)
     subject = render_template(template.subject, values)
     body = ensure_client_account_link(
         render_template(template.body, values), booking, portal_url
     )
-    message = build_email_message(booking, profile, subject, body, username,
-                                  recipient=recipient, reply_to=reply_to)
-    send_email_message(message, booking.brand)
     return subject, body
+
+
+def send_rendered_email(booking: Booking, profile: BusinessProfile, recipient: str,
+                        subject: str, body: str) -> None:
+    """Send a previously rendered, audit-retained message exactly as written."""
+    username, _ = smtp_credentials(booking.brand)
+    if not smtp_ready(booking.brand):
+        raise RuntimeError(f"SMTP is not configured for {profile.display_name}")
+    message = build_email_message(
+        booking, profile, subject, body, username, recipient=recipient
+    )
+    send_email_message(message, booking.brand)
 
 
 def preview_template_email(booking: Booking, profile: BusinessProfile, template: EmailTemplate,

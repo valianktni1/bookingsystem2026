@@ -79,6 +79,7 @@ def test_native_final_timings_uses_spare_coverage_and_reopens_review_task():
             "form_type": "final_timings", "data": final_answers(),
         })
         assert saved.status_code == 200, saved.text
+        assert client.get(f"/api/bookings/{booking['id']}").json()["form_data"]["ceremony_time"] == "13:00"
         pdf_document_id = saved.json()["pdf_document_id"]
         assert pdf_document_id
         public = client.get(f"/api/client/{token}").json()

@@ -306,7 +306,7 @@
     $$('[data-payment-invoice]', body).forEach(button => button.onclick = () => recordPayment(r, button.dataset.paymentInvoice, Number(button.dataset.balance)));
     $$('[data-due-invoice]', body).forEach(button => button.onclick = () => changeInvoiceDueDate(r, button.dataset.dueInvoice, button.dataset.dueDate, button.dataset.standardDue));
     $$('[data-action="delete-payment"]', body).forEach(button => button.onclick = async () => {
-      if (!confirm("Remove this payment entry?")) return;
+      if (!confirm("Remove this payment entry? If it is the only recorded payment, the wedding will return to provisional and its calendar/date-checker reservation will be removed.")) return;
       await api(`/api/payments/${button.closest("[data-payment]").dataset.payment}`, { method: "DELETE" });
       toast("Payment removed");
       openDrawer(r.id, "Finance");

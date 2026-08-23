@@ -45,6 +45,16 @@ class Admin(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+class LoginAttempt(Base):
+    """Durable administrator login throttling, keyed by normalised email."""
+    __tablename__ = "login_attempts"
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    failed_count: Mapped[int] = mapped_column(default=0)
+    first_failed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    last_failed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+
 class BusinessProfile(Base):
     __tablename__ = "business_profiles"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
@@ -383,6 +393,9 @@ class EmailLog(Base):
     first_link_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_link_accessed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     link_access_count: Mapped[int] = mapped_column(default=0)
+    retry_count: Mapped[int] = mapped_column(default=0)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
     booking: Mapped[Booking] = relationship()
 
@@ -423,3 +436,6 @@ class ReminderLog(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="pending")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retry_count: Mapped[int] = mapped_column(default=0)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

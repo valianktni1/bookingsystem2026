@@ -41,11 +41,16 @@ class Settings(BaseSettings):
     mail_list_limit: int = Field(default=60, ge=10, le=200)
     reminder_scan_hours: int = 6
     reminders_enabled: bool = False
+    email_retry_minutes: int = Field(default=60, ge=5, le=1440)
+    login_max_failures: int = Field(default=5, ge=3, le=20)
+    login_failure_window_minutes: int = Field(default=15, ge=5, le=120)
+    login_lock_minutes: int = Field(default=15, ge=5, le=1440)
     google_maps_api_key: str | None = None
     google_calendar_client_id: str | None = None
     google_calendar_client_secret: str | None = None
     google_calendar_redirect_uri: str | None = None
     google_calendar_timeout_seconds: int = Field(default=20, ge=5, le=60)
+    google_calendar_retry_minutes: int = Field(default=30, ge=5, le=1440)
     accounts_integration_enabled: bool = False
     accounts_integration_auto_sync: bool = False
     accounts_api_url: str | None = None

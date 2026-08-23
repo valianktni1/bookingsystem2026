@@ -214,7 +214,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
                                  "google_calendar_configured": False,
-                                     "build": "2026.08.23-same-date-booking-warning-v8.26"}
+                                     "build": "2026.08.23-reliability-safety-v8.27"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -695,7 +695,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert sent_enquiry_emails[0]["recipient"] == "rachel@example.com"
         enquiry_portal_url = sent_enquiry_emails[0]["portal_url"]
         assert "/client/" in enquiry_portal_url
-        assert sent_enquiry_emails[1]["recipient"] == "mark@perfectweddingsbymark.uk"
+        assert sent_enquiry_emails[1]["recipient"] == "mark@example.com"
         assert sent_enquiry_emails[1]["reply_to"] == "rachel@example.com"
         assert sent_enquiry_emails[1]["values"]["heard_about_us"] == "Google search"
         assert client.post("/api/auth/login", json={

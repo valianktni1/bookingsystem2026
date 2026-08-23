@@ -67,6 +67,14 @@ def apply_safe_migrations() -> None:
             "first_link_accessed_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
             "last_link_accessed_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
             "link_access_count": "INTEGER NOT NULL DEFAULT 0",
+            "retry_count": "INTEGER NOT NULL DEFAULT 0",
+            "last_attempt_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+            "next_attempt_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+        },
+        "reminder_logs": {
+            "retry_count": "INTEGER NOT NULL DEFAULT 0",
+            "last_attempt_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+            "next_attempt_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
         },
     }
     with engine.begin() as connection:

@@ -220,8 +220,8 @@ A £150 deposit secures your date."""),
         "payment_received": ("Payment received", "Payment received - {payment_amount} - thank you", "Hi {client_first_name},\n\nThank you, I have received your payment of {payment_amount} on {payment_date}.\n\n{payment_status}.\n\nInvoice: {invoice_number}\nTotal paid so far: {total_paid}\nRemaining balance: {outstanding_balance}\nFinal balance due: {balance_due_date}\n\nYou can view the updated invoice, payment history and download your receipt in your wedding booking:\n{portal_url}\n\nThank you,\nMark\n{business_name}\n{business_phone}"),
         "enquiry_received": ("Website enquiry acknowledgement", "Thank you for your Weddings By Mark enquiry", "Hi {client_first_name},\n\nThank you for getting in touch about your wedding on {event_date} at {venue_or_project}. I have received your enquiry and will come back to you as soon as I can.\n\nYour secure wedding area has also been created. You can use this private link to return to your enquiry and, once prepared, view your package quote:\n{portal_url}\n\nIn the meantime, if you need to add anything, simply reply to this email.\n\nMark\nWeddings By Mark\n{business_phone}"),
         "new_enquiry_admin": ("New website enquiry - notify Mark", "New wedding enquiry - {couple_or_company} - {event_date}", "Hi Mark,\n\nA new wedding enquiry has just been submitted through your website.\n\nCouple: {couple_or_company}\nWedding date: {event_date}\nVenue/location: {venue_or_project}\nEmail: {client_email}\nPhone: {client_phone}\nPackage interest: {package_interest}\nSelfie booth interest: {selfie_booth_interest}\nSpecial offer code: {promo_code}\nHow they found you: {heard_about_us}\n\nTheir message:\n{enquiry_message}\n\nFun question answer:\n{fun_answer}\n\nOpen the booking system:\n{admin_url}\n\nYou can reply directly to this notification and it will go to the couple.\n\nWeddings By Mark Booking System"),
-        "quote_accepted": ("Package accepted and invoice ready", "Your package is confirmed and your invoice is ready", "Hi {client_first_name},\n\nThank you for choosing your Weddings By Mark package. Your selection and any add-ons have been saved, and your invoice is now available in your wedding booking:\n\n{portal_url}\n\nYour booking fee of {deposit_amount} is due by {deposit_due_date}. The remaining balance is due by {balance_due_date}.\n\nYour bank-transfer payment reference is **{payment_reference}**. Please use this same reference for every payment for your wedding.\n\nPlease use the secure link to complete your Wedding Booking Form/questionnaire and read and digitally sign your wedding contract. The invoice also contains the bank-transfer details.\n\nYour date is secured as soon as I receive your first payment.\n\nMark\nWeddings By Mark\n{business_phone}"),
-        "contract_completed": ("Agreement signed by both parties", "Your wedding agreement is now signed by both parties", "Hi {client_first_name},\n\nThank you for completing your wedding agreement.\n\nI am pleased to confirm that it has now been signed by you and countersigned by Mark Adam Powell on behalf of Weddings By Mark. A protected copy, including both names and the date and time of acceptance, is safely retained with your wedding booking.\n\nYou can view your completed agreement, invoice, payment history and all of your wedding details at any time using your secure booking link:\n\n{portal_url}\n\nThank you again for choosing Weddings By Mark. I am genuinely looking forward to being part of your special day.\n\nWarmest regards,\nMark\nWeddings By Mark\n{business_phone}"),
+        "quote_accepted": ("Package accepted and invoice ready", "Your package is selected and your invoice is ready", "Hi {client_first_name},\n\nThank you for choosing your Weddings By Mark package. Your selection and any add-ons have been saved, and your invoice is now available in your wedding booking:\n\n{portal_url}\n\nYour booking fee of {deposit_amount} is due by {deposit_due_date}. The remaining balance is due by {balance_due_date}.\n\nYour bank-transfer payment reference is **{payment_reference}**. Please use this same reference for every payment for your wedding.\n\nPlease use the secure link to complete your Wedding Booking Form/questionnaire and read and digitally sign your wedding contract. The invoice also contains the bank-transfer details.\n\nYour date remains provisional until I receive your first payment. As soon as that payment arrives, your wedding date is secured.\n\nMark\nWeddings By Mark\n{business_phone}"),
+        "contract_completed": ("Agreement signed by both parties", "Your wedding agreement is now signed by both parties", "Hi {client_first_name},\n\nThank you for completing your wedding agreement.\n\nI am pleased to confirm that it has now been signed by you and countersigned by Mark Adam Powell on behalf of Weddings By Mark. A protected copy, including both names and the date and time of acceptance, is safely retained with your wedding booking.\n\nYour agreement and package selection are safely recorded. Your wedding date is secured as soon as I receive your first payment.\n\nYou can view your completed agreement, invoice, payment history and all of your wedding details at any time using your secure booking link:\n\n{portal_url}\n\nThank you again for choosing Weddings By Mark. I am genuinely looking forward to being part of your special day.\n\nWarmest regards,\nMark\nWeddings By Mark\n{business_phone}"),
     }
     for brand in (Brand.WBM, Brand.IVORY):
         for key, (name, subject, body) in template_rows.items():
@@ -428,6 +428,30 @@ Weddings By Mark"""
         accepted_template.body = accepted_template.body.replace(
             "The invoice also contains the bank-transfer details and payment reference.",
             "Your bank-transfer payment reference is **{payment_reference}**. Please use this same reference for every payment for your wedding.\n\nThe invoice also contains the bank-transfer details.",
+        )
+    if (accepted_template and accepted_template.display_name == "Package accepted and invoice ready"):
+        if accepted_template.subject == "Your package is confirmed and your invoice is ready":
+            accepted_template.subject = template_rows["quote_accepted"][1]
+        accepted_template.body = accepted_template.body.replace(
+            "Your date is secured as soon as I receive your first payment.",
+            "Your date remains provisional until I receive your first payment. As soon as that payment arrives, your wedding date is secured.",
+        )
+
+    completed_template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == Brand.WBM,
+        EmailTemplate.template_key == "contract_completed",
+    ))
+    completed_marker = (
+        "Your agreement and package selection are safely recorded. Your wedding date is secured "
+        "as soon as I receive your first payment."
+    )
+    if (completed_template and completed_template.display_name == "Agreement signed by both parties"
+            and completed_marker not in completed_template.body
+            and "A protected copy, including both names" in completed_template.body):
+        completed_template.body = completed_template.body.replace(
+            "\n\nYou can view your completed agreement, invoice, payment history",
+            f"\n\n{completed_marker}\n\nYou can view your completed agreement, invoice, payment history",
+            1,
         )
 
     for reminder_key in ("deposit_due_1", "balance_due_7", "balance_due_1", "balance_overdue_2"):

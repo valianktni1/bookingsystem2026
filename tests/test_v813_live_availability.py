@@ -15,7 +15,8 @@ from fastapi.testclient import TestClient
 
 from app.database import SessionLocal, engine
 from app.main import app
-from app.models import Booking, Brand, Client, Quote, RecordKind, RecordStatus
+from app.models import (Booking, Brand, Client, Invoice, Payment, Quote,
+                        RecordKind, RecordStatus)
 
 
 def reset_database():
@@ -44,6 +45,20 @@ def add_wedding(db, suffix: str, wedding_date: date, status: RecordStatus, **kwa
     db.add_all([client, booking])
     db.flush()
     return booking
+
+
+def secure_native_wedding(db, booking: Booking, sequence: int) -> None:
+    invoice = Invoice(
+        booking_id=booking.id, brand=Brand.WBM, sequence=sequence,
+        number=f"WBM{sequence:05d}", issue_date=date.today(),
+        total=100, paid=100, status="paid",
+    )
+    db.add(invoice)
+    db.flush()
+    db.add(Payment(
+        invoice_id=invoice.id, amount=100, paid_date=date.today(),
+        payment_type="bank_transfer",
+    ))
 
 
 def test_live_availability_returns_only_privacy_safe_date_statuses():
@@ -84,18 +99,19 @@ def test_live_availability_returns_only_privacy_safe_date_statuses():
                 accepted_at=datetime.now(timezone.utc),
             ))
 
-            add_wedding(
+            archived = add_wedding(
                 db,
                 "archived",
                 archived_date,
                 RecordStatus.IN_PROGRESS,
                 archived_at=datetime.now(timezone.utc),
             )
+            secure_native_wedding(db, archived, 9801)
             db.commit()
 
         assert client.get(f"/api/public/availability?date={open_date.isoformat()}").text == "Available"
         assert client.get(f"/api/public/availability?date={blocked_date.isoformat()}").text == "Booked"
-        assert client.get(f"/api/public/availability?date={accepted_date.isoformat()}").text == "Booked"
+        assert client.get(f"/api/public/availability?date={accepted_date.isoformat()}").text == "Available"
         assert client.get(f"/api/public/availability?date={archived_date.isoformat()}").text == "Booked"
         assert client.get("/api/public/availability?date=2020-01-01").text == "Unavailable"
 
@@ -110,4 +126,3 @@ def test_live_availability_rejects_invalid_dates():
     reset_database()
     with TestClient(app) as client:
         assert client.get("/api/public/availability?date=not-a-date").status_code == 422
-
