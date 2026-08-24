@@ -148,7 +148,7 @@ def test_quote_review_controls_are_wired_as_a_two_stage_flow():
     assert "Review email &amp; send" in javascript
     assert 'subject:value("#quote-email-subject").trim()' in javascript
     assert 'body:value("#quote-email-body").trim()' in javascript
-    assert "/static/app.js?v=invoice-preview-v8-28-4" in index
+    assert "/static/app.js?v=inline-pdf-hotfix-v8-28-4-1" in index
     assert "/static/catalog.css?v=quote-email-review-v8-25" in index
 
 

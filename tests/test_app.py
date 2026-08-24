@@ -214,7 +214,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
                                  "google_calendar_configured": False,
-                                     "build": "2026.08.24-invoice-preview-v8.28.4"}
+                                     "build": "2026.08.24-inline-pdf-hotfix-v8.28.4.1"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -450,9 +450,12 @@ def test_phase_two_b_flow(monkeypatch):
         pdf = client.get(f"/api/invoices/{wbm_invoice.json()['id']}/pdf")
         assert pdf.status_code == 200
         assert pdf.content.startswith(b"%PDF")
+        assert pdf.headers["x-frame-options"] == "DENY"
         inline_pdf = client.get(f"/api/invoices/{wbm_invoice.json()['id']}/pdf?inline=true")
         assert inline_pdf.status_code == 200
         assert inline_pdf.headers["content-disposition"].startswith("inline")
+        assert inline_pdf.headers["x-frame-options"] == "SAMEORIGIN"
+        assert inline_pdf.headers["content-security-policy"] == "frame-ancestors 'self'"
         receipt = client.get(f"/api/invoices/{wbm_invoice.json()['id']}/receipt.pdf")
         assert receipt.status_code == 200
 

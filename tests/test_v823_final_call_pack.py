@@ -137,6 +137,8 @@ def test_complete_final_call_pack_saves_notes_pdf_and_completes_existing_task():
         inline = client.get(f"/api/bookings/{booking_id}/final-call-pack.pdf?inline=true")
         assert inline.status_code == 200
         assert inline.headers["content-disposition"].startswith("inline")
+        assert inline.headers["x-frame-options"] == "SAMEORIGIN"
+        assert inline.headers["content-security-policy"] == "frame-ancestors 'self'"
 
         queue = client.get("/api/workflow-queues").json()["queues"]["final_calls"]
         assert all(item["booking_id"] != booking_id for item in queue)
@@ -197,6 +199,8 @@ def test_studio_ninja_can_use_private_pack_without_enabling_or_sending_anything(
         preview = client.get(f"/api/invoices/{invoice['id']}/pdf?inline=true")
         assert preview.status_code == 200
         assert preview.headers["content-disposition"].startswith("inline")
+        assert preview.headers["x-frame-options"] == "SAMEORIGIN"
+        assert preview.headers["content-security-policy"] == "frame-ancestors 'self'"
         assert "Final Wedding Timings have not been submitted" in status.json()["readiness"]["warnings"]
 
         saved = client.put(f"/api/bookings/{booking_id}/final-call-pack", json={

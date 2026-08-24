@@ -1,5 +1,11 @@
-BookingSystem2026 - Workflow Clarity and In-System Invoice Preview
-Build: 2026.08.24-invoice-preview-v8.28.4
+BookingSystem2026 - Workflow Clarity and Working In-System PDF Preview
+Build: 2026.08.24-inline-pdf-hotfix-v8.28.4.1
+
+V8.28.4.1 inline PDF security hotfix:
+- Allows authenticated inline PDFs to display inside this application's own modal.
+- Restricts those PDF previews to SAMEORIGIN with CSP frame-ancestors 'self'.
+- Keeps downloads and all ordinary private application pages protected by DENY.
+- Fixes the grey preview window / broken document icon seen after V8.28.4.
 
 V8.28.4 invoice access improvement:
 - Restores in-system View invoice previews for every invoice card.

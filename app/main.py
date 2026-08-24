@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.28.4-invoice-preview", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.28.4.1-inline-pdf-hotfix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -108,6 +108,9 @@ async def protective_response_headers(request: Request, call_next):
     """Apply low-risk browser protections without changing the existing UI."""
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    content_type = response.headers.get("Content-Type", "").lower()
+    disposition = response.headers.get("Content-Disposition", "").lower()
+    is_inline_pdf = content_type.startswith("application/pdf") and disposition.startswith("inline")
     # The public enquiry form is deliberately embedded on the Weddings By Mark
     # WordPress site.  X-Frame-Options cannot express a safe cross-origin allow
     # list, so use CSP for this one public document and keep every admin/client
@@ -119,6 +122,12 @@ async def protective_response_headers(request: Request, call_next):
         )
         if "X-Frame-Options" in response.headers:
             del response.headers["X-Frame-Options"]
+    elif is_inline_pdf:
+        # Authenticated invoice, agreement and working-pack previews are shown
+        # inside this application's own secure modal. Allow only that same
+        # origin; downloads and every normal application page remain DENY.
+        response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
     else:
         response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
