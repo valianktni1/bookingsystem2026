@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.28.1-enquiry-embed-hotfix", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.28.2-enquiry-confirmation", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")

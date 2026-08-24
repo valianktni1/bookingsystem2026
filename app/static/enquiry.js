@@ -8,6 +8,13 @@ function tellParentHeight() {
   const height = Math.ceil(document.documentElement.scrollHeight);
   window.parent.postMessage({type: "wbm-enquiry-height", height}, "*");
 }
+
+function tellParentSubmitted() {
+  // Existing website embeds understand the height message. Newer embeds also
+  // bring the confirmation itself into view on the surrounding website page.
+  window.parent.postMessage({type: "wbm-enquiry-height", height: 520}, "*");
+  window.parent.postMessage({type: "wbm-enquiry-submitted", height: 520}, "*");
+}
 new ResizeObserver(tellParentHeight).observe(document.documentElement);
 window.addEventListener("load", tellParentHeight);
 
@@ -160,10 +167,15 @@ form.addEventListener("submit", async event => {
     const response = await fetch("/api/public/enquiries", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(values)});
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(Array.isArray(body.detail) ? body.detail.map(item => item.msg).join(", ") : body.detail || "Your enquiry could not be sent");
+    const success = document.querySelector("#success");
     document.querySelector("#enquiry-card").classList.add("hidden");
-    document.querySelector("#success").classList.remove("hidden");
-    window.scrollTo({top: 0, behavior: "smooth"});
-    tellParentHeight();
+    document.body.classList.add("enquiry-complete");
+    success.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      try { success.focus({preventScroll: true}); }
+      catch (_) { success.focus(); }
+      tellParentSubmitted();
+    });
   } catch (error) {
     errorBox.textContent = error.message;
     submitButton.disabled = false;

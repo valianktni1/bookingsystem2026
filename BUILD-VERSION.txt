@@ -1,5 +1,11 @@
-BookingSystem2026 - Workflow Clarity and Enquiry Embed Hotfix
-Build: 2026.08.24-enquiry-embed-hotfix-v8.28.1
+BookingSystem2026 - Workflow Clarity and Visible Enquiry Confirmation
+Build: 2026.08.24-enquiry-confirmation-v8.28.2
+
+V8.28.2 enquiry confirmation improvement:
+- Keeps the successful confirmation in the visitor's current view after Submit.
+- Sends a protected message to the website embed so it resizes and scrolls the confirmation into view.
+- Includes a fixed-position fallback for older website embeds, preventing an apparently blank white screen.
+- Adds an accessible live status and keyboard focus to the successful confirmation.
 
 V8.28.1 urgent enquiry embed hotfix:
 

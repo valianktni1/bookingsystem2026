@@ -101,7 +101,7 @@ async function renderPackages(){
     $$('[data-delete-addon]').forEach(b=>b.onclick=()=>deleteCatalogItem("addon",d.addons.find(x=>x.id===b.dataset.deleteAddon)));
     $("#new-package").onclick=()=>newPackage(d.packages);
     $("#new-addon").onclick=()=>newAddon(d.packages,d.addons);
-    $("#copy-enquiry-embed").onclick=async()=>{const origin=location.origin;const code=`<iframe id="wbm-enquiry-form" src="${origin}/enquiry" style="width:100%;max-width:1040px;height:1600px;border:0" loading="lazy" title="Weddings By Mark enquiry form"></iframe>\n<script data-iframe-id="wbm-enquiry-form" src="${origin}/static/enquiry-embed.js"></script>`;await navigator.clipboard.writeText(code);toast("Website embed code copied")};
+    $("#copy-enquiry-embed").onclick=async()=>{const origin=location.origin;const code=`<iframe id="wbm-enquiry-form" src="${origin}/enquiry" style="width:100%;max-width:1040px;height:1600px;border:0" loading="lazy" title="Weddings By Mark enquiry form"></iframe>\n<script data-iframe-id="wbm-enquiry-form" src="${origin}/static/enquiry-embed.js?v=enquiry-confirmation-v8-28-2"></script>`;await navigator.clipboard.writeText(code);toast("Website embed code copied")};
   }catch(e){showError(e)}
 }
 async function deleteCatalogItem(type,item){if(!item)return;const label=type==="package"?"package":"add-on";if(!confirm(`Delete ${label} "${item.name}"?\n\nIt will be removed from future quotes. Items already used on accepted quotes or invoices are protected.`))return;try{await api(`/api/catalog/${type==="package"?"packages":"addons"}/${item.id}`,{method:"DELETE"});toast(`${type==="package"?"Package":"Add-on"} deleted`);renderPackages()}catch(e){toast(e.message,"error")}}
