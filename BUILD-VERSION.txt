@@ -1,5 +1,10 @@
-BookingSystem2026 - Workflow Clarity and Visible Enquiry Confirmation
-Build: 2026.08.24-enquiry-confirmation-v8.28.2
+BookingSystem2026 - Workflow Clarity and Visible Record Actions
+Build: 2026.08.24-visible-record-actions-v8.28.3
+
+V8.28.3 record action visibility fix:
+- Restores the visible "More actions" label in every booking header.
+- Gives the nested action button an explicit high-contrast header style.
+- Adds accessible menu state so the button announces whether its actions are open.
 
 V8.28.2 enquiry confirmation improvement:
 - Keeps the successful confirmation in the visitor's current view after Submit.

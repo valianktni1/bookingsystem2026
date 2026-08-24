@@ -17,7 +17,7 @@ def test_payment_due_card_keeps_count_and_adds_filtered_amount_total():
 
 def test_current_build_identifier_is_exposed_by_health_endpoint():
     backup_py = (ROOT / "app" / "backup.py").read_text()
-    assert 'BACKUP_BUILD = "2026.08.24-enquiry-confirmation-v8.28.2"' in backup_py
+    assert 'BACKUP_BUILD = "2026.08.24-visible-record-actions-v8.28.3"' in backup_py
 
 
 def test_upcoming_weddings_are_before_the_work_queues():

@@ -174,8 +174,8 @@
             <button id="record-email-client-top" class="primary email-client-primary" type="button">✉ Email client</button>
             <button id="edit-record" class="secondary" type="button">Edit details</button>
             <div class="record-more-wrap">
-              <button id="record-more" class="secondary" type="button">More actions <span>⌄</span></button>
-              <div id="record-actions-menu" class="record-actions-menu hidden">
+              <button id="record-more" class="secondary" type="button" aria-haspopup="menu" aria-expanded="false">More actions <span aria-hidden="true">⌄</span></button>
+              <div id="record-actions-menu" class="record-actions-menu hidden" role="menu">
                 <button id="record-client-area" type="button">Open quote & client area</button>
                 <button id="archive-record" type="button">${r.archived ? "Restore from archive" : "Archive record"}</button>
                 <div class="record-safety-actions"></div>
@@ -214,7 +214,10 @@
       $("#record-client-area").onclick = $("#record-portal-shortcut").onclick = () => selectRecordTab(r, "Quote", true);
       $("#record-more").onclick = event => {
         event.stopPropagation();
-        $("#record-actions-menu").classList.toggle("hidden");
+        const menu = $("#record-actions-menu");
+        const opening = menu.classList.contains("hidden");
+        menu.classList.toggle("hidden", !opening);
+        $("#record-more").setAttribute("aria-expanded", String(opening));
       };
       if ($("#next-record-action")) $("#next-record-action").onclick = () => selectRecordTab(r, next.tab, true);
       $$('[data-stage-tab]', drawer).forEach(button => button.onclick = () => selectRecordTab(r, button.dataset.stageTab, true));

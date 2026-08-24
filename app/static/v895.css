@@ -7,6 +7,8 @@
 .record-command-actions>.secondary,.record-primary-actions>.secondary{min-height:38px;border-color:#ffffff46;color:#fff;background:#ffffff12}
 .record-command-actions>.secondary:hover,.record-primary-actions>.secondary:hover{background:#ffffff22}
 .record-more-wrap{position:relative}
+.record-more-wrap>#record-more{min-height:38px;border-color:#ffffff46;color:#fff;background:#ffffff12;white-space:nowrap}
+.record-more-wrap>#record-more:hover,.record-more-wrap>#record-more[aria-expanded="true"]{color:#fff;background:#ffffff22}
 .record-actions-menu{width:245px;position:absolute;z-index:30;top:45px;right:0;padding:7px;border:1px solid #d8e2e3;border-radius:11px;color:var(--ink);background:#fff;box-shadow:0 18px 50px #07161c42}
 .record-actions-menu>button,.record-safety-actions>button{width:100%;min-height:42px;padding:0 11px;border:0;border-radius:8px;color:var(--ink);background:#fff;text-align:left;font-size:11px;font-weight:700}
 .record-actions-menu>button:hover,.record-safety-actions>button:hover{background:#f1f6f6}

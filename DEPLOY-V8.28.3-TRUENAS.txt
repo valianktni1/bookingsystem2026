@@ -1,0 +1,26 @@
+BOOKINGSYSTEM2026 V8.28.3 - VISIBLE RECORD ACTIONS
+
+1. Extract the supplied V8.28.3 ZIP.
+2. Copy its contents into the GitHub repository using GitHub Desktop.
+3. Commit and push to the main branch.
+4. Run these commands in the TrueNAS shell:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc \
+  > bookingapp-before-v8283-2026-08-24.dump
+
+ls -lh bookingapp-before-v8283-2026-08-24.dump
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+Expected build value:
+
+"build":"2026.08.24-visible-record-actions-v8.28.3"
+
+After deployment, open any booking. The top-right action beside Edit details
+should visibly read "More actions" and should open the archive/delete menu.
