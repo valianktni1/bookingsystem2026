@@ -1,5 +1,22 @@
-BookingSystem2026 - Reliability and Safety
-Build: 2026.08.23-reliability-safety-v8.27
+BookingSystem2026 - Workflow Clarity
+Build: 2026.08.23-workflow-clarity-v8.28
+
+V8.28 workflow clarity:
+
+- Gives every booking one factual journey stage everywhere, including a clear
+  provisional label after quote acceptance and before the first payment.
+- Separates Today into work that genuinely needs action and clients or payments
+  that are simply waiting or upcoming.
+- Counts clients needing action once even when one client has several alerts.
+- Removes the duplicate agreement warning after the couple has signed and the
+  countersignature is already shown as a client update.
+- Makes the client record explain its current stage and prioritise the exact next
+  admin action, including submitted forms, countersigning, overdue payments and
+  retained failed-email review.
+- Adds a compact Journey summary and mobile-friendly progress markers without
+  removing any existing quote, payment, form, file or activity controls.
+- Adds no automation. Studio Ninja communication protection, Testing Mode,
+  invoice numbering, Calendar rules, Accounts settings and backups are unchanged.
 
 V8.27 reliability and safety:
 

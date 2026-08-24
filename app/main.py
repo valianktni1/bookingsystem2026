@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.27-reliability-safety", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.28-workflow-clarity", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -621,7 +621,109 @@ def final_call_pack_json(
     }
 
 
-def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | None = None) -> dict:
+def journey_stages(db: Session, bookings: list[Booking]) -> dict[str, dict]:
+    """Derive one truthful, read-only client-journey stage for every admin view."""
+    booking_ids = [booking.id for booking in bookings]
+    if not booking_ids:
+        return {}
+    booking_form_ids = set(db.scalars(select(FormSubmission.booking_id).where(
+        FormSubmission.booking_id.in_(booking_ids),
+        FormSubmission.form_type == "booking_form",
+    )).all())
+    contracts = {
+        row.booking_id: row for row in db.scalars(select(ContractAcceptance).where(
+            ContractAcceptance.booking_id.in_(booking_ids)
+        )).all()
+    }
+    result: dict[str, dict] = {}
+    raw_labels = {
+        RecordStatus.ENQUIRY: "New enquiry", RecordStatus.QUOTED: "Quote sent",
+        RecordStatus.CONFIRMED: "Secured", RecordStatus.IN_PROGRESS: "Ready for wedding",
+        RecordStatus.COMPLETED: "Completed", RecordStatus.CANCELLED: "Cancelled",
+    }
+    for booking in bookings:
+        if booking.status == RecordStatus.CANCELLED:
+            result[booking.id] = {
+                "key": "cancelled", "label": "Cancelled", "tone": "danger",
+                "help": "The record is retained, but no further booking action or automatic email will run.",
+            }
+            continue
+        if booking.status == RecordStatus.COMPLETED:
+            result[booking.id] = {
+                "key": "completed", "label": "Completed", "tone": "success",
+                "help": "The wedding or project is complete and its history remains retained.",
+            }
+            continue
+        if booking.kind != RecordKind.WEDDING:
+            result[booking.id] = {
+                "key": booking.status.value,
+                "label": raw_labels.get(booking.status, booking.status.value.replace("_", " ").title()),
+                "tone": "success" if booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS) else "neutral",
+                "help": "This is an Ivory Digital project rather than a wedding journey.",
+            }
+            continue
+        if booking.legacy_source == "studio_ninja":
+            result[booking.id] = {
+                "key": "imported", "label": f"{raw_labels.get(booking.status, 'Secured')} · imported",
+                "tone": "success" if booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS) else "neutral",
+                "help": "Imported from Studio Ninja; general new-system client emails remain paused.",
+                "imported": True,
+            }
+            continue
+
+        accepted_quote = any(quote.status == "accepted" for quote in booking.quotes)
+        has_payment = bool(booking.deposit_paid_date) or any(
+            Decimal(invoice.paid or 0) > 0 for invoice in booking.invoices
+        )
+        booking_form_complete = booking.id in booking_form_ids
+        contract = contracts.get(booking.id)
+        agreement_complete = bool(contract and (
+            contract.is_legacy_import or contract.supplier_signed_at
+        ))
+        final_call = next((task for task in booking.tasks
+                           if task.workflow_key == "wbm_final_details_call"), None)
+
+        if has_payment and booking_form_complete and agreement_complete:
+            if final_call and final_call.completed:
+                result[booking.id] = {
+                    "key": "ready", "label": "Ready for wedding", "tone": "success",
+                    "help": "Payment, forms, agreement and the final-details call are complete.",
+                }
+            else:
+                result[booking.id] = {
+                    "key": "details_complete", "label": "Booking details complete", "tone": "success",
+                    "help": "Payment, Wedding Booking Form and agreement are complete; final preparations are still ahead.",
+                }
+        elif has_payment:
+            result[booking.id] = {
+                "key": "secured", "label": "Secured", "tone": "success",
+                "help": "The first payment has been received; the date is secured while the remaining details are completed.",
+            }
+        elif accepted_quote:
+            result[booking.id] = {
+                "key": "quote_accepted", "label": "Quote accepted · provisional", "tone": "warning",
+                "help": "The couple chose their package; the date becomes secured when their first payment is recorded.",
+            }
+        elif booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS):
+            result[booking.id] = {
+                "key": "payment_missing", "label": "Payment not recorded · provisional", "tone": "warning",
+                "help": "This record is marked as booked, but no first payment is stored; review it before treating the date as secured.",
+            }
+        elif booking.status == RecordStatus.QUOTED:
+            result[booking.id] = {
+                "key": "quote_sent", "label": "Quote sent", "tone": "neutral",
+                "help": "The quote is with the couple and is waiting for their package choice.",
+            }
+        else:
+            result[booking.id] = {
+                "key": "enquiry", "label": "New enquiry", "tone": "neutral",
+                "help": "The enquiry is waiting for you to review it and prepare the quote.",
+            }
+    return result
+
+
+def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | None = None,
+                 journey_stage: dict | None = None) -> dict:
     data = {"id": item.id, "brand": item.brand.value, "kind": item.kind.value, "status": item.status.value,
             "title": item.title, "event_date": item.event_date.isoformat() if item.event_date else None,
             "venue_or_project": item.venue_or_project, "venue_address": item.venue_address,
@@ -637,7 +739,8 @@ def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | N
             "automation_suppressed": item.automation_suppressed,
             "is_test": item.is_test,
             "archived_at": item.archived_at.isoformat() if item.archived_at else None,
-            "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat()}
+            "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat(),
+            "journey_stage": journey_stage}
     if full:
         visible_tasks = [
             task for task in item.tasks
@@ -1230,13 +1333,15 @@ def delete_addon(addon_id: str, _: Admin = Depends(current_admin), db: Session =
 @app.get("/api/dashboard")
 def dashboard(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     counts = dashboard_counts(db)
-    upcoming = db.scalars(select(Booking).options(selectinload(Booking.client))
+    stage_loads = (selectinload(Booking.client), selectinload(Booking.quotes),
+                   selectinload(Booking.tasks), selectinload(Booking.invoices))
+    upcoming = db.scalars(select(Booking).options(*stage_loads)
                           .where(Booking.archived_at.is_(None),
                                  Booking.status != RecordStatus.CANCELLED,
                                  Booking.event_date >= date.today())
                           .order_by(Booking.event_date).limit(8)).all()
     upcoming_weddings = db.scalars(
-        select(Booking).options(selectinload(Booking.client)).where(
+        select(Booking).options(*stage_loads).where(
             Booking.archived_at.is_(None),
             Booking.brand == Brand.WBM,
             Booking.kind == RecordKind.WEDDING,
@@ -1250,9 +1355,11 @@ def dashboard(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
                                             Booking.status != RecordStatus.CANCELLED,
                                             visible_task_condition())
                        .order_by(Task.due_at.asc().nullslast()).limit(10)).all()
+    stage_rows = list({row.id: row for row in [*upcoming, *upcoming_weddings]}.values())
+    stages = journey_stages(db, stage_rows)
     counts.update({
-        "upcoming": [booking_json(x) for x in upcoming],
-        "upcoming_weddings": [booking_json(x) for x in upcoming_weddings],
+        "upcoming": [booking_json(x, journey_stage=stages.get(x.id)) for x in upcoming],
+        "upcoming_weddings": [booking_json(x, journey_stage=stages.get(x.id)) for x in upcoming_weddings],
         "tasks": [task_json(t) for t in tasks],
     })
     return counts
@@ -1396,11 +1503,11 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                 booking, "Wedding Booking Form has not been submitted",
                 "Journey", "review_forms",
             ))
-        elif native_workflow and booking_form_complete and not agreement_complete:
+        elif native_workflow and booking_form_complete and not agreement_complete and not contract:
             queues["agreements_waiting"].append(item(
                 booking,
-                "Couple signed · your countersignature is needed" if contract else "Agreement has not been signed",
-                "Journey", "countersign" if contract else "review_forms",
+                "Agreement has not been signed",
+                "Journey", "review_forms",
             ))
 
         for invoice in booking.invoices:
@@ -1502,7 +1609,10 @@ def list_bookings(brand: Brand | None = None, kind: RecordKind | None = None,
         Booking.event_date.is_not(None),
     )).all()
     active_date_counts = Counter(active_wedding_dates)
-    stmt = select(Booking).options(selectinload(Booking.client)).order_by(Booking.event_date.asc().nullslast(), Booking.created_at.desc())
+    stmt = select(Booking).options(
+        selectinload(Booking.client), selectinload(Booking.quotes),
+        selectinload(Booking.tasks), selectinload(Booking.invoices),
+    ).order_by(Booking.event_date.asc().nullslast(), Booking.created_at.desc())
     stmt = stmt.where(Booking.archived_at.is_not(None) if archived else Booking.archived_at.is_(None))
     if brand:
         stmt = stmt.where(Booking.brand == brand)
@@ -1513,9 +1623,10 @@ def list_bookings(brand: Brand | None = None, kind: RecordKind | None = None,
         stmt = stmt.join(Client).where(or_(Booking.title.ilike(term), Booking.venue_or_project.ilike(term),
                                            Client.email.ilike(term), Client.company_name.ilike(term)))
     rows = db.scalars(stmt).unique().all()
+    stages = journey_stages(db, list(rows))
     result = []
     for row in rows:
-        data = booking_json(row)
+        data = booking_json(row, journey_stage=stages.get(row.id))
         is_active_wedding = (
             row.archived_at is None
             and row.brand == Brand.WBM
@@ -1551,7 +1662,8 @@ def get_booking(booking_id: str, _: Admin = Depends(current_admin), db: Session 
     item = full_booking(db, booking_id)
     activity = db.scalars(select(AuditLog).where(AuditLog.entity_id == booking_id)
                           .order_by(AuditLog.created_at.desc())).all()
-    return booking_json(item, full=True, activity=activity)
+    stage = journey_stages(db, [item]).get(item.id)
+    return booking_json(item, full=True, activity=activity, journey_stage=stage)
 
 
 @app.patch("/api/bookings/{booking_id}")

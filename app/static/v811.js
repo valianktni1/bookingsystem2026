@@ -28,6 +28,14 @@
     final_calls: ["Final-detail calls", "Private telephone reminders due soon", "☎"],
   };
   const queueOrder = Object.keys(queueCopy);
+  const actionQueueOrder = [
+    "communication_failures", "client_updates", "overdue_payments",
+    "new_enquiries", "final_calls",
+  ];
+  const waitingQueueOrder = [
+    "quotes_waiting", "accepted_payment", "forms_waiting",
+    "agreements_waiting", "payments_due",
+  ];
   const baseNavigateV811 = navigate;
   const baseOpenDrawerV811 = openDrawer;
   const baseCloseDrawerV811 = closeDrawer;
@@ -213,7 +221,17 @@
   };
 
   async function renderJourneyV811(r, body) {
+    const stage = recordStage(r);
+    const facts = recordJourneyFacts(r, state.currentPortal || {});
+    const agreementComplete = Boolean(facts.contract && (
+      facts.contract.is_legacy_import || facts.contract.fully_signed || facts.contract.supplier_signed_at
+    ));
+    const progress = [
+      ["Quote", Boolean(facts.quote)], ["Payment", facts.hasPayment],
+      ["Booking form", Boolean(facts.bookingForm)], ["Agreement", agreementComplete],
+    ];
     body.innerHTML = `<div class="v811-journey">
+      <section class="v828-journey-summary ${attr(stage.tone || "neutral")}"><div><small>CURRENT JOURNEY STAGE</small><h3>${esc(stage.label)}</h3><p>${esc(stage.help || "The stored booking facts determine this status automatically.")}</p></div><div class="v828-progress-pills">${progress.map(([label, done]) => `<span class="${done ? "done" : "waiting"}"><i>${done ? "✓" : "○"}</i>${esc(label)}</span>`).join("")}</div></section>
       <section class="v811-journey-block v811-journey-quote"><header><div><small>STEP 1</small><h3>Quote, client access and emails</h3></div><span>Everything sent to the couple is recorded here</span></header><div data-v811-quote></div></section>
       <section class="v811-journey-block v811-journey-forms"><header><div><small>STEPS 2 & 3</small><h3>Wedding Booking Form and agreement</h3></div><span>The couple's answers and protected signatures</span></header><div data-v811-forms></div></section>
     </div>`;
@@ -369,6 +387,7 @@
   };
 
   function derivedJourneyStatus(r) {
+    if (r.journey_stage?.label) return r.journey_stage.label;
     if (r.status === "cancelled") return "Cancelled";
     if (r.status === "completed") return "Completed";
     const facts = recordJourneyFacts(r, state.currentPortal || {});
@@ -387,6 +406,7 @@
 
   function suggestedAction(r) {
     const next = recordNextAction(r, state.currentPortal || {});
+    if (next.action) return next;
     const title = next.title.toLowerCase();
     if (title.includes("send the package quote")) return { ...next, action: "send_quote" };
     if (title.includes("record their first payment") || title.includes("outstanding") || title.includes("balance remaining")) return { ...next, action: "record_payment" };
@@ -397,7 +417,7 @@
     return { ...next, action: "view" };
   }
 
-  async function performRecordAction(r, section, action) {
+  async function performRecordAction(r, section, action, details = {}) {
     await selectRecordTab(r, section, true);
     if (action === "send_quote") $("#send-quote")?.click();
     else if (action === "record_payment") ($("[data-payment-invoice]") || $("#new-invoice"))?.click();
@@ -409,16 +429,31 @@
     else if (action === "review_forms") $(".v811-journey-forms")?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (action === "review_booking_form") $(".v811-journey-forms")?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (action === "review_final_timings") $(".v820-final")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (action === "retry_email") {
+      const retry = details.emailId
+        ? $(`[data-retry-email="${CSS.escape(details.emailId)}"]`, $("#drawer"))
+        : $("[data-retry-email]", $("#drawer"));
+      retry?.scrollIntoView({ behavior: "smooth", block: "center" });
+      retry?.focus();
+    }
     else if (action === "open_final_call_pack") $(".v823-final-call-pack")?.scrollIntoView({ behavior: "smooth", block: "start" });
     else if (action === "open_task") $(".overview-task-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   function decorateOpenRecord(r) {
     const badge = $(".record-title-line .status", $("#drawer"));
-    if (badge) badge.textContent = derivedJourneyStatus(r);
+    if (badge) {
+      badge.textContent = derivedJourneyStatus(r);
+      badge.className = `status ${recordStageClass(r)}`;
+      const identity = badge.closest(".record-title-line")?.parentElement;
+      identity?.querySelector(".v828-stage-help")?.remove();
+      if (recordStage(r).help) badge.closest(".record-title-line")?.insertAdjacentHTML(
+        "afterend", `<small class="v828-stage-help">${esc(recordStage(r).help)}</small>`
+      );
+    }
     const action = suggestedAction(r);
     const button = $("#next-record-action", $("#drawer"));
-    if (button) button.onclick = () => performRecordAction(r, canonicalSection(action.tab), action.action);
+    if (button) button.onclick = () => performRecordAction(r, canonicalSection(action.tab), action.action, action);
   }
 
   openDrawer = async function (id, tab = "Overview", options = {}) {
@@ -469,9 +504,8 @@
     if (renderNumber !== dashboardRenderNumber || state.view !== "dashboard") return;
     const d = state.dashboard || {};
     const queues = Object.fromEntries(queueOrder.map(key => [key, (data.queues[key] || []).filter(row => state.brand === "all" || row.brand === state.brand)]));
-    const clientUpdateBookings = new Set(queues.client_updates.map(row => row.booking_id));
-    const urgent = queues.communication_failures.length + queues.client_updates.length + queues.overdue_payments.length + queues.new_enquiries.length + queues.accepted_payment.length
-      + queues.agreements_waiting.filter(row => !clientUpdateBookings.has(row.booking_id)).length;
+    const actionBookingIds = new Set(actionQueueOrder.flatMap(key => queues[key].map(row => row.booking_id)));
+    const urgent = actionBookingIds.size;
     const upcomingSource = state.brand === "ivory"
       ? (d.upcoming || []).filter(record => record.kind === "digital")
       : (d.upcoming_weddings || d.upcoming || []);
@@ -481,10 +515,12 @@
       ? "Your next project dates and deadlines"
       : "Your next wedding dates, in order";
     const tasks = (d.tasks || []).filter(task => state.brand === "all" || state.records.find(record => record.id === task.booking_id)?.brand === state.brand);
-    $("#content").innerHTML = `<section class="v811-today-head"><div><small>YOUR WORKING DAY</small><h2>Today</h2><p>Each item opens the right client and the exact part of their journey.</p></div><b class="${urgent ? "attention" : "clear"}">${urgent ? `${urgent} need attention` : "All clear"}</b></section>
+    const actionKeys = actionQueueOrder.filter(key => queues[key].length);
+    const waitingKeys = waitingQueueOrder.filter(key => queues[key].length);
+    $("#content").innerHTML = `<section class="v811-today-head"><div><small>YOUR WORKING DAY</small><h2>Today</h2><p>Action items are separated from clients you are simply waiting for.</p></div><b class="${urgent ? "attention" : "clear"}">${urgent ? `${urgent} client${urgent === 1 ? "" : "s"} need action` : "All clear"}</b></section>
       <section class="panel v824-upcoming-weddings"><div class="panel-title"><div><h2>${esc(upcomingTitle)}</h2><p>${esc(upcomingHelp)}</p></div><button data-jump="calendar">View all</button></div>${upcoming.length ? upcoming.slice(0, 7).map(recordRow).join("") : `<div class="empty"><strong>No upcoming records</strong>Your next dated booking will appear here.</div>`}</section>
-      <section class="v811-queue-cards">${queueOrder.map(key => queueCard(key, queues[key])).join("")}</section>
-      <section class="v811-worklists">${queueOrder.filter(key => queues[key].length).map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>Your upcoming dates and private tasks are still shown below.</article>`}</section>
+      <section class="v828-dashboard-group action"><header><div><small>START HERE</small><h2>Needs your action</h2><p>Only clients with something you can genuinely do now.</p></div><b>${urgent}</b></header><div class="v811-queue-cards">${actionQueueOrder.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${actionKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>You are clear to move on to the waiting and upcoming list.</article>`}</div></section>
+      <section class="v828-dashboard-group waiting"><header><div><small>KEEP AN EYE ON</small><h2>Waiting and upcoming</h2><p>No action is needed until the couple responds or a payment becomes due.</p></div><b>${waitingKeys.reduce((sum, key) => sum + queues[key].length, 0)}</b></header><div class="v811-queue-cards">${waitingQueueOrder.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${waitingKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing is waiting</strong>There are no watched client steps or payments in the next 60 days.</article>`}</div></section>
       <section class="dash-grid v811-dashboard-lower v824-dashboard-tasks"><article class="panel"><div class="panel-title"><div><h2>Private things to do · ${d.open_tasks || 0}</h2><p>These never email a client</p></div><button data-jump="workflows">View all</button></div>${tasks.length ? tasks.slice(0, 7).map(task => taskRow(task, true)).join("") : `<div class="empty"><strong>You're all caught up</strong>No open private tasks.</div>`}</article></section>`;
     $$('[data-queue-record]', $("#content")).forEach(button => button.onclick = () => {
       if (button.dataset.action === "open_email" && window.openInboxMessageFromDashboard) {
@@ -543,7 +579,7 @@
   }
 
   function searchResultRecord(record, recent = false) {
-    return `<button class="v811-search-result" data-search-record="${attr(record.id)}" data-section="Overview"><i class="record-avatar ${record.brand}">${esc(initials(record))}</i><span><strong>${esc(record.title)}</strong><small>${esc(record.venue_or_project || record.client.email)}${record.archived ? " · Archived" : ""}</small></span><em>${recent ? "Recent" : statusText(record.status)}</em></button>`;
+    return `<button class="v811-search-result" data-search-record="${attr(record.id)}" data-section="Overview"><i class="record-avatar ${record.brand}">${esc(initials(record))}</i><span><strong>${esc(record.title)}</strong><small>${esc(record.venue_or_project || record.client.email)}${record.archived ? " · Archived" : ""}</small></span><em>${recent ? "Recent" : recordStageLabel(record)}</em></button>`;
   }
 
   async function showGlobalSearch(query = "") {

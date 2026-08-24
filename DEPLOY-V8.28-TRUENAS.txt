@@ -1,0 +1,31 @@
+BOOKINGSYSTEM2026 V8.28 - WORKFLOW CLARITY
+
+1. Extract the supplied V8.28 ZIP.
+2. Publish the complete extracted contents to the main branch in GitHub Desktop.
+3. Wait until GitHub shows the V8.28 commit on main.
+4. In the TrueNAS shell run exactly:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc \
+  > bookingapp-before-v828-2026-08-23.dump
+
+ls -lh bookingapp-before-v828-2026-08-23.dump
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+5. The health response must include:
+
+"status":"ok"
+"google_calendar_configured":true
+"build":"2026.08.23-workflow-clarity-v8.28"
+
+6. Hard-refresh the browser once. On Android/Samsung Browser, close the booking
+   tab and reopen it if the old V8.27 badge is still cached.
+
+This deployment sends no email, changes no invoice or payment, and runs no
+Accounts sync. Existing Studio Ninja automation protection is unchanged.
