@@ -1,5 +1,16 @@
-BookingSystem2026 - Workflow Clarity
-Build: 2026.08.23-workflow-clarity-v8.28
+BookingSystem2026 - Workflow Clarity and Enquiry Embed Hotfix
+Build: 2026.08.24-enquiry-embed-hotfix-v8.28.1
+
+V8.28.1 urgent enquiry embed hotfix:
+
+- Restores the public Wedding Enquiry Form iframe on perfectweddingsbymark.uk
+  after the V8.27 security-header tightening inadvertently blocked it.
+- Allows framing only for the single public /enquiry document and only from the
+  canonical Weddings By Mark website addresses.
+- Keeps the private admin, client records, invoices and every other route under
+  the original DENY protection.
+- Sends no email and changes no booking, invoice, payment, Calendar or Accounts
+  data during deployment.
 
 V8.28 workflow clarity:
 

@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.28-workflow-clarity", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.28.1-enquiry-embed-hotfix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -108,7 +108,19 @@ async def protective_response_headers(request: Request, call_next):
     """Apply low-risk browser protections without changing the existing UI."""
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("X-Frame-Options", "DENY")
+    # The public enquiry form is deliberately embedded on the Weddings By Mark
+    # WordPress site.  X-Frame-Options cannot express a safe cross-origin allow
+    # list, so use CSP for this one public document and keep every admin/client
+    # page protected by DENY.
+    if request.url.path.rstrip("/") == "/enquiry":
+        response.headers["Content-Security-Policy"] = (
+            "frame-ancestors 'self' https://perfectweddingsbymark.uk "
+            "https://www.perfectweddingsbymark.uk"
+        )
+        if "X-Frame-Options" in response.headers:
+            del response.headers["X-Frame-Options"]
+    else:
+        response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
     if settings.app_env.lower() == "production":

@@ -167,9 +167,9 @@ def test_v828_dashboard_and_record_actions_are_explicit_and_mobile_friendly():
     app_js = (root / "app/static/app.js").read_text()
     dashboard_js = (root / "app/static/v811.js").read_text()
     css = (root / "app/static/v811.css").read_text()
-    assert "WORKFLOW CLARITY V8.28" in index
-    assert "/static/app.js?v=workflow-clarity-v8-28" in index
-    assert "/static/v811.js?v=workflow-clarity-v8-28" in index
+    assert "WORKFLOW CLARITY V8.28.1" in index
+    assert "/static/app.js?v=enquiry-embed-hotfix-v8-28-1" in index
+    assert "/static/v811.js?v=enquiry-embed-hotfix-v8-28-1" in index
     assert "Needs your action" in dashboard_js
     assert "Waiting and upcoming" in dashboard_js
     assert "new Set(actionQueueOrder.flatMap" in dashboard_js
@@ -179,6 +179,24 @@ def test_v828_dashboard_and_record_actions_are_explicit_and_mobile_friendly():
     assert "Studio Ninja handles the existing client messages" in app_js
     assert ".v828-journey-summary" in css
     assert "@media(max-width:560px)" in css
+
+
+def test_public_enquiry_can_embed_only_on_the_wbm_website():
+    reset_database()
+    with TestClient(app) as client:
+        enquiry = client.get("/enquiry")
+        assert enquiry.status_code == 200
+        assert "x-frame-options" not in enquiry.headers
+        policy = enquiry.headers["content-security-policy"]
+        assert policy == (
+            "frame-ancestors 'self' https://perfectweddingsbymark.uk "
+            "https://www.perfectweddingsbymark.uk"
+        )
+
+        private_app = client.get("/dashboard")
+        assert private_app.status_code == 200
+        assert private_app.headers["x-frame-options"] == "DENY"
+        assert "content-security-policy" not in private_app.headers
 
 
 def teardown_module():
