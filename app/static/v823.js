@@ -14,11 +14,20 @@
     return `<div class="v823-readiness"><div class="v823-badges">${badges.map(([ready,label])=>`<span class="${ready?"ready":"check"}"><i>${ready?"✓":"!"}</i>${esc(label)}</span>`).join("")}</div>${warnings.length?`<div class="v823-warnings"><strong>Check during the call</strong>${warnings.map(text=>`<span>• ${esc(text)}</span>`).join("")}</div>`:`<div class="v823-all-ready"><strong>✓ Everything recorded is ready for the call</strong></div>`}</div>`;
   }
 
+  function invoiceReference(r) {
+    const invoices=r.invoices||[];
+    const active=invoices.filter(invoice=>!["void","cancelled"].includes(invoice.status));
+    const shown=active.length?active:invoices;
+    if(!shown.length)return `<section class="v823-invoice-reference empty"><strong>No invoice is attached to this booking</strong><span>Check the package details recorded above during the call.</span></section>`;
+    return `<section class="v823-invoice-reference"><header><div><small>PACKAGE & INVOICE</small><h4>Open what the couple actually booked</h4></div><span>Shown here without downloading first</span></header><div>${shown.map(invoice=>`<article><span><strong>${esc(invoice.number)}</strong><small>${esc(invoice.description||r.package_name||"Invoice details")} · ${money(invoice.total)}</small></span><div><button class="primary" data-final-call-invoice="${invoice.id}" data-invoice-number="${attr(invoice.number)}" type="button">View invoice</button><a class="secondary" href="/api/invoices/${invoice.id}/pdf">Download PDF</a></div></article>`).join("")}</div></section>`;
+  }
+
   function panel(r,data) {
     const imported=r.legacy_source==="studio_ninja";
     return `<section class="v811-journey-block v823-final-call-pack"><header><div><small>STEP 5</small><h3>Complete final telephone-call pack</h3></div><span>Private checklist, notes and printable working copy</span></header><div class="v823-body">
       <div class="v823-proof ${data.completed?"complete":""}"><i>${data.completed?"✓":"☎"}</i><span><small>${data.completed?"FINAL CALL COMPLETED":"READY FOR YOUR FINAL CALL"}</small><strong>${data.completed?(data.completed_at?fmtDateTime(data.completed_at):"Task marked complete"):`${data.checked_count}/${data.checklist_count} checks confirmed`}</strong><em>${data.completed_by?`Completed by ${esc(data.completed_by)}`:"Save your progress and return whenever you need to."}</em></span></div>
       ${readinessCard(data)}
+      ${invoiceReference(r)}
       ${imported?`<div class="v823-safety"><strong>Studio Ninja protection remains on</strong><span>This is your private working pack only. Saving it, printing it or completing the call sends no email and does not enable any other automation.</span></div>`:`<div class="v823-safety"><strong>Private working area</strong><span>Nothing here is shown or emailed to the couple. It simply brings the existing booking records together for your call.</span></div>`}
       <section class="v823-checklist"><div><small>FINAL-CALL CHECKLIST</small><h4>Work through these while you speak</h4></div>${(data.checklist||[]).map(item=>`<label><input type="checkbox" data-final-call-check="${attr(item.key)}" ${item.checked?"checked":""}><span><i>✓</i>${esc(item.label)}</span></label>`).join("")}</section>
       <label class="v823-notes"><span><small>PRIVATE CALL NOTES</small><strong>Anything agreed, changed or needing a follow-up</strong></span><textarea data-final-call-notes rows="7" placeholder="Type your notes here while you speak to the couple…">${esc(data.notes||"")}</textarea></label>
@@ -41,6 +50,7 @@
   }
 
   function wire(r,body,data) {
+    body.querySelectorAll("[data-final-call-invoice]").forEach(button=>button.onclick=()=>showPdfPreview(`Invoice ${button.dataset.invoiceNumber}`,`/api/invoices/${button.dataset.finalCallInvoice}/pdf?inline=true`,`/api/invoices/${button.dataset.finalCallInvoice}/pdf`));
     const save=body.querySelector("[data-final-call-save]");
     if(save)save.onclick=async()=>{save.disabled=true;try{await savePack(r,body,data.completed,"Final-call progress saved privately")}catch(error){save.disabled=false;toast(error.message,"error")}};
     const complete=body.querySelector("[data-final-call-complete]");

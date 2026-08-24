@@ -33,7 +33,7 @@ from .models import (Booking, BusinessProfile, ContractAcceptance, Invoice,
 from .pdf import contract_acceptance_pdf, invoice_pdf
 
 
-BACKUP_BUILD = "2026.08.24-visible-record-actions-v8.28.3"
+BACKUP_BUILD = "2026.08.24-invoice-preview-v8.28.4"
 BACKUP_LOCK = threading.Lock()
 SENSITIVE_SETTING_KEYS = {
     "google_calendar_connection",

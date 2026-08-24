@@ -167,9 +167,9 @@ def test_v828_dashboard_and_record_actions_are_explicit_and_mobile_friendly():
     app_js = (root / "app/static/app.js").read_text()
     dashboard_js = (root / "app/static/v811.js").read_text()
     css = (root / "app/static/v811.css").read_text()
-    assert "WORKFLOW CLARITY V8.28.3" in index
-    assert "/static/app.js?v=visible-record-actions-v8-28-3" in index
-    assert "/static/v811.js?v=visible-record-actions-v8-28-3" in index
+    assert "WORKFLOW CLARITY V8.28.4" in index
+    assert "/static/app.js?v=invoice-preview-v8-28-4" in index
+    assert "/static/v811.js?v=invoice-preview-v8-28-4" in index
     assert "Needs your action" in dashboard_js
     assert "Waiting and upcoming" in dashboard_js
     assert "new Set(actionQueueOrder.flatMap" in dashboard_js

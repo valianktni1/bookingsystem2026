@@ -1,5 +1,12 @@
-BookingSystem2026 - Workflow Clarity and Visible Record Actions
-Build: 2026.08.24-visible-record-actions-v8.28.3
+BookingSystem2026 - Workflow Clarity and In-System Invoice Preview
+Build: 2026.08.24-invoice-preview-v8.28.4
+
+V8.28.4 invoice access improvement:
+- Restores in-system View invoice previews for every invoice card.
+- Works for protected Studio Ninja imports and bookings created in this system.
+- Keeps Download PDF and receipts as separate choices.
+- Adds direct invoice access inside the private final telephone-call pack.
+- Adds in-screen preview access to the main Payments & invoices register.
 
 V8.28.3 record action visibility fix:
 - Restores the visible "More actions" label in every booking header.

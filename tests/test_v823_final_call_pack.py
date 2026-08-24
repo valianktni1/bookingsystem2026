@@ -181,6 +181,11 @@ def test_studio_ninja_can_use_private_pack_without_enabling_or_sending_anything(
         login(client)
         with SessionLocal() as db:
             booking = add_wedding(db, imported=True)
+            db.add(Invoice(
+                booking_id=booking.id, brand=Brand.WBM, sequence=9452, number="WBM09452",
+                issue_date=date.today(), total=Decimal("1450"), paid=Decimal("1450"),
+                status="paid", description="Protected Studio Ninja Ultimate package",
+            ))
             db.commit()
             booking_id = booking.id
 
@@ -188,6 +193,10 @@ def test_studio_ninja_can_use_private_pack_without_enabling_or_sending_anything(
         assert status.status_code == 200
         assert status.json()["legacy_source"] == "studio_ninja"
         assert status.json()["automation_suppressed"] is True
+        invoice = client.get(f"/api/bookings/{booking_id}").json()["invoices"][0]
+        preview = client.get(f"/api/invoices/{invoice['id']}/pdf?inline=true")
+        assert preview.status_code == 200
+        assert preview.headers["content-disposition"].startswith("inline")
         assert "Final Wedding Timings have not been submitted" in status.json()["readiness"]["warnings"]
 
         saved = client.put(f"/api/bookings/{booking_id}/final-call-pack", json={
@@ -209,8 +218,8 @@ def test_v823_assets_and_private_wording_are_wired():
     index = (root / "app/static/index.html").read_text()
     javascript = (root / "app/static/v823.js").read_text()
     dashboard = (root / "app/static/v811.js").read_text()
-    assert "/static/v823.css?v=final-call-pack-v8-23" in index
-    assert "/static/v823.js?v=final-call-pack-v8-23" in index
+    assert "/static/v823.css?v=invoice-preview-v8-28-4" in index
+    assert "/static/v823.js?v=invoice-preview-v8-28-4" in index
     assert "Complete final telephone-call pack" in javascript
     assert "It does not email the couple" in javascript
     assert "Studio Ninja protection remains on" in javascript

@@ -49,3 +49,5 @@
 .v88-due-cell small{margin-top:4px;color:var(--muted);font-size:8px;line-height:1.3}
 .v88-due-cell.overdue strong,.v88-due-cell.overdue small{color:#9a3f35}
 .v88-due-cell.due_today strong,.v88-due-cell.due_today small{color:#a46b12;font-weight:800}
+.file-actions .invoice-preview-button{min-height:30px;padding:5px 9px;border:0;border-radius:6px;color:#fff;background:var(--teal);font-size:8px;font-weight:800;cursor:pointer}
+.file-actions .invoice-preview-button:hover{background:var(--teal2)}
