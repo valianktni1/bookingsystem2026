@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.28.4.1-inline-pdf-hotfix", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.28.4.2-client-receipt-open-fix", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -2003,7 +2003,14 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
         raw, _ = issue_portal_token(
             db, booking.id, portal_lifetime_days(booking)
         )
-        portal_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=invoices"
+        # Open the exact receipt from the payment-confirmation email. The
+        # client can still close the preview and use the rest of their secure
+        # account, while phone email browsers no longer have to understand a
+        # forced PDF download before showing anything useful.
+        portal_url = (
+            f"{settings.app_url.rstrip('/')}/client/{raw}"
+            f"?tab=invoices&open=receipt&invoice={invoice.id}"
+        )
         outstanding = max(Decimal("0"), invoice.total - invoice.paid)
         deposit_remaining = max(Decimal("0"), booking.deposit_amount - invoice.paid)
         try:
@@ -2095,13 +2102,15 @@ def download_invoice_pdf(invoice_id: str, inline: bool = Query(False),
 
 
 @app.get("/api/invoices/{invoice_id}/receipt.pdf")
-def download_receipt_pdf(invoice_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+def download_receipt_pdf(invoice_id: str, inline: bool = Query(False),
+                         _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     invoice = full_invoice(db, invoice_id)
     if invoice.paid <= 0:
         raise HTTPException(422, "Record a payment before creating a receipt")
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile, receipt=True), media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{invoice.number}-receipt.pdf"'})
+                    headers={"Content-Disposition":
+                             f'{"inline" if inline else "attachment"}; filename="{invoice.number}-receipt.pdf"'})
 
 
 @app.get("/api/documents")
@@ -2982,13 +2991,15 @@ def public_invoice_pdf(token: str, invoice_id: str, inline: bool = Query(False),
 
 
 @app.get("/api/client/{token}/invoices/{invoice_id}/receipt.pdf")
-def public_receipt_pdf(token: str, invoice_id: str, db: Session = Depends(get_db)):
+def public_receipt_pdf(token: str, invoice_id: str, inline: bool = Query(False),
+                       db: Session = Depends(get_db)):
     invoice = public_invoice_for_portal(db, token, invoice_id)
     if invoice.paid <= 0:
         raise HTTPException(422, "A receipt is available after a payment has been recorded")
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile, receipt=True), media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{invoice.number}-receipt.pdf"'})
+                    headers={"Content-Disposition":
+                             f'{"inline" if inline else "attachment"}; filename="{invoice.number}-receipt.pdf"'})
 
 
 @app.get("/api/client/{token}/documents/{document_id}")

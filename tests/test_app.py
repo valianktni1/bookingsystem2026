@@ -66,6 +66,15 @@ def test_branded_email_artwork_is_brand_specific():
     assert ">OPEN YOUR SECURE ACCOUNT</a>" in wbm_html
     assert ">https://booking.weddingsbymark.uk/client/example</a>" not in wbm_html
     assert wbm_images == {"weddings-by-mark-logo.png", "weddings-by-mark-awards.png"}
+    receipt_message = build_email_message(
+        wedding, wbm_profile, "Payment received",
+        "https://booking.weddingsbymark.uk/client/receipt-token"
+        "?tab=invoices&open=receipt&invoice=invoice-id",
+        "mark@perfectweddingsbymark.uk",
+    )
+    receipt_html = next(part.get_content() for part in receipt_message.walk()
+                        if part.get_content_type() == "text/html")
+    assert ">VIEW YOUR PAYMENT RECEIPT</a>" in receipt_html
     notification = build_email_message(
         wedding, wbm_profile, "New enquiry", "A new enquiry has arrived",
         "mark@perfectweddingsbymark.uk", recipient="mark@perfectweddingsbymark.uk",
@@ -214,7 +223,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
                                  "google_calendar_configured": False,
-                                     "build": "2026.08.24-inline-pdf-hotfix-v8.28.4.1"}
+                                     "build": "2026.08.25-client-receipt-open-v8.28.4.2"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -458,6 +467,15 @@ def test_phase_two_b_flow(monkeypatch):
         assert inline_pdf.headers["content-security-policy"] == "frame-ancestors 'self'"
         receipt = client.get(f"/api/invoices/{wbm_invoice.json()['id']}/receipt.pdf")
         assert receipt.status_code == 200
+        assert receipt.headers["content-disposition"].startswith("attachment")
+        assert receipt.headers["x-frame-options"] == "DENY"
+        inline_receipt = client.get(
+            f"/api/invoices/{wbm_invoice.json()['id']}/receipt.pdf?inline=true"
+        )
+        assert inline_receipt.status_code == 200
+        assert inline_receipt.headers["content-disposition"].startswith("inline")
+        assert inline_receipt.headers["x-frame-options"] == "SAMEORIGIN"
+        assert inline_receipt.headers["content-security-policy"] == "frame-ancestors 'self'"
 
         invoices = client.get("/api/invoices").json()
         assert {row["number"] for row in invoices} == {"ID02001", "WBM02001"}
@@ -801,7 +819,18 @@ def test_phase_two_b_flow(monkeypatch):
         assert payment_mail["values"]["payment_amount"] == "£50.00"
         assert payment_mail["values"]["total_paid"] == "£50.00"
         assert payment_mail["values"]["payment_status"] == "Your booking is secured"
-        assert payment_mail["portal_url"].endswith("?tab=invoices")
+        assert payment_mail["portal_url"].endswith(
+            f"?tab=invoices&open=receipt&invoice={invoice['id']}"
+        )
+        payment_token = payment_mail["portal_url"].split("/client/")[1].split("?")[0]
+        public_inline_receipt = client.get(
+            f"/api/client/{payment_token}/invoices/{invoice['id']}/receipt.pdf?inline=true"
+        )
+        assert public_inline_receipt.status_code == 200
+        assert public_inline_receipt.content.startswith(b"%PDF")
+        assert public_inline_receipt.headers["content-disposition"].startswith("inline")
+        assert public_inline_receipt.headers["x-frame-options"] == "SAMEORIGIN"
+        assert public_inline_receipt.headers["content-security-policy"] == "frame-ancestors 'self'"
         secured = client.get(f"/api/bookings/{imported_enquiry[0]['id']}").json()
         assert secured["status"] == "confirmed"
 

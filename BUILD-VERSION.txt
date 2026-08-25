@@ -1,5 +1,11 @@
-BookingSystem2026 - Workflow Clarity and Working In-System PDF Preview
-Build: 2026.08.24-inline-pdf-hotfix-v8.28.4.1
+BookingSystem2026 - Workflow Clarity and Reliable Client Receipt Opening
+Build: 2026.08.25-client-receipt-open-v8.28.4.2
+
+V8.28.4.2 client receipt opening fix:
+- Payment-confirmation emails open the exact receipt automatically inside the secure client account.
+- Client receipts now have a protected inline preview and a separate download.
+- The email action clearly reads VIEW YOUR PAYMENT RECEIPT.
+- Keeps the V8.28.4.1 same-origin PDF protections and all existing workflow safeguards.
 
 V8.28.4.1 inline PDF security hotfix:
 - Allows authenticated inline PDFs to display inside this application's own modal.

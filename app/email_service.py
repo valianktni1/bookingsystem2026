@@ -165,11 +165,13 @@ def _body_html(body: str) -> str:
     def link(match: re.Match) -> str:
         url = match.group(1)
         if "/client/" in url:
+            label = ("VIEW YOUR PAYMENT RECEIPT"
+                     if "open=receipt" in url else "OPEN YOUR SECURE ACCOUNT")
             return (
                 f'<a href="{url}" style="display:inline-block;padding:14px 22px;'
                 'border-radius:8px;background:#76591f;color:#ffffff;text-decoration:none;'
                 'font-weight:bold;letter-spacing:.4px;text-align:center">'
-                'OPEN YOUR SECURE ACCOUNT</a>'
+                f'{label}</a>'
             )
         return (f'<a href="{url}" style="color:#76591f;text-decoration:underline;'
                 f'word-break:break-all">{url}</a>')

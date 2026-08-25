@@ -208,7 +208,7 @@ def test_v822_dashboard_assets_and_exact_actions_are_wired():
     mail_js = (root / "app/static/v896.js").read_text()
     css = (root / "app/static/v822.css").read_text()
     assert "/static/v822.css?v=client-updates-dashboard-v8-22" in index
-    assert "/static/v811.js?v=inline-pdf-hotfix-v8-28-4-1" in index
+    assert "/static/v811.js?v=client-receipt-open-v8-28-4-2" in index
     assert "/static/v895.js?v=visible-record-actions-v8-28-3" in index
     assert "/static/v896.js?v=client-updates-dashboard-v8-22" in index
     assert "New client updates" in dashboard_js

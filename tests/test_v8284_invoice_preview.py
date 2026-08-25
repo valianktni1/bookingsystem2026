@@ -36,3 +36,18 @@ def test_final_call_pack_includes_direct_invoice_access():
     assert ".v823-invoice-reference" in css
     assert "/static/v823.js?v=invoice-preview-v8-28-4" in index
     assert "/static/v82.js?v=invoice-preview-v8-28-4" in index
+
+
+def test_client_receipt_email_opens_receipt_and_keeps_download_choice():
+    script = read_static("client.js")
+    client_page = read_static("client.html")
+
+    assert 'requestedDocument = initialQuery.get("open")' in script
+    assert 'requestedInvoice = initialQuery.get("invoice")' in script
+    assert 'requestedDocument !== "receipt"' in script
+    assert "openRequestedEmailDocument();" in script
+    assert 'data-client-receipt-preview="${invoice.id}"' in script
+    assert "/receipt.pdf?inline=true" in script
+    assert ">View receipt</button>" in script
+    assert ">Download receipt</a>" in script
+    assert "/static/client.js?v=client-receipt-open-v8-28-4-2" in client_page

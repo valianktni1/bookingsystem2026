@@ -4,6 +4,8 @@ let bookingStep = 0;
 const initialQuery = new URLSearchParams(location.search);
 const requestedTab = initialQuery.get("tab");
 const emailAccess = initialQuery.get("email_access");
+const requestedDocument = initialQuery.get("open");
+const requestedInvoice = initialQuery.get("invoice");
 const requestedTabs = {quote:"Choose package", invoices:"Invoices", booking:"Booking form", documents:"Documents", agreement:"Agreement"};
 let active = requestedTabs[requestedTab] || "Overview";
 const token = location.pathname.split("/").filter(Boolean).pop();
@@ -31,6 +33,17 @@ function openClientPdf(title, previewUrl, downloadUrl = previewUrl) {
   const overlay = document.querySelector(".client-pdf-preview");
   overlay.querySelector("button").onclick = () => overlay.remove();
   overlay.onclick = event => { if (event.target === overlay) overlay.remove(); };
+}
+function openRequestedEmailDocument() {
+  if (requestedDocument !== "receipt" || !requestedInvoice) return;
+  const invoice = data.invoices.find(item => item.id === requestedInvoice && Number(item.paid || 0) > 0);
+  if (!invoice) return;
+  const receiptUrl = `/api/client/${token}/invoices/${invoice.id}/receipt.pdf`;
+  openClientPdf(`Receipt ${invoice.number}`, `${receiptUrl}?inline=true`, receiptUrl);
+  const cleanQuery = new URLSearchParams(location.search);
+  cleanQuery.delete("open");
+  cleanQuery.delete("invoice");
+  history.replaceState(history.state, "", `${location.pathname}${cleanQuery.size ? `?${cleanQuery}` : ""}`);
 }
 function existing(type) { return data.submissions.find(x => x.form_type === type)?.data || {}; }
 function bookingJourneyUnlocked() {
@@ -86,6 +99,7 @@ async function init() {
     $("#portal").classList.remove("hidden");
     renderTabs();
     render();
+    openRequestedEmailDocument();
   } catch (error) {
     $("#loading").classList.add("hidden");
     $("#error").classList.remove("hidden");
@@ -160,8 +174,9 @@ function invoicesPanel() {
     $("#panel").innerHTML = `<h2>Your invoices</h2><p class="intro">Your invoice will appear here automatically after you accept your package or service quote.</p><div class="invoice-empty"><strong>No invoice yet</strong><span>Choose and accept your package first - there is nothing else you need to do.</span></div>`;
     return;
   }
-  $("#panel").innerHTML = `<h2>Your invoices & payments</h2><p class="intro">Your invoice and bank-transfer details are available below.</p><div class="quote-payment-reference invoice-reference"><small>YOUR BANK-TRANSFER PAYMENT REFERENCE</small><strong>${esc(data.record.payment_reference || data.invoices[0]?.payment_reference || "See invoice")}</strong><span>Please use this same reference for every payment for your wedding.</span></div><div class="client-invoices">${data.invoices.map(invoice => `<article class="client-invoice"><header><div><span><strong>${esc(invoice.number)}</strong>${invoice.legacy_number?`<small class="client-legacy-ref">Original reference retained</small>`:""}</span><span class="invoice-status ${invoice.status}">${esc(String(invoice.status).replaceAll("_"," "))}</span></div><b>${money(invoice.total)}</b></header>${invoice.line_items?.length ? `<div class="client-invoice-lines">${invoice.line_items.map(item => `<div><span><b>${esc(item.name)}</b>${item.description ? `<small>${esc(item.description)}</small>` : ""}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : invoice.description ? `<div class="client-invoice-lines"><div><span><b>${esc(invoice.description)}</b></span><strong>${money(invoice.total)}</strong></div></div>` : ""}${invoice.payment_schedule?.length?`<section class="client-payment-schedule"><strong>Payment schedule</strong>${invoice.payment_schedule.map(item=>`<div><span>${esc(item.label||"Scheduled payment")}<small>${item.due_date?date(item.due_date):"No due date recorded"} · ${esc(String(item.status||"scheduled").replaceAll("_"," "))}</small></span><b>${money(item.amount)}</b></div>`).join("")}</section>`:""}<dl><dt>Issued</dt><dd>${date(invoice.issue_date)}</dd>${!invoice.payment_schedule?.length&&invoice.deposit_due_date ? `<dt>Booking fee</dt><dd>${money(invoice.deposit_amount)} · due ${date(invoice.deposit_due_date)}</dd>` : ""}${!invoice.payment_schedule?.length&&invoice.due_date ? `<dt>Remaining balance</dt><dd>${money(Math.max(0,Number(invoice.total)-Number(invoice.deposit_amount||0)))} · due ${date(invoice.due_date)}</dd>` : ""}<dt>Paid so far</dt><dd>${money(invoice.paid)}</dd><dt><strong>Total outstanding</strong></dt><dd><strong>${money(invoice.balance)}</strong></dd></dl><div class="client-invoice-actions"><button class="primary" type="button" data-client-invoice-preview="${invoice.id}" data-client-invoice-number="${esc(invoice.number)}">View invoice</button><a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/invoice.pdf">Download PDF</a>${invoice.paid > 0 ? `<a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/receipt.pdf">Download receipt</a>` : ""}</div></article>`).join("")}</div>`;
+  $("#panel").innerHTML = `<h2>Your invoices & payments</h2><p class="intro">Your invoice and bank-transfer details are available below.</p><div class="quote-payment-reference invoice-reference"><small>YOUR BANK-TRANSFER PAYMENT REFERENCE</small><strong>${esc(data.record.payment_reference || data.invoices[0]?.payment_reference || "See invoice")}</strong><span>Please use this same reference for every payment for your wedding.</span></div><div class="client-invoices">${data.invoices.map(invoice => `<article class="client-invoice"><header><div><span><strong>${esc(invoice.number)}</strong>${invoice.legacy_number?`<small class="client-legacy-ref">Original reference retained</small>`:""}</span><span class="invoice-status ${invoice.status}">${esc(String(invoice.status).replaceAll("_"," "))}</span></div><b>${money(invoice.total)}</b></header>${invoice.line_items?.length ? `<div class="client-invoice-lines">${invoice.line_items.map(item => `<div><span><b>${esc(item.name)}</b>${item.description ? `<small>${esc(item.description)}</small>` : ""}</span><strong>${money(item.total)}</strong></div>`).join("")}</div>` : invoice.description ? `<div class="client-invoice-lines"><div><span><b>${esc(invoice.description)}</b></span><strong>${money(invoice.total)}</strong></div></div>` : ""}${invoice.payment_schedule?.length?`<section class="client-payment-schedule"><strong>Payment schedule</strong>${invoice.payment_schedule.map(item=>`<div><span>${esc(item.label||"Scheduled payment")}<small>${item.due_date?date(item.due_date):"No due date recorded"} · ${esc(String(item.status||"scheduled").replaceAll("_"," "))}</small></span><b>${money(item.amount)}</b></div>`).join("")}</section>`:""}<dl><dt>Issued</dt><dd>${date(invoice.issue_date)}</dd>${!invoice.payment_schedule?.length&&invoice.deposit_due_date ? `<dt>Booking fee</dt><dd>${money(invoice.deposit_amount)} · due ${date(invoice.deposit_due_date)}</dd>` : ""}${!invoice.payment_schedule?.length&&invoice.due_date ? `<dt>Remaining balance</dt><dd>${money(Math.max(0,Number(invoice.total)-Number(invoice.deposit_amount||0)))} · due ${date(invoice.due_date)}</dd>` : ""}<dt>Paid so far</dt><dd>${money(invoice.paid)}</dd><dt><strong>Total outstanding</strong></dt><dd><strong>${money(invoice.balance)}</strong></dd></dl><div class="client-invoice-actions"><button class="primary" type="button" data-client-invoice-preview="${invoice.id}" data-client-invoice-number="${esc(invoice.number)}">View invoice</button><a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/invoice.pdf">Download PDF</a>${invoice.paid > 0 ? `<button class="secondary-client" type="button" data-client-receipt-preview="${invoice.id}" data-client-receipt-number="${esc(invoice.number)}">View receipt</button><a class="secondary-client" href="/api/client/${token}/invoices/${invoice.id}/receipt.pdf">Download receipt</a>` : ""}</div></article>`).join("")}</div>`;
   document.querySelectorAll("[data-client-invoice-preview]").forEach(button => button.onclick = () => openClientPdf(`Invoice ${button.dataset.clientInvoiceNumber}`, `/api/client/${token}/invoices/${button.dataset.clientInvoicePreview}/invoice.pdf?inline=true`, `/api/client/${token}/invoices/${button.dataset.clientInvoicePreview}/invoice.pdf`));
+  document.querySelectorAll("[data-client-receipt-preview]").forEach(button => button.onclick = () => openClientPdf(`Receipt ${button.dataset.clientReceiptNumber}`, `/api/client/${token}/invoices/${button.dataset.clientReceiptPreview}/receipt.pdf?inline=true`, `/api/client/${token}/invoices/${button.dataset.clientReceiptPreview}/receipt.pdf`));
 }
 
 function documentsPanel() {
