@@ -1,0 +1,73 @@
+/* V8.30.1 - dedicated mobile workspace based on the supplied Studio Ninja references. */
+@media(max-width:760px){
+  body{background:#f5f7f7}
+  main{padding-bottom:76px}
+  .topbar{height:62px;position:sticky;z-index:25;top:0;padding:0 11px;gap:8px;box-shadow:0 2px 12px #102b340d}
+  .topbar .menu-button{width:42px;height:42px;flex:0 0 auto;border:0;font-size:22px}
+  .topbar .search{width:auto;min-width:0;flex:1;height:42px;border-radius:11px}
+  .topbar .attention-button{height:42px;flex:0 0 auto}
+  .topbar .testing-mode-button{display:none}
+  .page{padding:18px 12px 28px}
+  .page-heading{min-height:64px;align-items:center;margin-bottom:13px}
+  .page-heading small{font-size:8px}.page-heading h1{margin:3px 0 4px;font-size:22px}.page-heading p{font-size:10px}
+  .page-heading>.primary{width:43px;min-width:43px;height:43px}
+
+  .mobile-nav{height:70px;padding-bottom:env(safe-area-inset-bottom);grid-template-columns:repeat(5,1fr);background:#fffffff8;box-shadow:0 -5px 22px #102b3418}
+  .mobile-nav button{font-size:9px;font-weight:650}.mobile-nav button span{font-size:20px}.mobile-nav button.active{background:#e9f7f4}
+
+  .v8301-mobile-shortcuts{display:grid;grid-template-columns:repeat(3,1fr);margin-bottom:14px;border:1px solid var(--line);border-radius:13px;background:#fff;box-shadow:var(--shadow);overflow:hidden}
+  .v8301-mobile-shortcuts button{min-height:92px;display:grid;place-items:center;align-content:center;gap:7px;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:#fff;font-size:10px;font-weight:700}
+  .v8301-mobile-shortcuts button:nth-child(3n){border-right:0}.v8301-mobile-shortcuts button:nth-last-child(-n+3){border-bottom:0}
+  .v8301-mobile-shortcuts button:active{background:#edf8f5}.v8301-mobile-shortcuts i{width:36px;height:36px;display:grid;place-items:center;border-radius:10px;color:var(--teal);background:#e9f6f3;font-size:19px;font-style:normal}
+
+  .v830-wedding-switcher{position:sticky;z-index:18;top:70px;grid-template-columns:1fr 1fr;margin:0 -2px 11px;padding:5px 2px;background:#f5f7f7}
+  .v830-wedding-switcher>button{min-height:63px;padding:9px 11px;border-radius:11px;box-shadow:0 4px 13px #102b340b}
+  .v830-wedding-switcher strong{font-size:11px}.v830-wedding-switcher small{font-size:8px}
+  .v830-wedding-list .tools{min-height:0;padding:12px;gap:9px}.v830-wedding-list .archive-switch{order:2}.v830-wedding-list .filter-pills{order:3}
+  .v830-wedding-list .table-wrap,.v830-completion-queue>div{overflow:visible;background:#f5f7f7}
+  .v830-booking-table{min-width:0;display:grid;gap:9px;padding:9px;background:#f5f7f7}
+  .v830-booking-head{display:none}
+  .v830-booking-row{border:1px solid #d9e2e3;border-radius:11px;box-shadow:0 4px 14px #102b340b;overflow:hidden}
+  .v830-booking-row.same-date-booking{border-color:#e5a6a6;background:#fff6f5}
+  .v830-booking-open{min-height:124px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;padding:13px!important;text-align:left;font-size:10px}
+  .v830-booking-open::after{content:"⋮";position:absolute;top:10px;right:12px;color:#253e45;font-size:20px;font-weight:900;line-height:1;pointer-events:none}
+  .v830-booking-open .client-cell{grid-column:1/-1;padding-right:22px}.v830-booking-open .client-cell strong{font-size:13px;line-height:1.35}
+  .v830-booking-open .client-avatar{width:34px;height:34px}
+  .v830-booking-open>span:nth-child(2){grid-column:1/-1;color:#65767c}.v830-booking-open>span:nth-child(2)::before{content:"Venue · ";color:#253e45;font-weight:800}
+  .v830-booking-open .booking-date-cell{grid-column:1;color:#4f6268}.v830-booking-open .booking-date-cell::before{content:"Wedding · ";color:#253e45;font-weight:800}
+  .v830-booking-open .status{grid-column:2;grid-row:2;justify-self:end}
+  .v830-booking-open>strong{grid-column:2;grid-row:3;align-self:center;justify-self:end;color:#17343b;font-size:11px}
+  .v830-list-complete{width:calc(100% - 24px);min-height:40px;margin:0 12px 12px;font-size:10px}
+  .v830-completion-queue{border-radius:12px}.v830-completion-queue>header{padding:14px}.v830-completion-queue>header b{min-width:32px;height:32px}
+
+  .drawer{height:100dvh;inset:0;top:0;border-radius:0;background:#f5f7f7}
+  .record-command-header,.record-command-header.wbm{position:relative;color:#18343b;background:#fff;box-shadow:0 3px 14px #102b3412}
+  .record-command-bar{min-height:57px;position:sticky;z-index:20;top:0;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);background:#fff;backdrop-filter:none}
+  .record-back{min-width:45px!important;height:41px!important;border:1px solid var(--line)!important;border-radius:10px!important;color:#17343b!important;background:#fff!important}
+  .record-command-actions{margin-left:auto}.record-command-actions>#record-email-client-top{min-width:42px;width:42px;padding:0;font-size:0}.record-command-actions>#record-email-client-top::before{content:"✉";font-size:16px}
+  .record-command-actions .record-more-wrap>.secondary{min-width:42px;width:42px;padding:0;font-size:0}.record-command-actions .record-more-wrap>.secondary::before{content:"⋮";font-size:22px}
+  .record-command-identity{display:block;padding:16px 15px 17px}.record-avatar-large{display:none}
+  .record-command-identity small{color:#0d756a;font-size:8px}.record-title-line{margin-top:5px}.record-title-line h1{max-width:100%;font-size:21px;line-height:1.25}
+  .record-title-line .status{margin-top:3px;border-color:#b7d8d4;color:#0e655e;background:#eff8f7}
+  .record-command-identity p{margin-top:8px;color:#65767c;font-size:11px;line-height:1.45}
+  .record-contact-actions{margin:13px 0 0;padding:0}.record-contact-actions a,.record-contact-actions button{min-height:38px;border-color:#cad8d9;color:#17343b;background:#fff;font-size:9px}
+  .record-command-main{width:100%;margin:0;padding:12px}
+  .record-snapshot{grid-template-columns:1fr 1fr;border-radius:11px;box-shadow:none}.record-snapshot article{min-height:66px;padding:10px 11px}.record-snapshot small{font-size:7px}.record-snapshot strong{font-size:10px;white-space:normal}
+  .record-stage-bar{grid-template-columns:repeat(6,minmax(68px,1fr));margin-top:10px;border-radius:11px;box-shadow:none}.record-stage-bar button{min-height:59px}
+  .record-next-action{width:100%!important;margin:10px 0 12px!important;border-radius:11px}
+  .v8301-mobile-sections{display:grid;border:1px solid #d9e2e3;border-radius:11px;background:#fff;overflow:hidden;box-shadow:0 6px 18px #102b340c}
+  .v8301-mobile-section{scroll-margin-top:8px;border-bottom:1px solid #dde5e6;background:#fff}.v8301-mobile-section:last-child{border-bottom:0}
+  .v8301-mobile-section>button{width:100%;min-height:70px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:11px 14px;border:0;background:#fff;text-align:left}
+  .v8301-mobile-section>button>i{width:38px;height:38px;display:grid;place-items:center;border:1px solid #d4e1e1;border-radius:10px;color:var(--teal);background:#eff8f6;font-size:17px;font-style:normal}
+  .v8301-mobile-section>button span,.v8301-mobile-section>button strong,.v8301-mobile-section>button small{display:block;min-width:0}.v8301-mobile-section>button strong{font-size:13px}.v8301-mobile-section>button small{margin-top:4px;overflow:hidden;color:#718187;font-size:9px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+  .v8301-mobile-section>button>b{color:#839397;font-size:17px;transition:transform .16s}.v8301-mobile-section.open>button{color:#0e655e;background:#f3faf8}.v8301-mobile-section.open>button>b{transform:rotate(180deg)}
+  .v8301-mobile-section-body{padding:11px!important;border-top:1px solid #e2e9ea;background:#f5f8f8}
+  .v830-job-board{display:block}.v830-job-left,.v830-job-right{display:grid;gap:9px}.v830-job-right{margin-top:9px}.v830-top-cards,.v830-summary-stack{grid-template-columns:1fr}.v830-job-panel,.v830-info-card,.v830-summary-card{border-radius:10px;box-shadow:none}
+  .v830-workflow-list>button{min-height:56px}.v830-summary-card{min-height:67px}.v830-mail-list{max-height:none}
+  .record-actions-menu{top:54px;right:8px;left:8px}
+}
+
+@media(max-width:390px){
+  .page{padding-inline:9px}.v8301-mobile-shortcuts button{min-height:84px}.v830-wedding-switcher>button{padding-inline:8px}.v830-wedding-switcher small{display:none}
+  .record-command-main{padding:9px}.record-contact-actions a,.record-contact-actions button{padding-inline:8px}
+}

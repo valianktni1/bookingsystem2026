@@ -17,7 +17,7 @@ def test_payment_due_card_keeps_count_and_adds_filtered_amount_total():
 
 def test_current_build_identifier_is_exposed_by_health_endpoint():
     backup_py = (ROOT / "app" / "backup.py").read_text()
-    assert 'BACKUP_BUILD = "2026.08.26-studio-style-workspace-v8.30"' in backup_py
+    assert 'BACKUP_BUILD = "2026.08.26-studio-mobile-workspace-v8.30.1"' in backup_py
 
 
 def test_upcoming_weddings_are_before_the_work_queues():

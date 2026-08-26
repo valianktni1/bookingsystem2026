@@ -1,5 +1,13 @@
-BookingSystem2026 - Studio-style Desktop Wedding Workspace
-Build: 2026.08.26-studio-style-workspace-v8.30
+BookingSystem2026 - Studio-style Mobile Wedding Workspace
+Build: 2026.08.26-studio-mobile-workspace-v8.30.1
+
+V8.30.1 dedicated mobile workflow:
+- Rebuilds the phone wedding list as individual readable booking cards instead of a squeezed desktop table.
+- Gives the phone dashboard a six-button shortcut grid for enquiries, weddings, calendar, payments, inbox and settings.
+- Changes the permanent phone navigation to Home, Enquiries, Weddings, Calendar and Payments.
+- Rebuilds the mobile couple screen with essential details first and large stacked sections.
+- Uses Couple & wedding, Quote & mail, Invoices & payments, Agreement & forms, Files, and Notes & activity sections.
+- Keeps the safer BookingSystem actions, completion controls and Studio Ninja communication protections.
 
 V8.30 Studio-style desktop workflow:
 - Rebuilds the desktop client Overview as an at-a-glance job workspace inspired by the supplied Studio Ninja reference.

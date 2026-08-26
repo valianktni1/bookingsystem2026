@@ -223,7 +223,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
                                  "google_calendar_configured": False,
-                                     "build": "2026.08.26-studio-style-workspace-v8.30"}
+                                     "build": "2026.08.26-studio-mobile-workspace-v8.30.1"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

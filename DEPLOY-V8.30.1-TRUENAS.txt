@@ -1,0 +1,22 @@
+BOOKINGSYSTEM2026 V8.30.1 — TRUENAS / DOCKGE DEPLOYMENT
+
+Upload the unzipped V8.30.1 files to the GitHub main branch, then run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v8301-$(date +%Y%m%d-%H%M%S).dump"
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > "$BOOKING_BACKUP"
+
+ls -lh "$BOOKING_BACKUP"
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.26-studio-mobile-workspace-v8.30.1
+
+After deployment, close the existing phone browser tab completely and reopen the booking system so the new mobile CSS and JavaScript are loaded.
