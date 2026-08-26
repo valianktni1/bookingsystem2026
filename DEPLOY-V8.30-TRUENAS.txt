@@ -1,0 +1,26 @@
+BOOKINGSYSTEM2026 V8.30 — TRUENAS / DOCKGE DEPLOYMENT
+
+1. Upload the unzipped V8.30 files to the main branch using GitHub Desktop.
+
+2. In the TrueNAS shell, run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v830-$(date +%Y%m%d-%H%M%S).dump"
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > "$BOOKING_BACKUP"
+
+ls -lh "$BOOKING_BACKUP"
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+3. The final command must report:
+
+"build":"2026.08.26-studio-style-workspace-v8.30"
+
+4. Hard-refresh the browser after deployment. On Android/Chrome, close the booking-system tab and reopen it if the old layout remains cached.
+

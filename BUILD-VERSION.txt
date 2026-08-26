@@ -1,5 +1,17 @@
-BookingSystem2026 - Workflow Clarity and Durable Client Form Drafts
-Build: 2026.08.25-durable-form-drafts-v8.29
+BookingSystem2026 - Studio-style Desktop Wedding Workspace
+Build: 2026.08.26-studio-style-workspace-v8.30
+
+V8.30 Studio-style desktop workflow:
+- Rebuilds the desktop client Overview as an at-a-glance job workspace inspired by the supplied Studio Ninja reference.
+- Shows workflow progress and the couple's recent sent and received email conversation together on the left.
+- Shows Job, Client, Invoices, Quote, Agreement, Questionnaires, Files and Notes cards together on the right.
+- Keeps every detailed BookingSystem section one click away instead of replacing the existing functionality.
+- Makes Wedding Bookings open on Upcoming Weddings by default, with All Bookings directly beside it.
+- Separates past active weddings awaiting completion and provides a clear Mark complete control.
+- Adds Mark wedding complete inside every active wedding and a protected Reopen completed wedding action.
+- Completion retains the complete record, sends no email, archives nothing and leaves the Google Calendar history intact.
+- Completed weddings leave Upcoming Weddings but remain visible under All Bookings.
+- Keeps Studio Ninja imported records manual-only and preserves every existing automation safeguard.
 
 V8.29 durable client form drafts:
 - Saves Wedding Booking Form answers privately on the couple's current device while they type.

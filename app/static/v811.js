@@ -270,6 +270,8 @@
       restore: "Record restored",
       cancel_booking: "Booking cancelled",
       reopen_booking: "Booking reopened",
+      complete_booking: "Wedding marked complete",
+      reopen_completed_booking: "Completed wedding reopened",
     })[action] || baseStatusTextV811(action).replace(/\b\w/g, character => character.toUpperCase());
   }
 

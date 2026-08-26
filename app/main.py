@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.29.0-durable-form-drafts", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.30.0-studio-style-workspace", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1373,7 +1373,8 @@ def dashboard(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     tasks = db.scalars(select(Task).options(selectinload(Task.booking))
                        .join(Booking).where(Task.completed.is_(False),
                                             Booking.archived_at.is_(None),
-                                            Booking.status != RecordStatus.CANCELLED,
+                                            Booking.status.notin_((RecordStatus.CANCELLED,
+                                                                   RecordStatus.COMPLETED)),
                                             visible_task_condition())
                        .order_by(Task.due_at.asc().nullslast()).limit(10)).all()
     stage_rows = list({row.id: row for row in [*upcoming, *upcoming_weddings]}.values())
@@ -1470,13 +1471,18 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
         agreement_complete = bool(contract and (
             contract.is_legacy_import or contract.supplier_signed_at
         ))
-        native_workflow = booking.legacy_source != "studio_ninja" and booking.kind == RecordKind.WEDDING
+        workflow_active = booking.status != RecordStatus.COMPLETED
+        native_workflow = (
+            workflow_active
+            and booking.legacy_source != "studio_ninja"
+            and booking.kind == RecordKind.WEDDING
+        )
         open_task_keys = {
             task.workflow_key for task in booking.tasks if not task.completed and task.workflow_key
         }
 
         booking_form_submission = booking_form_submissions.get(booking.id)
-        if (booking_form_submission
+        if (workflow_active and booking_form_submission
                 and "wbm_review_booking_form" in open_task_keys):
             queues["client_updates"].append(item(
                 booking,
@@ -1486,7 +1492,8 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                 update_type="booking_form",
             ))
         final_submission = final_timings_submissions.get(booking.id)
-        if final_submission and "wbm_review_final_timings" in open_task_keys:
+        if (workflow_active and final_submission
+                and "wbm_review_final_timings" in open_task_keys):
             queues["client_updates"].append(item(
                 booking,
                 "Final Wedding Timings submitted and ready for your review",
@@ -1494,7 +1501,8 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                 occurred_at=final_submission.updated_at,
                 update_type="final_timings",
             ))
-        if (contract and not contract.is_legacy_import and not contract.supplier_signed_at):
+        if (workflow_active and contract and not contract.is_legacy_import
+                and not contract.supplier_signed_at):
             queues["client_updates"].append(item(
                 booking,
                 f"Agreement signed by {contract.accepted_name} · your countersignature is needed",
@@ -1547,7 +1555,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                 ))
 
         for task in booking.tasks:
-            if (task.workflow_key == "wbm_final_details_call" and not task.completed
+            if (workflow_active and task.workflow_key == "wbm_final_details_call" and not task.completed
                     and task.due_at and task.due_at.date() <= final_calls_due_through):
                 queues["final_calls"].append(item(
                     booking, "Private 30-day final-details telephone call",
@@ -1727,6 +1735,76 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
     db.commit()
     sync_booking_calendar_safely(db, item)
     return get_booking(item.id, _, db)
+
+
+@app.post("/api/bookings/{booking_id}/complete")
+def complete_wedding(booking_id: str, admin: Admin = Depends(current_admin),
+                     db: Session = Depends(get_db)):
+    """Deliberately close one retained wedding without sending client communication."""
+    item = db.get(Booking, booking_id)
+    if not item:
+        raise HTTPException(404, "Wedding booking not found")
+    if item.kind != RecordKind.WEDDING or item.brand != Brand.WBM:
+        raise HTTPException(409, "Only a Weddings By Mark wedding can be marked complete here")
+    if item.status == RecordStatus.CANCELLED:
+        raise HTTPException(409, "Reopen this cancelled wedding before marking it complete")
+    if item.status in (RecordStatus.ENQUIRY, RecordStatus.QUOTED):
+        raise HTTPException(409, "This is still an enquiry or provisional quote, not a booked wedding")
+    if item.status == RecordStatus.COMPLETED:
+        return get_booking(item.id, admin, db)
+
+    completed_at = datetime.now(timezone.utc)
+    previous_status = item.status.value
+    workflow = dict(item.workflow_state or {})
+    workflow["completion"] = {
+        "completed_at": completed_at.isoformat(),
+        "completed_by": admin.email,
+        "previous_status": previous_status,
+        "reopened_at": None,
+        "reopened_by": None,
+    }
+    item.workflow_state = workflow
+    item.status = RecordStatus.COMPLETED
+    audit(db, "complete_booking", "booking", item.id, {
+        "previous_status": previous_status,
+        "completed_by": admin.email,
+        "client_email_sent": False,
+    })
+    db.commit()
+    sync_booking_calendar_safely(db, item)
+    return get_booking(item.id, admin, db)
+
+
+@app.post("/api/bookings/{booking_id}/reopen-completed")
+def reopen_completed_wedding(booking_id: str, admin: Admin = Depends(current_admin),
+                             db: Session = Depends(get_db)):
+    """Undo an accidental completion while retaining the original completion audit."""
+    item = db.get(Booking, booking_id)
+    if not item:
+        raise HTTPException(404, "Wedding booking not found")
+    if item.status != RecordStatus.COMPLETED:
+        raise HTTPException(409, "Only a completed wedding can be reopened here")
+
+    workflow = dict(item.workflow_state or {})
+    completion = dict(workflow.get("completion") or {})
+    previous = str(completion.get("previous_status") or RecordStatus.IN_PROGRESS.value)
+    if previous not in (RecordStatus.CONFIRMED.value, RecordStatus.IN_PROGRESS.value):
+        previous = RecordStatus.IN_PROGRESS.value
+    completion.update({
+        "reopened_at": datetime.now(timezone.utc).isoformat(),
+        "reopened_by": admin.email,
+    })
+    workflow["completion"] = completion
+    item.workflow_state = workflow
+    item.status = RecordStatus(previous)
+    audit(db, "reopen_completed_booking", "booking", item.id, {
+        "restored_status": previous,
+        "reopened_by": admin.email,
+        "client_email_sent": False,
+    })
+    db.commit()
+    sync_booking_calendar_safely(db, item)
+    return get_booking(item.id, admin, db)
 
 
 @app.post("/api/bookings/{booking_id}/archive")
