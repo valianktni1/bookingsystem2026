@@ -1,6 +1,64 @@
-/* V8.9.8.1 — server-driven form, payment plans and clear submission confirmation. */
+/* V8.29 — server-driven form, payment plans, confirmation and durable draft recovery. */
 (() => {
   const legacyBookingForm = bookingForm;
+  const BOOKING_DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
+
+  function bookingDraftKey() {
+    return `wbm-booking-form-draft:${data?.record?.id || token}`;
+  }
+
+  function clearBookingDraft() {
+    try { localStorage.removeItem(bookingDraftKey()); } catch (_) {}
+  }
+
+  function readBookingDraft() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(bookingDraftKey()) || "null");
+      const savedAt = Number(saved?.savedAt);
+      if (!saved || !saved.values || typeof saved.values !== "object") return null;
+      if (!Number.isFinite(savedAt) || Date.now() - savedAt > BOOKING_DRAFT_MAX_AGE) {
+        clearBookingDraft();
+        return null;
+      }
+      saved.savedAt = savedAt;
+      return saved;
+    } catch (_) { return null; }
+  }
+
+  function bookingDraftValues(form) {
+    const values = {};
+    for (const [key,value] of new FormData(form).entries()) values[key] = String(value).trim();
+    form.querySelectorAll('input[type="checkbox"][name]').forEach(input => {
+      if (!input.checked) values[input.name] = "";
+    });
+    return values;
+  }
+
+  function draftTime(savedAt) {
+    return new Intl.DateTimeFormat("en-GB", {hour:"2-digit", minute:"2-digit"})
+      .format(new Date(savedAt));
+  }
+
+  function writeBookingDraft(form) {
+    try {
+      const savedAt = Date.now();
+      localStorage.setItem(bookingDraftKey(), JSON.stringify({
+        step: bookingStep,
+        savedAt,
+        values: bookingDraftValues(form),
+      }));
+      const status = document.querySelector("#booking-draft-status");
+      if (status) status.innerHTML = `<strong>✓ Saved on this device</strong><span>Last saved at ${draftTime(savedAt)}. You can safely return using this same device and browser.</span>`;
+    } catch (_) { /* The form still submits when browser storage is unavailable. */ }
+  }
+
+  function wireBookingDraft(form) {
+    const remember = () => writeBookingDraft(form);
+    form.addEventListener("input", remember);
+    form.addEventListener("change", remember);
+    document.querySelector("#booking-back")?.addEventListener("click", remember);
+    document.querySelector("#booking-next")?.addEventListener("click", remember);
+  }
 
   function defaultValue(key, existing) {
     const defaults = {
@@ -35,18 +93,23 @@
 
   bookingForm = function () {
     if(data.record.kind!=="wedding"||!data.booking_form_template)return legacyBookingForm();
-    const x=existing("booking_form"),template=data.booking_form_template;
+    const savedDraft=readBookingDraft(),x={...existing("booking_form"),...(savedDraft?.values||{})},template=data.booking_form_template;
+    if(savedDraft)bookingStep=Math.max(0,Math.min(template.steps.length-1,Number(savedDraft.step)||0));
     const steps=template.steps.map((step,index)=>`<section class="form-step" data-step="${index}"><h3>${index+1}. ${esc(step.title)}</h3><p class="step-intro">${esc(step.introduction)}</p><div class="form-grid">${template.fields.filter(field=>field.step===step.id).map(field=>renderField(field,x)).join("")}</div></section>`).join("");
-    $("#panel").innerHTML=`<h2>${esc(template.heading)}</h2><p class="intro">${esc(template.introduction)}</p>${x.primary_full_name?`<div class="complete">✓ Previously submitted - you can update it below.</div><br>`:""}<form id="booking-form"><div class="form-progress">${template.steps.map(()=>"<span></span>").join("")}</div>${steps}<div class="form-step-actions"><button id="booking-back" class="secondary-client" type="button">Back</button><button id="booking-next" class="primary" type="button">Continue</button><button id="booking-save" class="primary" type="submit">${esc(template.submit_label)}</button></div></form>`;
-    $("#booking-form").onsubmit=event=>submitForm(event,"booking_form");
+    const draftMessage=savedDraft?`<strong>✓ Your saved answers have been restored</strong><span>Recovered from this device at ${draftTime(savedDraft.savedAt)}. They will remain here until you submit the form.</span>`:`<strong>Your answers are protected while you type</strong><span>This form saves a private draft on this device for up to 30 days and removes it after successful submission.</span>`;
+    $("#panel").innerHTML=`<h2>${esc(template.heading)}</h2><p class="intro">${esc(template.introduction)}</p>${existing("booking_form").primary_full_name?`<div class="complete">✓ Previously submitted - you can update it below.</div><br>`:""}<div id="booking-draft-status" class="client-draft-notice ${savedDraft?"restored":""}" role="status">${draftMessage}</div><form id="booking-form"><div class="form-progress">${template.steps.map(()=>"<span></span>").join("")}</div>${steps}<div class="form-step-actions"><button id="booking-back" class="secondary-client" type="button">Back</button><button id="booking-next" class="primary" type="button">Continue</button><button id="booking-save" class="primary" type="submit">${esc(template.submit_label)}</button></div></form>`;
+    const form=$("#booking-form");
+    form.onsubmit=event=>submitForm(event,"booking_form");
     wireBookingSteps();
+    wireBookingDraft(form);
   };
 
   submitForm = async function(event,type){
     event.preventDefault();const form=new FormData(event.currentTarget),values={};
     const wasPreviouslySubmitted=Boolean(existing(type)&&Object.keys(existing(type)).length);
     for(const [key,value] of form.entries())values[key]=String(value).trim();
-    try{await api(`/api/client/${token}/forms`,{method:"POST",body:JSON.stringify({form_type:type,data:values})});data=await api(`/api/client/${token}`);bookingStep=0;renderTabs();render();if(type==="booking_form"&&data.record.kind==="wedding")showBookingConfirmation(wasPreviouslySubmitted);else toast("Your details have been saved")}catch(error){toast(error.message)}
+    if(type==="booking_form"&&data.record.kind==="wedding")writeBookingDraft(event.currentTarget);
+    try{await api(`/api/client/${token}/forms`,{method:"POST",body:JSON.stringify({form_type:type,data:values})});if(type==="booking_form")clearBookingDraft();data=await api(`/api/client/${token}`);bookingStep=0;renderTabs();render();if(type==="booking_form"&&data.record.kind==="wedding")showBookingConfirmation(wasPreviouslySubmitted);else toast("Your details have been saved")}catch(error){toast(`${error.message}. Your answers are still saved on this device.`)}
   };
 
   function showBookingConfirmation(wasPreviouslySubmitted){

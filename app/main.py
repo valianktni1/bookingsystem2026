@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.28.4.2-client-receipt-open-fix", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.29.0-durable-form-drafts", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")

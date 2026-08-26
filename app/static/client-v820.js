@@ -1,4 +1,4 @@
-/* V8.23.2 — reliable mobile Final Wedding Timings submission and draft recovery. */
+/* V8.29 — reliable mobile Final Wedding Timings submission and durable draft recovery. */
 (() => {
   "use strict";
 
@@ -10,27 +10,45 @@
   const baseRender = render;
   const baseOverview = overview;
   let timingsStep = 0;
+  const TIMINGS_DRAFT_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
   function timingsDraftKey() {
     return `wbm-final-timings-draft:${data?.record?.id || token}`;
   }
   function readTimingsDraft() {
     try {
-      const saved=JSON.parse(sessionStorage.getItem(timingsDraftKey())||"null");
-      return saved&&saved.values&&typeof saved.values==="object"?saved:null;
+      const key=timingsDraftKey();
+      const durable=localStorage.getItem(key),legacy=sessionStorage.getItem(key);
+      const saved=JSON.parse(durable||legacy||"null");
+      if(!saved||!saved.values||typeof saved.values!=="object")return null;
+      const savedAt=Number(saved.savedAt||Date.now());
+      if(!Number.isFinite(savedAt)||Date.now()-savedAt>TIMINGS_DRAFT_MAX_AGE){clearTimingsDraft();return null}
+      saved.savedAt=savedAt;
+      if(!durable){localStorage.setItem(key,JSON.stringify(saved));sessionStorage.removeItem(key)}
+      return saved;
     } catch (_) { return null; }
   }
+  function timingsDraftTime(savedAt) {
+    return new Intl.DateTimeFormat("en-GB",{hour:"2-digit",minute:"2-digit"}).format(new Date(savedAt));
+  }
   function writeTimingsDraft(form) {
+    const savedAt=Date.now();
+    const payload=JSON.stringify({
+      step:timingsStep,
+      savedAt,
+      confirmed:Boolean(form.querySelector(".timings-confirm input")?.checked),
+      values:formValues(form),
+    });
     try {
-      const confirmation=form.querySelector(".timings-confirm input");
-      sessionStorage.setItem(timingsDraftKey(),JSON.stringify({
-        step:timingsStep,
-        confirmed:Boolean(confirmation?.checked),
-        values:formValues(form),
-      }));
-    } catch (_) { /* The form still works when browser storage is unavailable. */ }
+      localStorage.setItem(timingsDraftKey(),payload);
+    } catch (_) {
+      try { sessionStorage.setItem(timingsDraftKey(),payload); } catch (_) { return; }
+    }
+    const status=document.querySelector("#timings-draft-status");
+    if(status)status.innerHTML=`<strong>✓ Saved on this device</strong><span>Last saved at ${timingsDraftTime(savedAt)}. You can safely return using this same device and browser.</span>`;
   }
   function clearTimingsDraft() {
+    try { localStorage.removeItem(timingsDraftKey()); } catch (_) {}
     try { sessionStorage.removeItem(timingsDraftKey()); } catch (_) {}
   }
 
@@ -139,7 +157,8 @@
     const savedDraft=readTimingsDraft(),x={...existing("final_timings"),...(savedDraft?.values||{})},booking=existing("booking_form");
     if(savedDraft)timingsStep=Math.max(0,Math.min(4,Number(savedDraft.step)||0));
     const receptionDefault=x.reception_venue||booking.reception_details||data.record.venue_address||data.record.venue_or_project||"";
-    $("#panel").innerHTML=`<div class="timings-heading"><small>YOUR WEDDING-DAY RUN SHEET</small><h2>Final Wedding Timings</h2><p>Complete the details below so I can prepare the day properly and check the expected photography coverage before our final telephone call.</p></div>${x._calculation?'<div class="complete">✓ Previously submitted — you can update it if anything changes.</div>':""}<form id="final-timings-form" novalidate><div class="form-progress timings-progress">${[1,2,3,4,5].map(()=>"<span></span>").join("")}</div><div id="timings-error" class="timings-form-error hidden" role="alert"></div>
+    const draftMessage=savedDraft?`<strong>✓ Your saved timings have been restored</strong><span>Recovered from this device at ${timingsDraftTime(savedDraft.savedAt)}. They will remain here until you send the form.</span>`:`<strong>Your timings are protected while you type</strong><span>This form saves a private draft on this device for up to 30 days and removes it after successful submission.</span>`;
+    $("#panel").innerHTML=`<div class="timings-heading"><small>YOUR WEDDING-DAY RUN SHEET</small><h2>Final Wedding Timings</h2><p>Complete the details below so I can prepare the day properly and check the expected photography coverage before our final telephone call.</p></div>${x._calculation?'<div class="complete">✓ Previously submitted — you can update it if anything changes.</div>':""}<div id="timings-draft-status" class="client-draft-notice ${savedDraft?"restored":""}" role="status">${draftMessage}</div><form id="final-timings-form" novalidate><div class="form-progress timings-progress">${[1,2,3,4,5].map(()=>"<span></span>").join("")}</div><div id="timings-error" class="timings-form-error hidden" role="alert"></div>
       <section class="form-step" data-timing-step="0"><h3>1. Ceremony & reception</h3><p class="step-intro">Please confirm the key places and times.</p><div class="form-grid">${timeInput("Ceremony time","ceremony_time",x.ceremony_time||booking.ceremony_time,true)}${textInput("Expected ceremony length (minutes)","ceremony_duration",x.ceremony_duration||45,true,false,"number")}${textArea("Ceremony venue and full address *","ceremony_venue",x.ceremony_venue||booking.ceremony_details||data.record.venue_address||data.record.venue_or_project||"")}${yesNo("Is the reception at the same venue?","reception_same",x.reception_same)}<div data-reception-venue class="full">${textArea("Reception venue and full address","reception_venue",receptionDefault)}</div></div></section>
       <section class="form-step" data-timing-step="1"><h3>2. Preparations & travel</h3><p class="step-intro">I normally begin at least one hour before the ceremony. Spare included coverage may let me start earlier.</p><div class="form-grid">${yesNo("Would you like preparation photographs?","prep_photos",x.prep_photos??true)}<div data-prep-fields class="full form-grid nested-grid">${textInput("Who will I photograph getting ready?","prep_person",x.prep_person||"")}${textArea("Preparation venue and full address","prep_venue",x.prep_venue||"")}${textInput("Travel time from preparations to ceremony (minutes)","travel_minutes",x.travel_minutes||0,true,false,"number")}${selectInput("Preferred start","start_choice",[["normal","Use my recommended start"],["earlier","Request an earlier start"]],x.start_choice||"normal",true)}<div data-requested-start>${timeInput("Earlier start requested","requested_start",x.requested_start||"")}</div>${textArea("Preparation notes","prep_notes",x.prep_notes||"","Room details, access, parking or anything useful")}${textArea("Second preparation location or person","second_prep",x.second_prep||"")}</div></div></section>
       <section class="form-step" data-timing-step="2"><h3>3. Your running order</h3><p class="step-intro">Approximate times are absolutely fine.</p><div class="form-grid">${timeInput("Group photographs","group_photo_time",x.group_photo_time)}${timeInput("Wedding breakfast / meal","meal_time",x.meal_time)}${timeInput("Speeches","speeches_time",x.speeches_time)}${selectInput("When are the speeches?","speeches_position",[["Before the meal","Before the meal"],["Between courses","Between courses"],["After the meal","After the meal"]],x.speeches_position||"After the meal")}${timeInput("Evening guests arrive","evening_time",x.evening_time)}${timeInput("Cake cutting","cake_time",x.cake_time)}${timeInput("First dance","first_dance_time",x.first_dance_time,true)}${yesNo("Is there an essential photograph after the first dance?","later_event",x.later_event,true)}<div data-later-event class="full form-grid nested-grid">${textInput("What is the later event?","later_event_name",x.later_event_name||"")}${timeInput("Later event time","later_event_time",x.later_event_time)}</div>${textArea("Extra venues, stops or travel during the day","extra_stops",x.extra_stops||"")}</div></section>
@@ -200,7 +219,7 @@
         clearTimingsDraft();data=await api(`/api/client/${token}`);timingsStep=0;renderTabs();render();toast("Your final wedding timings have been sent safely");
       }catch(error){
         submitting=false;saveButton.disabled=false;saveButton.removeAttribute("aria-busy");saveButton.textContent="Send my final timings";
-        writeTimingsDraft(form);showFormError(error.message||"Your timings could not be sent. Your answers are still saved on this device.");
+        writeTimingsDraft(form);showFormError(`${error.message||"Your timings could not be sent."} Your answers are still saved on this device.`);
       }
     };
     show();

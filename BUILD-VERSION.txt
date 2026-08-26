@@ -1,5 +1,13 @@
-BookingSystem2026 - Workflow Clarity and Reliable Client Receipt Opening
-Build: 2026.08.25-client-receipt-open-v8.28.4.2
+BookingSystem2026 - Workflow Clarity and Durable Client Form Drafts
+Build: 2026.08.25-durable-form-drafts-v8.29
+
+V8.29 durable client form drafts:
+- Saves Wedding Booking Form answers privately on the couple's current device while they type.
+- Keeps Final Wedding Timings drafts after a refresh, browser closure or phone restart.
+- Restores the exact saved step and answers when the secure link is reopened on the same device.
+- Shows a clear saved/restored status instead of silently relying on browser storage.
+- Retains drafts for up to 30 days and removes them immediately after successful submission.
+- Does not send email, alter a booking or change a package until the couple deliberately submits.
 
 V8.28.4.2 client receipt opening fix:
 - Payment-confirmation emails open the exact receipt automatically inside the secure client account.
