@@ -110,7 +110,7 @@ def test_testing_mode_marks_records_routes_email_and_allows_test_cleanup(monkeyp
     sent_to = []
 
     def fake_send(booking, profile, template, portal_url=None, extra_values=None,
-                  recipient=None, reply_to=None):
+                  recipient=None, reply_to=None, **kwargs):
         sent_to.append(recipient or booking.client.email)
         return template.subject, template.body
 

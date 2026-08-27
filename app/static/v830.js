@@ -181,13 +181,13 @@
       const conversation = await api(`/api/bookings/${record.id}/conversation?limit=8`);
       if (!host.isConnected) return;
       const messages = (conversation.messages || []).slice(0, 8);
-      host.innerHTML = messages.length ? messages.map(message => `<button data-job-tab="Journey" type="button"><i class="${message.direction === "received" ? "received" : "sent"}">${message.direction === "received" ? "←" : "→"}</i><span><strong>${esc(message.subject || "(No subject)")}</strong><small>${message.direction === "received" ? "Received from couple" : "Sent by you"} · ${esc(fmtDateTime(message.date))}</small></span><b>View</b></button>`).join("") : `<div class="empty small-empty"><strong>No email conversation yet</strong>Messages linked to this couple will appear here.</div>`;
+      host.innerHTML = messages.length ? messages.map(message => `<button data-job-tab="Journey" type="button"><i class="${message.direction === "received" ? "received" : "sent"}">${message.direction === "received" ? "←" : "→"}</i><span><strong>${esc(message.subject || "(No subject)")}</strong><small>${message.direction === "received" ? "Received from couple" : `Sent by you · ${esc(emailEngagementShort(message))}`} · ${esc(fmtDateTime(message.date))}</small></span><b>View</b></button>`).join("") : `<div class="empty small-empty"><strong>No email conversation yet</strong>Messages linked to this couple will appear here.</div>`;
       $$('[data-job-tab]', host).forEach(button => button.onclick = () => selectRecordTab(record, button.dataset.jobTab, true));
       const count = $("[data-job-mail-count]", body);
       if (count) count.textContent = `${conversation.received_count || 0} received · ${conversation.sent_count || 0} sent`;
     } catch (_) {
       if (!host.isConnected) return;
-      host.innerHTML = fallbackEmails.length ? fallbackEmails.slice(0, 6).map(email => `<button data-job-tab="Journey" type="button"><i class="${email.status === "sent" ? "sent" : "failed"}">${email.status === "sent" ? "→" : "!"}</i><span><strong>${esc(email.subject || statusText(email.template_key))}</strong><small>${esc(statusText(email.status))} · ${esc(fmtDateTime(email.sent_at))}</small></span><b>View</b></button>`).join("") : `<div class="empty small-empty"><strong>Email summary unavailable</strong>Open Journey to view the retained communication history.</div>`;
+      host.innerHTML = fallbackEmails.length ? fallbackEmails.slice(0, 6).map(email => `<button data-job-tab="Journey" type="button"><i class="${email.status === "sent" ? "sent" : "failed"}">${email.status === "sent" ? "→" : "!"}</i><span><strong>${esc(email.subject || statusText(email.template_key))}</strong><small>${esc(statusText(email.status))}${email.status === "sent" ? ` · ${esc(emailEngagementShort(email))}` : ""} · ${esc(fmtDateTime(email.sent_at))}</small></span><b>View</b></button>`).join("") : `<div class="empty small-empty"><strong>Email summary unavailable</strong>Open Journey to view the retained communication history.</div>`;
       $$('[data-job-tab]', host).forEach(button => button.onclick = () => selectRecordTab(record, button.dataset.jobTab, true));
     }
   }

@@ -71,7 +71,9 @@ def test_exact_simple_wedding_email_schedule(monkeypatch):
         monkeypatch.setattr(main_module, "date", FrozenDate)
         monkeypatch.setattr(
             main_module, "send_template_email",
-            lambda booking, profile, template, portal_url=None: (template.subject, template.body),
+            lambda booking, profile, template, portal_url=None, **kwargs: (
+                template.subject, template.body
+            ),
         )
 
         for reminder_day, reminder_key in (

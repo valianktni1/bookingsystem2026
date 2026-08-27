@@ -233,7 +233,7 @@ def test_v85_protected_legacy_import_manual_only_and_brand_counters(monkeypatch)
         }).status_code == 422
 
         def fake_manual_email(booking, profile, template, portal_url=None, extra_values=None,
-                              recipient=None):
+                              recipient=None, **kwargs):
             return template.subject, template.body
 
         monkeypatch.setattr("app.main.send_template_email", fake_manual_email)

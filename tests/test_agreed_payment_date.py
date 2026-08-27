@@ -107,7 +107,9 @@ def test_agreed_payment_date_updates_invoice_pdf_data_and_reminders(monkeypatch)
         monkeypatch.setattr(main_module, "date", FrozenDate)
         monkeypatch.setattr(
             main_module, "send_template_email",
-            lambda booking, profile, template, portal_url=None: (template.subject, template.body),
+            lambda booking, profile, template, portal_url=None, **kwargs: (
+                template.subject, template.body
+            ),
         )
 
         # The original 45-day date is no longer a reminder trigger.
@@ -127,4 +129,3 @@ def test_agreed_payment_date_updates_invoice_pdf_data_and_reminders(monkeypatch)
                 ReminderLog.reminder_key == "balance_due_7",
             ))
             assert reminder.scheduled_for == agreed_due - timedelta(days=7)
-

@@ -397,6 +397,7 @@ def build_reply_message(
     body: str,
     in_reply_to: str | None,
     references: str | None,
+    open_tracking_url: str | None = None,
 ) -> EmailMessage:
     username, _ = smtp_credentials(brand)
     if not username:
@@ -419,13 +420,20 @@ def build_reply_message(
     if brand == Brand.WBM:
         awards = f'''<tr><td style="padding:18px 28px 22px;border-top:1px solid #ece6da;text-align:center;background:#fff">
         <img src="cid:{assets['awards_cid']}" width="300" alt="Weddings By Mark awards" style="display:block;width:100%;max-width:300px;height:auto;margin:0 auto;border:0"></td></tr>'''
+    tracking_pixel = ""
+    if open_tracking_url:
+        tracking_pixel = (
+            f'<img src="{html.escape(open_tracking_url, quote=True)}" width="1" height="1" '
+            'alt="" aria-hidden="true" style="display:block;width:1px;height:1px;'
+            'border:0;margin:0;padding:0">'
+        )
     markup = f'''<!doctype html><html><body style="margin:0;background:#f3f1ed;color:#292724">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center" style="padding:22px 10px">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#fff;border:1px solid #e7e2d8;border-radius:14px;overflow:hidden">
     <tr><td align="center" style="padding:22px;background:{assets['soft']};border-bottom:3px solid {assets['accent']}"><img src="cid:{assets['logo_cid']}" alt="{html.escape(profile.display_name)}" style="display:block;max-width:245px;max-height:125px;width:auto;height:auto;margin:auto"></td></tr>
     <tr><td style="padding:30px 32px;font:16px/1.6 Arial,sans-serif;color:#2d2b28">{_body_html(body)}</td></tr>
     <tr><td style="padding:17px 28px;background:#242321;color:#fff;text-align:center;font:12px/1.6 Arial,sans-serif"><strong>{html.escape(profile.display_name)}</strong><br>{html.escape(profile.email or username)}{(' · ' + html.escape(profile.phone)) if profile.phone else ''}</td></tr>
-    {awards}</table></td></tr></table></body></html>'''
+    {awards}</table></td></tr></table>{tracking_pixel}</body></html>'''
     message.add_alternative(markup, subtype="html")
     html_part = message.get_payload()[-1]
     for path_key, cid_key in (("logo", "logo_cid"), ("awards", "awards_cid")):

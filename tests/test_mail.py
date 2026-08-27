@@ -88,10 +88,23 @@ def test_unified_inbox_matches_booking_and_sends_threaded_reply(monkeypatch):
         assert "OPEN YOUR WEDDING ACCOUNT" in message.get_body(
             preferencelist=("plain",)
         ).get_content()
+        assert "email_access=" in message.get_body(
+            preferencelist=("plain",)
+        ).get_content()
+        assert "/api/public/email-open/" in message.get_body(
+            preferencelist=("html",)
+        ).get_content()
         with SessionLocal() as db:
             assert db.scalar(select(func.count()).select_from(MailboxReply)) == 1
             assert db.scalar(select(func.count()).select_from(EmailLog).where(
                 EmailLog.template_key == "mail_reply")) == 1
+            reply_row = db.scalar(select(MailboxReply))
+            reply_log = db.scalar(select(EmailLog).where(
+                EmailLog.template_key == "mail_reply"
+            ))
+            assert reply_row.email_log_id == reply_log.id
+            assert reply_log.tracking_token_hash
+            assert "Hi Sophie" in reply_log.body
             assert db.scalar(select(func.count()).select_from(ClientPortalToken).where(
                 ClientPortalToken.booking_id == booking["id"])) == 1
 

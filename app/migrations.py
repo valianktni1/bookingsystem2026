@@ -64,12 +64,18 @@ def apply_safe_migrations() -> None:
         "email_logs": {
             "body": "TEXT NULL",
             "tracking_token_hash": "VARCHAR(64) NULL",
+            "first_opened_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+            "last_opened_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+            "open_count": "INTEGER NOT NULL DEFAULT 0",
             "first_link_accessed_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
             "last_link_accessed_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
             "link_access_count": "INTEGER NOT NULL DEFAULT 0",
             "retry_count": "INTEGER NOT NULL DEFAULT 0",
             "last_attempt_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
             "next_attempt_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",
+        },
+        "mailbox_replies": {
+            "email_log_id": "VARCHAR(36) NULL",
         },
         "reminder_logs": {
             "retry_count": "INTEGER NOT NULL DEFAULT 0",
@@ -96,4 +102,9 @@ def apply_safe_migrations() -> None:
                 "CREATE UNIQUE INDEX IF NOT EXISTS uq_email_log_tracking_token_hash_idx "
                 "ON email_logs (tracking_token_hash) "
                 "WHERE tracking_token_hash IS NOT NULL"
+            ))
+        if inspector.has_table("mailbox_replies"):
+            connection.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_mailbox_reply_email_log_id_idx "
+                "ON mailbox_replies (email_log_id) WHERE email_log_id IS NOT NULL"
             ))

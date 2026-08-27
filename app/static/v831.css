@@ -1,0 +1,11 @@
+/* V8.31 - honest per-email open and secure-link evidence. */
+.email-engagement{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.email-engagement b{display:inline-flex;align-items:center;padding:5px 7px;border-radius:7px;font-size:8px;line-height:1.35;font-weight:800}
+.email-engagement .opened{color:#12645a;background:#dff3ed}
+.email-engagement .clicked{color:#fff;background:#12645a}
+.email-engagement .waiting{color:#73571f;background:#fff4d8}
+.email-engagement .historical{color:#6d665b;background:#f2efe9}
+.email-tracking-note{margin:12px 14px 0;padding:9px 11px;border-radius:8px;background:#f5f2ec;color:#6d665b;font-size:8px;line-height:1.55}
+.email-history-list>div{align-items:flex-start}.email-history-list .email-engagement{margin-top:6px}
+.couple-message-body>.email-engagement{margin:0 0 11px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+@media(max-width:700px){.email-engagement{align-items:stretch;flex-direction:column}.email-engagement b{width:fit-content;max-width:100%}}

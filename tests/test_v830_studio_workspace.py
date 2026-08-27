@@ -101,8 +101,8 @@ def test_studio_style_assets_and_requested_wedding_tabs_are_loaded():
     css = (root / "app/static/v830.css").read_text(encoding="utf-8")
 
     assert "/static/v830.css?v=studio-style-workspace-v8-30" in index
-    assert "/static/v830.js?v=studio-style-workspace-v8-30" in index
-    assert "STUDIO MOBILE WORKSPACE V8.30.1" in index
+    assert "/static/v830.js?v=email-opening-v8-31" in index
+    assert "EMAIL OPENING V8.31" in index
     assert "Upcoming weddings" in script
     assert "All bookings" in script
     assert "Past weddings awaiting completion" in script

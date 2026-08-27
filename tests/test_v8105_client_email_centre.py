@@ -1,6 +1,7 @@
 import os
 from datetime import date, timedelta
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 TEST_ROOT = Path(__file__).parent
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_ROOT / 'test.db'}"
@@ -99,7 +100,9 @@ def test_client_email_centre_recommends_contract_and_sends_template_or_manual(mo
         assert template_send.status_code == 200
         assert template_send.json()["account_link_included"] is True
         assert sent[-1]["template_key"] == "contract_reminder"
-        assert sent[-1]["portal_url"].endswith("?tab=agreement")
+        tracked_url = urlparse(sent[-1]["portal_url"])
+        assert parse_qs(tracked_url.query)["tab"] == ["agreement"]
+        assert parse_qs(tracked_url.query)["email_access"]
         assert "Please shout if you need any help." in sent[-1]["body"]
 
         manual_send = client.post(f"/api/bookings/{booking['id']}/email-centre/send", json={

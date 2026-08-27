@@ -1,5 +1,13 @@
-BookingSystem2026 - Studio-style Mobile Wedding Workspace
-Build: 2026.08.26-studio-mobile-workspace-v8.30.1
+BookingSystem2026 - Customer Email Opening & Link Evidence
+Build: 2026.08.27-email-opening-v8.31
+
+V8.31 customer email evidence:
+- Adds a private opaque open tracker to every new customer-facing HTML email sent by the booking system.
+- Records first/last image load and load count without storing an IP address, device or browsing identity.
+- Tracks secure-account link access for enquiry acknowledgements, quotes, booking confirmations, payment receipts, agreement messages, reminders, check-ins, manually composed client emails and booking-linked Inbox replies.
+- Shows Sent - open not detected, Opened (images loaded), and Link accessed in the booking email history and quick desktop/mobile conversation views.
+- Clearly explains that privacy-protected inboxes may block or pre-load images, so Link accessed is stronger evidence than an image load.
+- Does not rewrite historical mail and does not enable any automatic Studio Ninja communication.
 
 V8.30.1 dedicated mobile workflow:
 - Rebuilds the phone wedding list as individual readable booking cards instead of a squeezed desktop table.

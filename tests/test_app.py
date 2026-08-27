@@ -223,7 +223,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
                                  "google_calendar_configured": False,
-                                     "build": "2026.08.26-studio-mobile-workspace-v8.30.1"}
+                                        "build": "2026.08.27-email-opening-v8.31"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -608,7 +608,9 @@ def test_phase_two_b_flow(monkeypatch):
             reminder_patch.setattr(main_module, "date", FrozenDate)
             reminder_patch.setattr(
                 main_module, "send_template_email",
-                lambda booking, profile, template, portal_url=None: (template.subject, template.body),
+                lambda booking, profile, template, portal_url=None, **kwargs: (
+                    template.subject, template.body
+                ),
             )
             schedule = [
                 (expected_balance_due - timedelta(days=7), "balance_due_7"),
@@ -695,7 +697,7 @@ def test_phase_two_b_flow(monkeypatch):
         sent_enquiry_emails = []
 
         def fake_enquiry_email(booking, profile, template, portal_url=None, extra_values=None,
-                               recipient=None, reply_to=None):
+                               recipient=None, reply_to=None, **kwargs):
             sent_enquiry_emails.append({
                 "key": template.template_key,
                 "recipient": recipient or booking.client.email,
@@ -734,8 +736,11 @@ def test_phase_two_b_flow(monkeypatch):
 
         # Complete automated client journey: enquiry -> quote -> forms -> first
         # partial payment. A £50 first payment must secure a £100-deposit booking.
-        enquiry_token = enquiry_portal_url.split("/client/")[1]
-        enquiry_portal = client.get(f"/api/client/{enquiry_token}")
+        enquiry_token = enquiry_portal_url.split("/client/")[1].split("?", 1)[0]
+        enquiry_access = enquiry_portal_url.split("email_access=", 1)[1]
+        enquiry_portal = client.get(
+            f"/api/client/{enquiry_token}?email_access={enquiry_access}"
+        )
         assert enquiry_portal.status_code == 200
         assert enquiry_portal.json()["record"]["status"] == "enquiry"
         assert enquiry_portal.json()["quote"] is None
@@ -750,7 +755,7 @@ def test_phase_two_b_flow(monkeypatch):
         journey_emails = []
 
         def fake_journey_email(booking, profile, template, portal_url=None, extra_values=None,
-                               recipient=None, reply_to=None):
+                               recipient=None, reply_to=None, **kwargs):
             journey_emails.append({
                 "key": template.template_key,
                 "portal_url": portal_url,
@@ -812,15 +817,17 @@ def test_phase_two_b_flow(monkeypatch):
             ]
             assert "Wedding Booking Form/questionnaire" in journey_emails[1]["body"]
             assert "digitally sign your wedding contract" in journey_emails[1]["body"]
-            assert journey_emails[1]["portal_url"].endswith(f"/client/{quote_token}")
+            assert f"/client/{quote_token}?" in journey_emails[1]["portal_url"]
+            assert "email_access=" in journey_emails[1]["portal_url"]
             assert "countersigned by Mark Adam Powell" in journey_emails[2]["body"]
-            assert journey_emails[2]["portal_url"].endswith("?tab=agreement")
+            assert "?tab=agreement&email_access=" in journey_emails[2]["portal_url"]
             payment_mail = journey_emails[3]
         assert payment_mail["values"]["payment_amount"] == "£50.00"
         assert payment_mail["values"]["total_paid"] == "£50.00"
         assert payment_mail["values"]["payment_status"] == "Your booking is secured"
-        assert payment_mail["portal_url"].endswith(
-            f"?tab=invoices&open=receipt&invoice={invoice['id']}"
+        assert (
+            f"?tab=invoices&open=receipt&invoice={invoice['id']}&email_access="
+            in payment_mail["portal_url"]
         )
         payment_token = payment_mail["portal_url"].split("/client/")[1].split("?")[0]
         public_inline_receipt = client.get(

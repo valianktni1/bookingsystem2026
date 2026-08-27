@@ -1,0 +1,24 @@
+BookingSystem2026 V8.31 - TrueNAS deployment
+
+1. Extract this complete ZIP over the GitHub working copy, commit and push it.
+2. In the TrueNAS shell run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v831-$(date +%Y%m%d-%H%M%S).dump"
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > "$BOOKING_BACKUP"
+
+ls -lh "$BOOKING_BACKUP"
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.27-email-opening-v8.31
+
+3. Hard-refresh the desktop browser. On a phone, close the existing booking-system tab and reopen it.
+4. Send one Testing Mode email, open it with images enabled, then refresh the couple's Quote & mail section. The exact email should show Opened (images loaded).

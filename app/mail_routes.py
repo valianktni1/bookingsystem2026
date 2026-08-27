@@ -253,7 +253,7 @@ def register_mail_routes(app: FastAPI) -> None:
         logs = db.scalars(select(EmailLog).where(
             EmailLog.booking_id == booking.id,
             EmailLog.status == "sent",
-            EmailLog.template_key.notin_(("new_enquiry_admin", "mail_reply")),
+            EmailLog.template_key != "new_enquiry_admin",
             func.lower(EmailLog.recipient).in_(client_emails),
         ).order_by(EmailLog.sent_at).limit(limit)).all()
         for row in logs:
@@ -267,6 +267,18 @@ def register_mail_routes(app: FastAPI) -> None:
                 "address": row.recipient,
                 "date": row.sent_at.isoformat(),
                 "status": row.status,
+                "open_tracking_enabled": bool(row.tracking_token_hash),
+                "first_opened_at": (row.first_opened_at.isoformat()
+                                     if row.first_opened_at else None),
+                "last_opened_at": (row.last_opened_at.isoformat()
+                                    if row.last_opened_at else None),
+                "open_count": int(row.open_count or 0),
+                "link_tracking_enabled": bool(row.tracking_token_hash),
+                "first_link_accessed_at": (row.first_link_accessed_at.isoformat()
+                                             if row.first_link_accessed_at else None),
+                "last_link_accessed_at": (row.last_link_accessed_at.isoformat()
+                                            if row.last_link_accessed_at else None),
+                "link_access_count": int(row.link_access_count or 0),
                 "attachments": [],
             })
 
@@ -278,6 +290,8 @@ def register_mail_routes(app: FastAPI) -> None:
         ).order_by(MailboxReply.sent_at).limit(limit)).all()
         reply_message_ids = {str(row.message_id) for row in replies if row.message_id}
         for row in replies:
+            if row.email_log_id:
+                continue
             sent.append({
                 "id": f"mailbox-reply:{row.id}",
                 "direction": "sent",
@@ -473,9 +487,14 @@ def register_mail_routes(app: FastAPI) -> None:
             booking = _booking_match(db, recipient, selected)
         body = payload.body.strip()
         portal_url = None
+        tracking_token = secrets.token_urlsafe(32) if booking else None
         if payload.include_account_link and booking:
             portal_url = _new_portal_url(db, booking)
             if portal_url:
+                portal_url = (
+                    f"{portal_url}{'&' if '?' in portal_url else '?'}"
+                    f"email_access={tracking_token}"
+                )
                 label = ("OPEN YOUR WEDDING ACCOUNT" if selected == Brand.WBM
                          else "OPEN YOUR CLIENT ACCOUNT")
                 body = f"{body}\n\n[{label}]({portal_url})"
@@ -485,6 +504,10 @@ def register_mail_routes(app: FastAPI) -> None:
         message = build_reply_message(
             selected, profile, recipient, original["subject"], body,
             original["message_id"], original["references"],
+            open_tracking_url=(
+                f"{get_settings().app_url.rstrip('/')}/api/public/email-open/{tracking_token}.gif"
+                if tracking_token else None
+            ),
         )
         reply_row = MailboxReply(
             brand=selected,
@@ -504,10 +527,17 @@ def register_mail_routes(app: FastAPI) -> None:
             reply_row.status = "sent"
             reply_row.copied_to_sent = append_to_sent(selected, message)
             if booking:
-                db.add(EmailLog(
+                email_log = EmailLog(
                     booking_id=booking.id, template_key="mail_reply",
-                    recipient=recipient, subject=str(message["Subject"]), status="sent",
-                ))
+                    recipient=recipient, subject=str(message["Subject"]), body=body,
+                    status="sent",
+                    tracking_token_hash=hashlib.sha256(
+                        tracking_token.encode("utf-8")
+                    ).hexdigest(),
+                )
+                db.add(email_log)
+                db.flush()
+                reply_row.email_log_id = email_log.id
             audit(db, "reply_to_client_email", "mailbox_reply", reply_row.id, {
                 "brand": selected.value,
                 "booking_id": booking.id if booking else None,

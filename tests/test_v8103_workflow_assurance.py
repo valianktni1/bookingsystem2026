@@ -68,7 +68,7 @@ def test_future_client_acceptance_is_countersigned_emailed_and_viewable(monkeypa
         assert accepted.json()["supplier_signed_at"]
         assert accepted.json()["completion_email_sent"] is True
         assert sent and sent[0][1] == "contract_completed"
-        assert sent[0][2].endswith("?tab=agreement")
+        assert "?tab=agreement&email_access=" in sent[0][2]
 
         status = client.get(f"/api/client/{token}").json()
         assert status["contract"]["fully_signed"] is True

@@ -189,7 +189,8 @@ def _plain_body(body: str) -> str:
     return re.sub(r"\*\*([^*\n]{1,160})\*\*", r"\1", plain)
 
 
-def _email_html(body: str, booking: Booking, profile: BusinessProfile) -> str:
+def _email_html(body: str, booking: Booking, profile: BusinessProfile,
+                open_tracking_url: str | None = None) -> str:
     assets = BRAND_ASSETS[booking.brand]
     awards = ""
     if booking.brand == Brand.WBM:
@@ -203,6 +204,13 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile) -> str:
                    style="display:block;width:100%;max-width:340px;height:auto;margin:0 auto;border:0">
             </td>
           </tr>"""
+    tracking_pixel = ""
+    if open_tracking_url:
+        tracking_pixel = (
+            f'<img src="{html.escape(open_tracking_url, quote=True)}" width="1" height="1" '
+            'alt="" aria-hidden="true" style="display:block;width:1px;height:1px;'
+            'border:0;margin:0;padding:0">'
+        )
     return f"""<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#f3f1ed;color:#262626">
@@ -234,13 +242,15 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile) -> str:
         </td>
       </tr>
     </table>
+    {tracking_pixel}
   </body>
 </html>"""
 
 
 def build_email_message(booking: Booking, profile: BusinessProfile, subject: str, body: str,
                         username: str, recipient: str | None = None,
-                        reply_to: str | None = None) -> EmailMessage:
+                        reply_to: str | None = None,
+                        open_tracking_url: str | None = None) -> EmailMessage:
     """Create a branded multipart email with embedded, client-safe PNG artwork."""
     message = EmailMessage()
     message["Subject"] = subject
@@ -248,7 +258,9 @@ def build_email_message(booking: Booking, profile: BusinessProfile, subject: str
     message["To"] = recipient or booking.client.email
     message["Reply-To"] = reply_to or profile.email or username
     message.set_content(_plain_body(body))
-    message.add_alternative(_email_html(body, booking, profile), subtype="html")
+    message.add_alternative(
+        _email_html(body, booking, profile, open_tracking_url), subtype="html"
+    )
     html_part = message.get_payload()[-1]
     assets = BRAND_ASSETS[booking.brand]
     for path_key, cid_key in (("logo", "logo_cid"), ("awards", "awards_cid")):
@@ -264,7 +276,8 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
                         portal_url: str | None = None,
                         extra_values: dict[str, str] | None = None,
                         recipient: str | None = None,
-                        reply_to: str | None = None) -> tuple[str, str]:
+                        reply_to: str | None = None,
+                        open_tracking_url: str | None = None) -> tuple[str, str]:
     username, _ = smtp_credentials(booking.brand)
     if not smtp_ready(booking.brand):
         raise RuntimeError(
@@ -275,7 +288,8 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
         booking, profile, template, portal_url, extra_values
     )
     message = build_email_message(booking, profile, subject, body, username,
-                                  recipient=recipient, reply_to=reply_to)
+                                  recipient=recipient, reply_to=reply_to,
+                                  open_tracking_url=open_tracking_url)
     try:
         send_email_message(message, booking.brand)
     except Exception as exc:
@@ -300,13 +314,15 @@ def render_template_content(booking: Booking, profile: BusinessProfile,
 
 
 def send_rendered_email(booking: Booking, profile: BusinessProfile, recipient: str,
-                        subject: str, body: str) -> None:
+                        subject: str, body: str,
+                        open_tracking_url: str | None = None) -> None:
     """Send a previously rendered, audit-retained message exactly as written."""
     username, _ = smtp_credentials(booking.brand)
     if not smtp_ready(booking.brand):
         raise RuntimeError(f"SMTP is not configured for {profile.display_name}")
     message = build_email_message(
-        booking, profile, subject, body, username, recipient=recipient
+        booking, profile, subject, body, username, recipient=recipient,
+        open_tracking_url=open_tracking_url,
     )
     send_email_message(message, booking.brand)
 

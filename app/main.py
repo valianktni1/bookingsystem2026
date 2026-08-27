@@ -70,6 +70,11 @@ STATIC_DIR = Path(__file__).parent / "static"
 ALLOWED_UPLOADS = {"application/pdf", "image/jpeg", "image/png",
                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
 ENQUIRY_HITS: dict[str, list[datetime]] = {}
+# A standards-compatible transparent 1x1 GIF. The public tracking route always
+# returns the same bytes and never exposes whether an opaque token was valid.
+TRANSPARENT_GIF = bytes.fromhex(
+    "47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b"
+)
 
 
 @asynccontextmanager
@@ -100,7 +105,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.30.1-studio-mobile-workspace", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.31-email-opening", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -204,6 +209,42 @@ def send_booking_template_email(db: Session, booking: Booking, profile: Business
     if booking.is_test:
         kwargs["recipient"] = client_email_recipient(db, booking)
     return send_template_email(booking, profile, template, portal_url, **kwargs)
+
+
+def tracked_client_email_url(portal_url: str | None, tracking_token: str) -> str | None:
+    """Add an opaque per-message link marker without exposing booking data."""
+    if not portal_url:
+        return None
+    separator = "&" if "?" in portal_url else "?"
+    return f"{portal_url}{separator}email_access={tracking_token}"
+
+
+def email_open_url(tracking_token: str) -> str:
+    return f"{settings.app_url.rstrip('/')}/api/public/email-open/{tracking_token}.gif"
+
+
+def send_tracked_booking_template_email(
+    db: Session,
+    booking: Booking,
+    profile: BusinessProfile,
+    template: EmailTemplate,
+    portal_url: str | None = None,
+    *,
+    tracking_token: str | None = None,
+    **kwargs,
+) -> tuple[str, str, str]:
+    """Send one client email and return the hash used for open/link evidence."""
+    raw_tracking_token = tracking_token or secrets.token_urlsafe(32)
+    subject, body = send_booking_template_email(
+        db,
+        booking,
+        profile,
+        template,
+        tracked_client_email_url(portal_url, raw_tracking_token),
+        open_tracking_url=email_open_url(raw_tracking_token),
+        **kwargs,
+    )
+    return subject, body, token_digest(raw_tracking_token)
 
 
 def payment_plan_code(booking: Booking) -> str:
@@ -1053,11 +1094,12 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
         if acknowledgement:
             try:
                 recipient = client_email_recipient(db, booking)
-                subject, email_body = send_booking_template_email(
+                subject, email_body, tracking_hash = send_tracked_booking_template_email(
                     db, booking, profile, acknowledgement, portal_url
                 )
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
-                                recipient=recipient, subject=subject, body=email_body, status="sent"))
+                                recipient=recipient, subject=subject, body=email_body, status="sent",
+                                tracking_token_hash=tracking_hash))
             except Exception as exc:
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
                                 recipient=client_email_recipient(db, booking),
@@ -2092,7 +2134,7 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
         outstanding = max(Decimal("0"), invoice.total - invoice.paid)
         deposit_remaining = max(Decimal("0"), booking.deposit_amount - invoice.paid)
         try:
-            subject, email_body = send_booking_template_email(
+            subject, email_body, tracking_hash = send_tracked_booking_template_email(
                 db, booking,
                 profile,
                 template,
@@ -2110,7 +2152,8 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
             )
             db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
                             recipient=client_email_recipient(db, booking), subject=subject,
-                            body=email_body, status="sent"))
+                            body=email_body, status="sent",
+                            tracking_token_hash=tracking_hash))
             payment_email_sent = True
         except Exception as exc:
             payment_email_error = str(exc)
@@ -2333,6 +2376,12 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
                     "retryable": bool(x.status == "failed" and x.body and not booking.legacy_source),
                     "retry_count": int(x.retry_count or 0),
                     "link_tracking_enabled": bool(x.tracking_token_hash),
+                    "open_tracking_enabled": bool(x.tracking_token_hash),
+                    "first_opened_at": (x.first_opened_at.isoformat()
+                                         if x.first_opened_at else None),
+                    "last_opened_at": (x.last_opened_at.isoformat()
+                                        if x.last_opened_at else None),
+                    "open_count": int(x.open_count or 0),
                     "first_link_accessed_at": (x.first_link_accessed_at.isoformat()
                                                 if x.first_link_accessed_at else None),
                     "last_link_accessed_at": (x.last_link_accessed_at.isoformat()
@@ -2700,7 +2749,6 @@ def create_and_send_quote(booking_id: str, payload: QuoteSendIn,
     )
     quote_url = f"{settings.app_url.rstrip('/')}/client/{raw}?tab=quote"
     tracking_token = secrets.token_urlsafe(32)
-    tracked_quote_url = f"{quote_url}&email_access={tracking_token}"
     template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
                                                      EmailTemplate.template_key == "quote",
                                                      EmailTemplate.is_active.is_(True)))
@@ -2736,13 +2784,15 @@ def create_and_send_quote(booking_id: str, payload: QuoteSendIn,
                 body=(payload.body.strip() if payload.body else template.body),
                 is_active=True,
             )
-            subject, email_body = send_booking_template_email(
-                db, booking, profile, composed_template, tracked_quote_url
+            subject, email_body, tracking_hash = send_tracked_booking_template_email(
+                db, booking, profile, composed_template, quote_url,
+                tracking_token=tracking_token,
             )
             email_sent = True
             email_log.subject = subject
             email_log.body = email_body
             email_log.status = "sent"
+            email_log.tracking_token_hash = tracking_hash
             if booking.status == RecordStatus.ENQUIRY:
                 booking.status = RecordStatus.QUOTED
             for task in db.scalars(select(Task).where(
@@ -2792,11 +2842,12 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
     try:
         portal_url = issue_client_email_url(db, booking, template.template_key)
         recipient = client_email_recipient(db, booking)
-        subject, email_body = send_booking_template_email(
+        subject, email_body, tracking_hash = send_tracked_booking_template_email(
             db, booking, profile, template, portal_url
         )
         log = EmailLog(booking_id=booking.id, template_key=template.template_key,
-                       recipient=recipient, subject=subject, body=email_body, status="sent")
+                       recipient=recipient, subject=subject, body=email_body, status="sent",
+                       tracking_token_hash=tracking_hash)
         db.add(log)
         audit(
             db,
@@ -2931,7 +2982,7 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
     recipient = client_email_recipient(db, booking)
     try:
         portal_url = issue_client_email_url(db, booking, template_key)
-        subject, email_body = send_booking_template_email(
+        subject, email_body, tracking_hash = send_tracked_booking_template_email(
             db, booking, profile, composed, portal_url
         )
         db.add(EmailLog(
@@ -2941,6 +2992,7 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
             subject=subject,
             body=email_body,
             status="sent",
+            tracking_token_hash=tracking_hash,
         ))
         audit(db, "send_manual_email" if manual_only else "send_client_email",
               "booking", booking.id, {
@@ -2976,6 +3028,40 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
         raise HTTPException(503, str(exc))
 
 
+@app.get("/api/public/email-open/{tracking_token}.gif", include_in_schema=False)
+def record_email_open(tracking_token: str, db: Session = Depends(get_db)):
+    """Record an email-image load without exposing any client information."""
+    if 20 <= len(tracking_token) <= 200:
+        email_log = db.scalar(select(EmailLog).where(
+            EmailLog.status == "sent",
+            EmailLog.tracking_token_hash == token_digest(tracking_token),
+        ).limit(1))
+        if email_log:
+            opened_at = datetime.now(timezone.utc)
+            first_open = email_log.first_opened_at is None
+            if first_open:
+                email_log.first_opened_at = opened_at
+            email_log.last_opened_at = opened_at
+            email_log.open_count = int(email_log.open_count or 0) + 1
+            if first_open:
+                audit(db, "client_email_opened", "booking", email_log.booking_id, {
+                    "email_log_id": email_log.id,
+                    "template": email_log.template_key,
+                    "recipient": email_log.recipient,
+                    "evidence": "tracking_image_loaded",
+                })
+            db.commit()
+    return Response(
+        content=TRANSPARENT_GIF,
+        media_type="image/gif",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
 @app.get("/api/client/{token}")
 def public_portal_data(
     token: str,
@@ -2987,7 +3073,6 @@ def public_portal_data(
     if email_access:
         access_log = db.scalar(select(EmailLog).where(
             EmailLog.booking_id == booking.id,
-            EmailLog.template_key == "quote",
             EmailLog.status == "sent",
             EmailLog.tracking_token_hash == token_digest(email_access),
         ).limit(1))
@@ -2999,9 +3084,11 @@ def public_portal_data(
             access_log.last_link_accessed_at = accessed_at
             access_log.link_access_count = int(access_log.link_access_count or 0) + 1
             if first_access:
-                audit(db, "quote_link_accessed", "booking", booking.id, {
+                audit(db, ("quote_link_accessed" if access_log.template_key == "quote"
+                           else "client_email_link_accessed"), "booking", booking.id, {
                     "email_log_id": access_log.id,
                     "recipient": access_log.recipient,
+                    "template": access_log.template_key,
                 })
             db.commit()
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
@@ -3202,7 +3289,7 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
             and smtp_ready(booking.brand)):
         try:
             invoice_portal_url = f"{settings.app_url.rstrip('/')}/client/{token}"
-            subject, email_body = send_booking_template_email(
+            subject, email_body, tracking_hash = send_tracked_booking_template_email(
                 db, booking, profile, acceptance_template, invoice_portal_url,
                 extra_values={
                     "deposit_due_date": deposit_due_date.strftime("%d %B %Y"),
@@ -3212,7 +3299,8 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
             )
             db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
                             recipient=client_email_recipient(db, booking), subject=subject,
-                            body=email_body, status="sent"))
+                            body=email_body, status="sent",
+                            tracking_token_hash=tracking_hash))
             acceptance_email_sent = True
         except Exception as exc:
             db.add(EmailLog(booking_id=booking.id, template_key="quote_accepted",
@@ -3624,11 +3712,12 @@ def send_contract_completion_email(db: Session, booking: Booking) -> tuple[bool,
         return False, error
     portal_url = issue_client_email_url(db, booking, "contract_completed")
     try:
-        subject, email_body = send_booking_template_email(
+        subject, email_body, tracking_hash = send_tracked_booking_template_email(
             db, booking, profile, template, portal_url
         )
         db.add(EmailLog(booking_id=booking.id, template_key="contract_completed",
-                        recipient=recipient, subject=subject, body=email_body, status="sent"))
+                        recipient=recipient, subject=subject, body=email_body, status="sent",
+                        tracking_token_hash=tracking_hash))
         return True, None
     except Exception as exc:
         error = str(exc)
@@ -3749,7 +3838,7 @@ def _attempt_reminder(db: Session, booking: Booking, reminder: ReminderLog) -> b
             raise RuntimeError("Business profile is missing")
         portal_url = issue_client_email_url(db, booking, template_key, 365)
         recipient = client_email_recipient(db, booking)
-        subject, email_body = send_booking_template_email(
+        subject, email_body, tracking_hash = send_tracked_booking_template_email(
             db, booking, profile, template, portal_url
         )
         reminder.status = "sent"
@@ -3762,6 +3851,7 @@ def _attempt_reminder(db: Session, booking: Booking, reminder: ReminderLog) -> b
             subject=subject,
             body=email_body,
             status="sent",
+            tracking_token_hash=tracking_hash,
             retry_count=max(0, reminder.retry_count - 1),
             last_attempt_at=now,
         ))
@@ -3962,7 +4052,11 @@ def retry_failed_communication(
     email.last_attempt_at = now
     db.commit()
     try:
-        send_rendered_email(booking, profile, email.recipient, email.subject, email.body)
+        tracking_token = secrets.token_urlsafe(32)
+        send_rendered_email(
+            booking, profile, email.recipient, email.subject, email.body,
+            open_tracking_url=email_open_url(tracking_token),
+        )
     except Exception as exc:
         email.error = str(exc)[:2000]
         email.next_attempt_at = now + timedelta(minutes=settings.email_retry_minutes)
@@ -3977,6 +4071,7 @@ def retry_failed_communication(
         subject=email.subject,
         body=email.body,
         status="sent",
+        tracking_token_hash=token_digest(tracking_token),
         retry_count=email.retry_count,
         last_attempt_at=now,
         sent_at=now,

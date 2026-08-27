@@ -192,7 +192,7 @@ def test_failed_exact_email_is_visible_and_manually_retryable(monkeypatch):
 
         monkeypatch.setattr(
             main_module, "send_rendered_email",
-            lambda booking, profile, recipient, subject, body:
+            lambda booking, profile, recipient, subject, body, **kwargs:
             sent.append((recipient, subject, body)),
         )
         retried = client.post(f"/api/communications/failures/email/{failure_id}/retry")
