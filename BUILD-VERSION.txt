@@ -1,5 +1,15 @@
-BookingSystem2026 - Enquiry Date Clash Protection
-Build: 2026.08.28-enquiry-date-clash-v8.31.1
+BookingSystem2026 - Friendly Desktop & Mobile Workspace
+Build: 2026.08.28-friendly-workspace-v8.32
+
+V8.32 friendly working layout:
+- Raises important phone text to readable 15-19px sizes instead of the previous 8-11px labels.
+- Rebuilds mobile dashboard shortcuts as large two-column tiles and makes action queues readable.
+- Makes each mobile wedding a large card showing couple, package, venue, date, status and outstanding balance.
+- Adds direct Email, Call, Invoice, Questionnaire, Notes and More actions immediately beneath every couple header.
+- Removes the six-step horizontal workflow bar from mobile and reduces the initial summary to four essential facts.
+- Keeps one-tap expandable mobile sections with larger headings, descriptions, buttons and form text.
+- Enlarges the desktop wedding list, workflow, mail, client, invoice and summary text for at-a-glance use.
+- Keeps V8.31.1 date clashes, V8.31 email evidence, Studio Ninja protections and Accounts sync off.
 
 V8.31.1 enquiry date-clash protection:
 - Checks every new enquiry and unaccepted quote against secured WBM weddings immediately.

@@ -105,7 +105,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.31-email-opening", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.32-friendly-workspace", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -786,12 +786,18 @@ def journey_stages(db: Session, bookings: list[Booking]) -> dict[str, dict]:
 
 def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | None = None,
                  journey_stage: dict | None = None) -> dict:
+    outstanding_total = sum((
+        max(Decimal(invoice.total or 0) - Decimal(invoice.paid or 0), Decimal("0"))
+        for invoice in item.invoices
+        if invoice.status not in ("paid", "void", "cancelled")
+    ), Decimal("0"))
     data = {"id": item.id, "brand": item.brand.value, "kind": item.kind.value, "status": item.status.value,
             "title": item.title, "event_date": item.event_date.isoformat() if item.event_date else None,
             "venue_or_project": item.venue_or_project, "venue_address": item.venue_address,
             "venue_place_id": item.venue_place_id, "venue_lat": item.venue_lat, "venue_lng": item.venue_lng,
             "package_name": item.package_name,
             "quoted_total": money(item.quoted_total), "deposit_amount": money(item.deposit_amount),
+            "outstanding_total": money(outstanding_total),
             "payment_reference": payment_reference(item),
             "deposit_paid_date": item.deposit_paid_date.isoformat() if item.deposit_paid_date else None,
             "balance_due_date": item.balance_due_date.isoformat() if item.balance_due_date else None,

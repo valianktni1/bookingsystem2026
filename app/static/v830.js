@@ -19,11 +19,11 @@
   function weddingRow(record, canComplete = false) {
     return `<div class="v830-booking-row ${hasSameDateConflict(record) ? "same-date-booking" : ""}">
       <button class="v830-booking-open" data-record="${attr(record.id)}" type="button">
-        <span class="client-cell"><i class="client-avatar ${record.brand}">${esc(initials(record))}</i><strong>${esc(record.title)}</strong></span>
+        <span class="client-cell"><i class="client-avatar ${record.brand}">${esc(initials(record))}</i><span class="v832-client-copy"><strong>${esc(record.title)}</strong><small>${esc(record.package_name || "Package not selected")}</small></span></span>
         <span>${esc(record.venue_or_project || "Not set")}</span>
         <span class="booking-date-cell"><span>${esc(fmtDate(record.event_date))}</span>${sameDateBookingWarning(record)}</span>
         <span class="status ${recordStageClass(record)}" title="${attr(recordStage(record).help || "")}">${esc(recordStageLabel(record))}</span>
-        <strong>${money(record.quoted_total)}</strong>
+        <strong class="v832-money"><span>${money(record.outstanding_total)}</span><small>outstanding</small></strong>
       </button>
       ${canComplete ? `<button class="v830-list-complete" data-complete-wedding="${attr(record.id)}" type="button">✓ Mark complete</button>` : ""}
     </div>`;

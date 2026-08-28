@@ -1,0 +1,78 @@
+/* V8.32 - friendly, readable Studio-style working screens. */
+
+.v832-quick-actions{width:min(1320px,calc(100% - 44px));display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin:15px auto 0}
+.v832-quick-actions button{min-height:62px;display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 12px;border:1px solid #cfdcdd;border-radius:11px;color:#18383d;background:#fff;font-size:14px;font-weight:800;box-shadow:0 5px 16px #102b340d}
+.v832-quick-actions button:hover{border-color:#83bdb6;color:#0d665e;background:#f2faf8}.v832-quick-actions button:disabled{opacity:.45;cursor:not-allowed}
+.v832-quick-actions i{width:33px;height:33px;display:grid;place-items:center;border-radius:9px;color:#0d6d64;background:#e8f5f2;font-size:16px;font-style:normal}
+
+@media(min-width:761px){
+  .v830-wedding-switcher strong{font-size:16px}.v830-wedding-switcher small{font-size:12px}
+  .v830-wedding-list .tools>div:first-child strong{font-size:16px}.v830-wedding-list .tools>div:first-child small,.v830-upcoming-count{font-size:12px}
+  .v830-booking-head{font-size:11px}.v830-booking-open{min-height:82px;font-size:14px}.v830-booking-open .client-cell strong{font-size:16px}.v830-booking-open .status{font-size:12px}.v830-booking-open>strong{font-size:14px}
+  .v832-client-copy,.v832-money{display:grid;gap:4px}.v832-client-copy small,.v832-money small{color:#75858a;font-size:11px;font-weight:600}.v832-money small{text-align:right}
+  .same-date-booking-warning small{font-size:11px}
+  .record-snapshot small{font-size:11px}.record-snapshot strong{font-size:15px}
+  .record-stage-bar button{font-size:13px}.record-workspace-tabs strong{font-size:14px}.record-workspace-tabs small{font-size:11px}
+  .record-next-action small{font-size:10px}.record-next-action strong{font-size:16px}.record-next-action span{font-size:13px}
+  .v830-job-panel>header small,.v830-info-card dt,.v830-summary-card small{font-size:11px}.v830-job-panel>header h3{font-size:18px}.v830-job-panel>header>span{font-size:12px}
+  .v830-workflow-list strong,.v830-mail-list strong{font-size:14px}.v830-workflow-list small,.v830-mail-list small{font-size:12px}
+  .v830-info-card>header>strong{font-size:15px}.v830-info-card dl{grid-template-columns:105px minmax(0,1fr);font-size:13px}
+  .v830-summary-card strong{font-size:15px}.v830-summary-card em{font-size:12px}
+  .drawer .detail p,.drawer .detail dl,.drawer .invoice-card dl{font-size:14px}.drawer .detail h3,.drawer .section-actions h3{font-size:17px}
+}
+
+@media(max-width:760px){
+  html{font-size:16px}
+  body{font-size:16px;line-height:1.45}
+  button,input,select,textarea{font-size:16px}
+  .topbar .search input{font-size:16px}.page{padding:16px 12px 30px}.page-heading{min-height:74px}
+  .page-heading small{font-size:12px}.page-heading h1{font-size:27px}.page-heading p{max-width:none;font-size:15px;line-height:1.45}
+  .mobile-nav{height:76px}.mobile-nav button{font-size:12px;font-weight:750}.mobile-nav button span{font-size:22px}
+
+  .v8301-mobile-shortcuts{grid-template-columns:repeat(2,1fr);border-radius:14px}
+  .v8301-mobile-shortcuts button{min-height:102px;border-right:1px solid var(--line);font-size:16px}
+  .v8301-mobile-shortcuts button:nth-child(3n){border-right:1px solid var(--line)}.v8301-mobile-shortcuts button:nth-child(even){border-right:0}.v8301-mobile-shortcuts button:nth-last-child(-n+3){border-bottom:1px solid var(--line)}.v8301-mobile-shortcuts button:nth-last-child(-n+2){border-bottom:0}
+  .v8301-mobile-shortcuts i{width:44px;height:44px;font-size:22px}
+
+  .v811-today-head{padding:17px;gap:10px}.v811-today-head small{font-size:12px}.v811-today-head h2{font-size:26px}.v811-today-head p{font-size:15px;line-height:1.45}.v811-today-head>b{font-size:14px}
+  .v828-dashboard-group>header small{font-size:12px}.v828-dashboard-group>header h2{font-size:22px}.v828-dashboard-group>header p{font-size:15px;line-height:1.45}
+  .v811-queue-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.v811-queue-cards>button{min-height:128px;padding:14px;display:grid;align-content:start}.v811-queue-cards i{width:40px;height:40px;font-size:18px}.v811-queue-cards strong{font-size:26px}.v811-queue-cards small{font-size:15px}.v811-queue-cards em{font-size:13px;line-height:1.4}.v819-payment-total{font-size:18px}
+  .v811-queue-item{min-height:88px;padding:13px;gap:12px}.v811-queue-item>span:nth-child(2) strong{font-size:16px}.v811-queue-item>span:nth-child(2) small{font-size:14px;line-height:1.4}.v811-queue-panel .panel-title h2{font-size:19px}.v811-queue-panel .panel-title p{font-size:14px}
+
+  .v830-wedding-switcher{top:66px}.v830-wedding-switcher>button{min-height:80px;padding:12px}.v830-wedding-switcher strong{font-size:16px;line-height:1.25}.v830-wedding-switcher small{font-size:13px;line-height:1.3}
+  .v830-wedding-list .tools>div:first-child strong{font-size:18px}.v830-wedding-list .tools>div:first-child small,.v830-upcoming-count{font-size:14px}
+  .v830-booking-table{gap:12px;padding:10px}.v830-booking-row{border-radius:14px}
+  .v830-booking-open{min-height:174px;gap:10px 12px;padding:16px!important;font-size:15px}
+  .v830-booking-open::after{content:"›";top:15px;right:16px;font-size:27px}
+  .v830-booking-open .client-cell{align-items:center;padding-right:30px}.v830-booking-open .client-cell strong{font-size:19px;line-height:1.25}.v830-booking-open .client-avatar{width:44px;height:44px;font-size:14px}
+  .v832-client-copy{display:grid;gap:4px}.v832-client-copy small{color:#6f8085;font-size:14px;font-weight:600}
+  .v830-booking-open>span:nth-child(2),.v830-booking-open .booking-date-cell{font-size:15px;line-height:1.4}.v830-booking-open .status{font-size:13px;padding:6px 9px}
+  .v830-booking-open>strong.v832-money{display:grid;gap:1px;font-size:17px;text-align:right}.v832-money small{color:#718187;font-size:12px;font-weight:600}
+  .same-date-booking-warning{gap:7px}.same-date-booking-warning i{width:23px;height:23px;font-size:13px}.same-date-booking-warning small{font-size:13px}
+  .v830-list-complete{min-height:50px;font-size:15px}
+
+  .record-command-bar{min-height:58px}.record-command-actions>#record-email-client-top{display:none}
+  .record-command-identity{padding:17px 15px 18px}.record-command-identity small{font-size:12px}.record-title-line h1{font-size:27px}.record-command-identity p{font-size:16px;line-height:1.45}.v828-stage-help{font-size:14px;line-height:1.4}
+  .record-contact-actions{display:none}
+  .v832-quick-actions{width:auto;position:sticky;z-index:19;top:57px;grid-template-columns:repeat(3,1fr);gap:1px;margin:0;border-top:1px solid #dbe5e6;border-bottom:1px solid #dbe5e6;background:#dbe5e6;box-shadow:0 5px 16px #102b3415}
+  .v832-quick-actions button{min-height:68px;display:grid;place-items:center;align-content:center;gap:4px;padding:6px 3px;border:0;border-radius:0;box-shadow:none;font-size:16px}
+  .v832-quick-actions i{width:auto;height:auto;background:transparent;font-size:19px}.v832-quick-actions button:last-child i{font-size:15px}
+  .record-command-main{padding:12px!important}
+  .record-snapshot{grid-template-columns:1fr 1fr}.record-snapshot article{min-height:82px;padding:12px}.record-snapshot article:nth-child(n+5){display:none}.record-snapshot small{font-size:11px}.record-snapshot strong{font-size:16px;line-height:1.3}
+  .record-stage-bar{display:none}
+  .record-next-action{padding:15px!important;gap:12px}.record-next-action small{font-size:11px}.record-next-action strong{font-size:18px;line-height:1.3}.record-next-action span{font-size:15px;line-height:1.45}.record-next-action button{min-height:48px;font-size:15px}
+
+  .v8301-mobile-sections{border-radius:14px}.v8301-mobile-section>button{min-height:88px;gap:13px;padding:13px 15px}.v8301-mobile-section>button>i{width:45px;height:45px;font-size:20px}.v8301-mobile-section>button strong{font-size:18px}.v8301-mobile-section>button small{margin-top:5px;font-size:15px;line-height:1.4;white-space:normal}.v8301-mobile-section>button>b{font-size:21px}
+  .v8301-mobile-section-body{padding:13px!important}
+  .v830-job-panel>header{padding:14px}.v830-job-panel>header small{font-size:11px}.v830-job-panel>header h3{font-size:19px}.v830-job-panel>header>span{font-size:13px}
+  .v830-workflow-list>button{min-height:74px}.v830-workflow-list strong,.v830-mail-list strong{font-size:16px}.v830-workflow-list small,.v830-mail-list small{font-size:14px;line-height:1.4}
+  .v830-info-card>header{height:58px}.v830-info-card>header>strong{font-size:17px}.v830-info-card dl{grid-template-columns:92px minmax(0,1fr);font-size:15px;line-height:1.45}
+  .v830-summary-card{min-height:88px}.v830-summary-card small{font-size:11px}.v830-summary-card strong{font-size:17px}.v830-summary-card em{font-size:14px;line-height:1.4}
+  .drawer .detail{padding:16px}.drawer .detail h3,.drawer .section-actions h3,.drawer .section-title{font-size:20px}.drawer .detail p,.drawer .detail dl,.drawer .invoice-card dl{grid-template-columns:1fr;font-size:16px;line-height:1.5}.drawer .detail dt{margin-top:8px;font-size:13px;font-weight:750}.drawer .detail dd small{font-size:14px}
+  .drawer .primary,.drawer .secondary,.drawer .mini,.drawer .small-button{min-height:48px;font-size:15px}.drawer input,.drawer select,.drawer textarea{min-height:48px;font-size:16px}
+  .questionnaire-card>header h3{font-size:19px}.questionnaire-card>header span,.questionnaire-card dt,.questionnaire-card dd{font-size:15px}.questionnaire-card dl>div{gap:7px;padding:15px}
+}
+
+@media(max-width:370px){
+  .v811-queue-cards{grid-template-columns:1fr}.v832-quick-actions button{font-size:15px}.v830-booking-open{min-height:184px}.page-heading h1{font-size:25px}.v830-wedding-switcher small{display:block}
+}
