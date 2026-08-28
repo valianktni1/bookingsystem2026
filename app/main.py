@@ -892,6 +892,73 @@ def website_date_is_booked(db: Session, wedding_date: date) -> bool:
     return booking_id is not None
 
 
+SAME_DATE_ENQUIRY_STATUSES = (RecordStatus.ENQUIRY, RecordStatus.QUOTED)
+SAME_DATE_BOOKED_STATUSES = (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)
+
+
+def same_date_conflict_totals(db: Session) -> dict[date, Counter]:
+    """Build the private admin conflict totals for every relevant WBM date.
+
+    Open enquiries and quotes count only while they remain in the live workspace.
+    Confirmed/in-progress weddings continue protecting their date when archived,
+    matching the public availability check's safety-first behaviour.
+    """
+    rows = db.execute(select(
+        Booking.event_date, Booking.status, Booking.archived_at,
+    ).where(
+        Booking.brand == Brand.WBM,
+        Booking.kind == RecordKind.WEDDING,
+        Booking.is_test.is_(False),
+        Booking.event_date.is_not(None),
+        Booking.status.in_(SAME_DATE_ENQUIRY_STATUSES + SAME_DATE_BOOKED_STATUSES),
+    )).all()
+    totals: dict[date, Counter] = {}
+    for wedding_date, booking_status, archived_at in rows:
+        if booking_status in SAME_DATE_ENQUIRY_STATUSES and archived_at is not None:
+            continue
+        bucket = totals.setdefault(wedding_date, Counter())
+        bucket["booked"] += int(booking_status in SAME_DATE_BOOKED_STATUSES)
+        bucket["enquiries"] += int(booking_status in SAME_DATE_ENQUIRY_STATUSES)
+    return totals
+
+
+def add_same_date_conflict(data: dict, booking: Booking,
+                           totals: dict[date, Counter]) -> dict:
+    relevant = (
+        booking.brand == Brand.WBM
+        and booking.kind == RecordKind.WEDDING
+        and not booking.is_test
+        and booking.event_date is not None
+        and booking.status in SAME_DATE_ENQUIRY_STATUSES + SAME_DATE_BOOKED_STATUSES
+        and not (
+            booking.status in SAME_DATE_ENQUIRY_STATUSES
+            and booking.archived_at is not None
+        )
+    )
+    counts = totals.get(booking.event_date, Counter()) if relevant else Counter()
+    booked = int(counts.get("booked", 0))
+    enquiries = int(counts.get("enquiries", 0))
+    own_booked = int(relevant and booking.status in SAME_DATE_BOOKED_STATUSES)
+    own_enquiry = int(relevant and booking.status in SAME_DATE_ENQUIRY_STATUSES)
+    other_booked = max(0, booked - own_booked)
+    other_enquiries = max(0, enquiries - own_enquiry)
+    total = booked + enquiries
+    conflict = {
+        "has_conflict": bool(relevant and other_booked + other_enquiries > 0),
+        "booked_weddings": booked,
+        "open_enquiries": enquiries,
+        "other_booked_weddings": other_booked,
+        "other_open_enquiries": other_enquiries,
+        "total_records": total,
+    }
+    # Retain the original field for older cached admin JavaScript. Its value is
+    # now the total number of live records sharing the date, while the structured
+    # object above supplies the accurate wording to V8.31.1 and later.
+    data["same_date_active_booking_count"] = total if relevant else 0
+    data["same_date_conflict"] = conflict
+    return data
+
+
 @app.get("/api/public/availability")
 def public_wedding_availability(date: date = Query(...), db: Session = Depends(get_db)):
     """Privacy-safe live date result for the public website checker."""
@@ -1669,17 +1736,9 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
 def list_bookings(brand: Brand | None = None, kind: RecordKind | None = None,
                   archived: bool = False, q: str | None = Query(default=None, max_length=100),
                   _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
-    # Count genuine active WBM jobs independently of the current search/filter,
-    # so finding one member of a same-date pair never hides its warning.
-    active_wedding_dates = db.scalars(select(Booking.event_date).where(
-        Booking.archived_at.is_(None),
-        Booking.brand == Brand.WBM,
-        Booking.kind == RecordKind.WEDDING,
-        Booking.status.in_((RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)),
-        Booking.is_test.is_(False),
-        Booking.event_date.is_not(None),
-    )).all()
-    active_date_counts = Counter(active_wedding_dates)
+    # Calculate conflicts independently of the current search/filter so finding
+    # one member of a same-date group never hides the warning.
+    date_conflicts = same_date_conflict_totals(db)
     stmt = select(Booking).options(
         selectinload(Booking.client), selectinload(Booking.quotes),
         selectinload(Booking.tasks), selectinload(Booking.invoices),
@@ -1698,18 +1757,7 @@ def list_bookings(brand: Brand | None = None, kind: RecordKind | None = None,
     result = []
     for row in rows:
         data = booking_json(row, journey_stage=stages.get(row.id))
-        is_active_wedding = (
-            row.archived_at is None
-            and row.brand == Brand.WBM
-            and row.kind == RecordKind.WEDDING
-            and row.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)
-            and not row.is_test
-            and row.event_date is not None
-        )
-        data["same_date_active_booking_count"] = (
-            int(active_date_counts.get(row.event_date, 0)) if is_active_wedding else 0
-        )
-        result.append(data)
+        result.append(add_same_date_conflict(data, row, date_conflicts))
     return result
 
 
@@ -1734,7 +1782,8 @@ def get_booking(booking_id: str, _: Admin = Depends(current_admin), db: Session 
     activity = db.scalars(select(AuditLog).where(AuditLog.entity_id == booking_id)
                           .order_by(AuditLog.created_at.desc())).all()
     stage = journey_stages(db, [item]).get(item.id)
-    return booking_json(item, full=True, activity=activity, journey_stage=stage)
+    data = booking_json(item, full=True, activity=activity, journey_stage=stage)
+    return add_same_date_conflict(data, item, same_date_conflict_totals(db))
 
 
 @app.patch("/api/bookings/{booking_id}")

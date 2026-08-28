@@ -1,5 +1,14 @@
-BookingSystem2026 - Customer Email Opening & Link Evidence
-Build: 2026.08.27-email-opening-v8.31
+BookingSystem2026 - Enquiry Date Clash Protection
+Build: 2026.08.28-enquiry-date-clash-v8.31.1
+
+V8.31.1 enquiry date-clash protection:
+- Checks every new enquiry and unaccepted quote against secured WBM weddings immediately.
+- Shows DATE BOOKED in New Enquiries when a requested date already has a confirmed/in-progress wedding.
+- Shows matching enquiry/wedding warnings in Wedding Bookings and inside the couple record.
+- Keeps secured archived weddings in the private conflict calculation so hiding a record cannot hide a booked date.
+- Excludes cancelled, completed, Testing Mode, archived enquiries and Ivory Digital records.
+- Replaces the tiny expired-session error with the full booking-system sign-in screen and confirms that nothing was sent.
+- Changes no public availability behavior, email automation, Studio Ninja protection, Accounts setting or client-facing screen.
 
 V8.31 customer email evidence:
 - Adds a private opaque open tracker to every new customer-facing HTML email sent by the booking system.

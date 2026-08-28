@@ -54,7 +54,7 @@ def add_record(db, title, status, *, brand=Brand.WBM, kind=RecordKind.WEDDING,
     return booking
 
 
-def test_only_active_real_wbm_weddings_create_the_same_date_warning():
+def test_active_wbm_weddings_and_open_enquiries_share_the_private_warning():
     reset_database()
     with TestClient(app) as client:
         login(client)
@@ -73,9 +73,9 @@ def test_only_active_real_wbm_weddings_create_the_same_date_warning():
 
         rows = client.get("/api/bookings").json()
         counts = {row["title"]: row["same_date_active_booking_count"] for row in rows}
-        assert counts["Alpha Wedding"] == 2
-        assert counts["Beta Wedding"] == 2
-        assert counts["Date Enquiry"] == 0
+        assert counts["Alpha Wedding"] == 3
+        assert counts["Beta Wedding"] == 3
+        assert counts["Date Enquiry"] == 3
         assert counts["Cancelled Wedding"] == 0
         assert counts["Testing Wedding"] == 0
         assert counts["Ivory Project"] == 0
@@ -83,7 +83,7 @@ def test_only_active_real_wbm_weddings_create_the_same_date_warning():
         # Searching for only one member of the pair must retain the warning.
         searched = client.get("/api/bookings?q=Alpha").json()
         assert [(row["title"], row["same_date_active_booking_count"]) for row in searched] == [
-            ("Alpha Wedding", 2),
+            ("Alpha Wedding", 3),
         ]
 
         # Once one genuine booking is cancelled, the remaining wedding is no
@@ -92,7 +92,8 @@ def test_only_active_real_wbm_weddings_create_the_same_date_warning():
             db.get(Booking, second_id).status = RecordStatus.CANCELLED
             db.commit()
         refreshed = client.get("/api/bookings?q=Alpha").json()
-        assert refreshed[0]["same_date_active_booking_count"] == 1
+        assert refreshed[0]["same_date_active_booking_count"] == 2
+        assert refreshed[0]["same_date_conflict"]["other_open_enquiries"] == 1
 
 
 def test_private_warning_is_wired_only_into_the_admin_booking_list():
@@ -103,14 +104,15 @@ def test_private_warning_is_wired_only_into_the_admin_booking_list():
     index = (root / "app/static/index.html").read_text()
 
     assert "sameDateBookingWarning" in admin_js
+    assert "sameDateConflictBanner" in admin_js
     assert "same_date_active_booking_count" in admin_js
-    assert "Caution:" in admin_js
+    assert "DATE BOOKED" in admin_js
     assert "same-date-booking-warning" in admin_js
     assert ".same-date-booking-warning" in css
     assert "sameDateBookingWarning" not in client_js
     assert "same_date_active_booking_count" not in client_js
-    assert "/static/app.css?v=same-date-booking-warning-v8-26" in index
-    assert "/static/app.js?v=email-opening-v8-31" in index
+    assert "/static/app.css?v=enquiry-date-clash-v8-31-1" in index
+    assert "/static/app.js?v=enquiry-date-clash-v8-31-1" in index
 
 
 def teardown_module():

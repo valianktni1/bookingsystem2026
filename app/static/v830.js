@@ -17,7 +17,7 @@
   }
 
   function weddingRow(record, canComplete = false) {
-    return `<div class="v830-booking-row ${Number(record.same_date_active_booking_count || 0) > 1 ? "same-date-booking" : ""}">
+    return `<div class="v830-booking-row ${hasSameDateConflict(record) ? "same-date-booking" : ""}">
       <button class="v830-booking-open" data-record="${attr(record.id)}" type="button">
         <span class="client-cell"><i class="client-avatar ${record.brand}">${esc(initials(record))}</i><strong>${esc(record.title)}</strong></span>
         <span>${esc(record.venue_or_project || "Not set")}</span>
