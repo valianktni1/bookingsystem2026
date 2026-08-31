@@ -1,5 +1,18 @@
-BookingSystem2026 - Direct Final Wedding Timings Access
-Build: 2026.08.30-final-timings-shortcut-v8.33
+BookingSystem2026 - Streaming Complete Backup
+Build: 2026.08.31-streaming-complete-backup-v8.33.2
+
+V8.33.2 streaming complete backup:
+- Fixes the apparent 32% freeze while large live databases regenerate invoices, receipts and signed agreements.
+- Writes each generated PDF straight into the ZIP instead of retaining the complete PDF batch in application memory.
+- Advances progress continuously with the current PDF number and total.
+- Keeps broken historic records non-blocking and records them as warnings in the backup manifest.
+- Retains the V8.33.1 Final Timings pop-up Download PDF action.
+
+V8.33.1 Final Timings PDF download:
+- Adds a prominent Download PDF button to the complete Final Wedding Timings pop-up.
+- Downloads the existing protected generated PDF directly from the open couple record.
+- Places a full-width touch-friendly download button above Close on mobile.
+- Changes no form answers, emails, dates, invoices, Calendar, Accounts or automation behaviour.
 
 V8.33 direct Final Wedding Timings access:
 - Confirms that the single automatic 30-day check-in email contains the Final Wedding Timings button and opens the couple directly on that form.

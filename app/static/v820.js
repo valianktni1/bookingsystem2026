@@ -27,7 +27,7 @@
     const values=submission.data||{},content=document.querySelector("#modal-content"),modal=document.querySelector("#modal");
     const rows=Object.entries(finalTimingsLabels).map(([key,label])=>`<div><dt>${esc(label)}</dt><dd>${esc(answer(values,key)).replace(/\n/g,"<br>")}</dd></div>`).join("");
     modal.classList.remove("pdf-preview-modal");
-    content.innerHTML=`<div class="modal-head"><div><small>COMPLETE CLIENT SUBMISSION</small><h2>Final Wedding Timings</h2><p>${esc(r.title)} · submitted ${esc(fmtDateTime(submission.submitted_at))}</p></div><button type="button" id="close-modal">×</button></div><div class="v821-answer-modal"><dl>${rows}</dl><footer><span>This is the complete form submitted by the couple.</span><button class="primary" id="close-final-answers" type="button">Close</button></footer></div>`;
+    content.innerHTML=`<div class="modal-head"><div><small>COMPLETE CLIENT SUBMISSION</small><h2>Final Wedding Timings</h2><p>${esc(r.title)} · submitted ${esc(fmtDateTime(submission.submitted_at))}</p></div><button type="button" id="close-modal">×</button></div><div class="v821-answer-modal"><dl>${rows}</dl><footer><span>This is the complete form submitted by the couple.</span><div class="v8331-answer-actions"><a class="primary" href="/api/bookings/${attr(r.id)}/final-timings.pdf" download>↓ Download PDF</a><button class="secondary" id="close-final-answers" type="button">Close</button></div></footer></div>`;
     modal.classList.remove("hidden");document.querySelector("#modal-overlay").classList.remove("hidden");
     document.querySelector("#close-modal").onclick=document.querySelector("#close-final-answers").onclick=closeModal;
   }

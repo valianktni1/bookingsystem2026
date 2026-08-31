@@ -1,0 +1,29 @@
+BookingSystem2026 V8.33.2 - TrueNAS deployment
+
+1. Extract this complete ZIP over the GitHub working copy, commit and push it.
+2. Temporarily make the GitHub repository public for the TrueNAS build.
+3. In the TrueNAS shell run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v8332-$(date +%Y%m%d-%H%M%S).dump"
+
+sudo sh -c "docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > '$BOOKING_BACKUP'"
+
+sudo ls -lh "$BOOKING_BACKUP"
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+
+curl -fsS http://127.0.0.1:30049/api/health
+
+echo
+
+Expected build:
+2026.08.31-streaming-complete-backup-v8.33.2
+
+4. Once healthy, make the GitHub repository private again.
+5. Close and reopen the booking-app tab on mobile, or hard-refresh on desktop.

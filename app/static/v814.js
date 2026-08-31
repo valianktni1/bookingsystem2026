@@ -1,4 +1,4 @@
-/* V8.23.1 - reliable background preparation and resumable backup delivery. */
+/* V8.33.2 - visible streaming backup preparation and resumable delivery. */
 (() => {
   "use strict";
 
@@ -87,7 +87,7 @@
       <div id="complete-backup-status" class="v814-backup-status hidden" role="status" aria-live="polite">
         <div><span id="complete-backup-status-text">Preparing your complete backup</span><strong id="complete-backup-status-percent">0%</strong></div>
         <progress id="complete-backup-progress" max="100" value="0">0%</progress>
-        <small>It is safe to keep using the booking system while this finishes. The download starts only after the ZIP is ready.</small>
+        <small>Large backups can take several minutes. The count now advances as each invoice, receipt and agreement PDF is written safely into the ZIP.</small>
       </div>
     </section>`);
     wireBackupDownload();

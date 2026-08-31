@@ -21,7 +21,7 @@ import zipfile
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -33,7 +33,7 @@ from .models import (Booking, BusinessProfile, ContractAcceptance, Invoice,
 from .pdf import contract_acceptance_pdf, invoice_pdf
 
 
-BACKUP_BUILD = "2026.08.30-final-timings-shortcut-v8.33"
+BACKUP_BUILD = "2026.08.31-streaming-complete-backup-v8.33.2"
 BACKUP_LOCK = threading.Lock()
 SENSITIVE_SETTING_KEYS = {
     "google_calendar_connection",
@@ -201,9 +201,12 @@ def _readable_registers(db: Session) -> dict[str, bytes]:
     }
 
 
-def _generated_pdfs(db: Session) -> tuple[dict[str, bytes], list[str]]:
-    files: dict[str, bytes] = {}
-    warnings: list[str] = []
+def _generated_pdf_entries(
+    db: Session,
+    warnings: list[str],
+    progress: Callable[[int, str], None] | None = None,
+) -> Iterator[tuple[str, bytes]]:
+    """Generate one PDF at a time so a large backup cannot retain them all in RAM."""
     profiles = {profile.brand: profile for profile in db.scalars(select(BusinessProfile)).all()}
     invoices = db.scalars(
         select(Invoice).options(
@@ -211,35 +214,65 @@ def _generated_pdfs(db: Session) -> tuple[dict[str, bytes], list[str]]:
             selectinload(Invoice.payments),
         ).order_by(Invoice.number)
     ).all()
-    for item in invoices:
-        profile = profiles.get(item.brand)
-        if not profile:
-            warnings.append(f"Invoice {item.number}: business profile missing; PDF not generated")
-            continue
-        name = _safe_name(item.number, item.id)
-        try:
-            files[f"invoice-pdfs/{name}.pdf"] = invoice_pdf(item, profile)
-            if Decimal(str(item.paid or 0)) > 0:
-                files[f"invoice-pdfs/{name}-receipt.pdf"] = invoice_pdf(item, profile, receipt=True)
-        except Exception as exc:  # A broken historic record must not prevent the main backup.
-            warnings.append(f"Invoice {item.number}: PDF not generated ({type(exc).__name__})")
-
     acceptances = db.scalars(
         select(ContractAcceptance)
         .options(selectinload(ContractAcceptance.booking))
         .order_by(ContractAcceptance.accepted_at)
     ).all()
+    invoice_jobs = sum(1 + int(Decimal(str(item.paid or 0)) > 0) for item in invoices)
+    total_jobs = max(1, invoice_jobs + len(acceptances))
+    completed = 0
+
+    def report(label: str) -> None:
+        if progress:
+            percent = 32 + min(22, int(completed / total_jobs * 22))
+            progress(percent, f"Creating backup PDFs ({completed + 1} of {total_jobs}) - {label}")
+
+    def finish() -> None:
+        nonlocal completed
+        completed += 1
+
+    for item in invoices:
+        profile = profiles.get(item.brand)
+        if not profile:
+            warnings.append(f"Invoice {item.number}: business profile missing; PDF not generated")
+            finish()
+            if Decimal(str(item.paid or 0)) > 0:
+                warnings.append(f"Receipt {item.number}: business profile missing; PDF not generated")
+                finish()
+            continue
+        name = _safe_name(item.number, item.id)
+        report(f"invoice {item.number}")
+        try:
+            yield f"invoice-pdfs/{name}.pdf", invoice_pdf(item, profile)
+        except Exception as exc:  # A broken historic record must not prevent the main backup.
+            warnings.append(f"Invoice {item.number}: PDF not generated ({type(exc).__name__})")
+        finally:
+            finish()
+        if Decimal(str(item.paid or 0)) > 0:
+            report(f"receipt {item.number}")
+            try:
+                yield f"invoice-pdfs/{name}-receipt.pdf", invoice_pdf(item, profile, receipt=True)
+            except Exception as exc:
+                warnings.append(f"Receipt {item.number}: PDF not generated ({type(exc).__name__})")
+            finally:
+                finish()
+
     for item in acceptances:
         profile = profiles.get(item.booking.brand)
         if not profile:
             warnings.append(f"Agreement {item.id}: business profile missing; PDF not generated")
+            finish()
             continue
         couple = _safe_name(item.booking.title, item.booking_id)
+        report(f"agreement for {item.booking.title}")
         try:
-            files[f"signed-agreements/{couple}-{item.id[:8]}.pdf"] = contract_acceptance_pdf(item, profile)
+            yield (f"signed-agreements/{couple}-{item.id[:8]}.pdf",
+                   contract_acceptance_pdf(item, profile))
         except Exception as exc:
             warnings.append(f"Agreement {item.id}: PDF not generated ({type(exc).__name__})")
-    return files, warnings
+        finally:
+            finish()
 
 
 def _program_snapshot() -> dict[str, bytes]:
@@ -283,47 +316,6 @@ def create_complete_backup(
             database_files, table_counts, schema = _database_export(db)
             report(20, "Preparing readable booking and payment registers")
             registers = _readable_registers(db)
-            report(32, "Creating invoice, receipt and agreement PDFs")
-            generated_pdfs, pdf_warnings = _generated_pdfs(db)
-            report(55, "Copying the running program safely")
-            program_files = _program_snapshot()
-            warnings.extend(pdf_warnings)
-
-            storage_root = get_settings().storage_root
-            stored_files: list[tuple[Path, str]] = []
-            report(62, "Finding uploaded client documents")
-            if storage_root.exists():
-                resolved_root = storage_root.resolve()
-                for path in sorted(storage_root.rglob("*")):
-                    if path.is_symlink() or not path.is_file():
-                        continue
-                    resolved = path.resolve()
-                    if not resolved.is_relative_to(resolved_root):
-                        warnings.append(f"Skipped unsafe stored path: {path.name}")
-                        continue
-                    relative = resolved.relative_to(resolved_root).as_posix()
-                    stored_files.append((resolved, f"uploaded-files/{relative}"))
-
-            manifest = {
-                "format": "BookingSystem2026 complete business-data backup",
-                "format_version": 1,
-                "application_build": BACKUP_BUILD,
-                "created_at_utc": created_at.isoformat(),
-                "database_dialect": db.bind.dialect.name if db.bind is not None else "unknown",
-                "table_counts": table_counts,
-                "database_row_count": sum(table_counts.values()),
-                "uploaded_file_count": len(stored_files),
-                "generated_pdf_count": len(generated_pdfs),
-                "program_file_count": len(program_files),
-                "security": {
-                    "environment_file_included": False,
-                    "plaintext_passwords_included": False,
-                    "google_or_smtp_credentials_included": False,
-                    "admin_password_hash_redacted": True,
-                    "google_oauth_connection_redacted": True,
-                },
-                "warnings": warnings,
-            }
             readme = (
                 "BOOKINGSYSTEM2026 COMPLETE BACKUP\n"
                 "=================================\n\n"
@@ -347,22 +339,69 @@ def create_complete_backup(
                 "Do not import individual JSONL files into the live system by hand.\n"
             )
 
-            report(70, "Building and checking the private ZIP")
+            report(28, "Starting the private ZIP safely")
             with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED,
                                  compresslevel=6, allowZip64=True) as archive:
-                _zip_bytes(archive, checksums, "README.txt", readme)
-                _zip_bytes(archive, checksums, "manifest.json",
-                           json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True))
+                report(30, "Adding the database snapshot and readable registers")
                 _zip_bytes(archive, checksums, "database/schema.json",
                            json.dumps(schema, indent=2, ensure_ascii=False, sort_keys=True))
                 for name, content in database_files.items():
                     _zip_bytes(archive, checksums, name, content)
                 for name, content in registers.items():
                     _zip_bytes(archive, checksums, name, content)
-                for name, content in generated_pdfs.items():
+
+                generated_pdf_count = 0
+                pdf_warnings: list[str] = []
+                report(32, "Creating backup PDFs (starting safely)")
+                for name, content in _generated_pdf_entries(db, pdf_warnings, progress):
                     _zip_bytes(archive, checksums, name, content)
+                    generated_pdf_count += 1
+                warnings.extend(pdf_warnings)
+
+                report(55, "Copying the running program safely")
+                program_files = _program_snapshot()
                 for name, content in program_files.items():
                     _zip_bytes(archive, checksums, name, content)
+
+                storage_root = get_settings().storage_root
+                stored_files: list[tuple[Path, str]] = []
+                report(62, "Finding uploaded client documents")
+                if storage_root.exists():
+                    resolved_root = storage_root.resolve()
+                    for path in sorted(storage_root.rglob("*")):
+                        if path.is_symlink() or not path.is_file():
+                            continue
+                        resolved = path.resolve()
+                        if not resolved.is_relative_to(resolved_root):
+                            warnings.append(f"Skipped unsafe stored path: {path.name}")
+                            continue
+                        relative = resolved.relative_to(resolved_root).as_posix()
+                        stored_files.append((resolved, f"uploaded-files/{relative}"))
+
+                manifest = {
+                    "format": "BookingSystem2026 complete business-data backup",
+                    "format_version": 1,
+                    "application_build": BACKUP_BUILD,
+                    "created_at_utc": created_at.isoformat(),
+                    "database_dialect": db.bind.dialect.name if db.bind is not None else "unknown",
+                    "table_counts": table_counts,
+                    "database_row_count": sum(table_counts.values()),
+                    "uploaded_file_count": len(stored_files),
+                    "generated_pdf_count": generated_pdf_count,
+                    "program_file_count": len(program_files),
+                    "security": {
+                        "environment_file_included": False,
+                        "plaintext_passwords_included": False,
+                        "google_or_smtp_credentials_included": False,
+                        "admin_password_hash_redacted": True,
+                        "google_oauth_connection_redacted": True,
+                    },
+                    "warnings": warnings,
+                }
+                report(66, "Adding the backup guide and manifest")
+                _zip_bytes(archive, checksums, "README.txt", readme)
+                _zip_bytes(archive, checksums, "manifest.json",
+                           json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=True))
                 uploaded_total = max(1, len(stored_files))
                 for position, (source, archive_name) in enumerate(stored_files, start=1):
                     digest = hashlib.sha256()
@@ -373,6 +412,7 @@ def create_complete_backup(
                     checksums[archive_name] = digest.hexdigest()
                     report(70 + min(24, int(position / uploaded_total * 24)),
                            f"Adding uploaded documents ({position} of {len(stored_files)})")
+                report(96, "Writing and checking backup checksums")
                 checksum_text = "".join(
                     f"{digest}  {name}\n" for name, digest in sorted(checksums.items())
                 )

@@ -111,7 +111,7 @@ def test_complete_backup_is_private_readable_and_complete():
         assert "program/requirements.txt" in names
 
         manifest = json.loads(archive.read("manifest.json"))
-        assert manifest["application_build"] == "2026.08.30-final-timings-shortcut-v8.33"
+        assert manifest["application_build"] == "2026.08.31-streaming-complete-backup-v8.33.2"
         assert manifest["table_counts"]["bookings"] == 1
         assert manifest["table_counts"]["invoices"] == 1
         assert manifest["table_counts"]["payments"] == 1
@@ -170,4 +170,4 @@ def test_business_settings_uses_background_job_instead_of_a_silent_long_download
     assert "complete-backup-status" in javascript
     assert "job.download_url" in javascript
     assert 'href="/api/backups/complete"' not in javascript
-    assert "reliable-backup-v8-23-1" in index
+    assert "streaming-backup-v8-33-2" in index

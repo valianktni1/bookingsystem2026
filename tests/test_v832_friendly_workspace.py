@@ -81,7 +81,7 @@ def test_mobile_workspace_has_large_direct_actions_and_no_horizontal_workflow():
     assert "/static/v832.css?v=final-timings-shortcut-v8-33" in index
     assert "/static/v832.js?v=final-timings-shortcut-v8-33" in index
     assert index.index("v8301.js") < index.index("v832.js")
-    assert "FINAL TIMINGS SHORTCUT V8.33" in index
+    assert "FINAL TIMINGS PDF V8.33.1" in index
 
 
 def teardown_module():

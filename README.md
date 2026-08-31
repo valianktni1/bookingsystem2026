@@ -1,9 +1,26 @@
-# Mark's Business Studio — Version 8.33
+# Mark's Business Studio — Version 8.33.2
 
 Mark's private, self-hosted booking and business management system. The current
 build includes every cumulative feature through V8.23.2, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.33.2 streaming complete backup
+
+Large complete backups no longer appear frozen at 32% while every invoice,
+receipt and signed agreement is regenerated. Each PDF is written directly into
+the ZIP rather than accumulating the full batch in application memory, and the
+Business Settings progress message advances through the current PDF number and
+total. The resulting archive contents, credential exclusions and resumable
+download remain unchanged.
+
+## Version 8.33.1 Final Timings PDF download
+
+The complete Final Wedding Timings pop-up now includes a prominent **Download
+PDF** button beside Close. On mobile the download action becomes a large
+full-width button, making the retained working PDF available in one tap on the
+wedding day. The existing protected PDF endpoint and all automation remain
+unchanged.
 
 ## Version 8.33 direct Final Wedding Timings access
 
