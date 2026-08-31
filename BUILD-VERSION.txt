@@ -1,5 +1,13 @@
-BookingSystem2026 - Friendly Desktop & Mobile Workspace
-Build: 2026.08.28-friendly-workspace-v8.32
+BookingSystem2026 - Direct Final Wedding Timings Access
+Build: 2026.08.30-final-timings-shortcut-v8.33
+
+V8.33 direct Final Wedding Timings access:
+- Confirms that the single automatic 30-day check-in email contains the Final Wedding Timings button and opens the couple directly on that form.
+- Replaces the wedding Questionnaire quick action with a clearly labelled Final timings action under every couple header.
+- Opens a submitted Final Wedding Timings Form immediately in the complete read-only answer view.
+- If the form is still waiting, opens and scrolls directly to its existing status, early-open and send controls.
+- Makes the existing Final Timings panel available from the latest stacked mobile Journey/Quote workspace as well as desktop.
+- Leaves Digital projects on the existing Questionnaire action and changes no email, invoice, Calendar, Accounts or automation behaviour.
 
 V8.32 friendly working layout:
 - Raises important phone text to readable 15-19px sizes instead of the previous 8-11px labels.

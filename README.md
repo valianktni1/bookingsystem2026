@@ -1,9 +1,18 @@
-# Mark's Business Studio — Version 8.23.2
+# Mark's Business Studio — Version 8.33
 
 Mark's private, self-hosted booking and business management system. The current
 build includes every cumulative feature through V8.23.2, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.33 direct Final Wedding Timings access
+
+Every wedding now has a prominent **Final timings** action immediately beneath
+the couple's header on desktop and mobile. When submitted, it opens the complete
+read-only form in one tap. Before submission it opens and scrolls to the existing
+status, early-open and deliberate-send controls. The single automatic 30-day
+check-in email still contains the direct client Final Wedding Timings button;
+no second email is sent and no automation behaviour has changed.
 
 ## Version 8.23.2 Final Wedding Timings mobile reliability
 

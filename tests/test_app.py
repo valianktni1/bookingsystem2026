@@ -223,7 +223,7 @@ def test_phase_two_b_flow(monkeypatch):
                                  "accounts_integration_enabled": False,
                                  "accounts_auto_sync": False,
                                  "google_calendar_configured": False,
-                                        "build": "2026.08.28-friendly-workspace-v8.32"}
+                                       "build": "2026.08.30-final-timings-shortcut-v8.33"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -622,7 +622,13 @@ def test_phase_two_b_flow(monkeypatch):
                 FrozenDate.current = reminder_day
                 with SessionLocal() as db:
                     result = main_module.run_due_reminders(db)
-                    assert result == {"sent": 1, "skipped": 0, "failed": 0}
+                    # The real 30-day Final Timings invitation may legitimately
+                    # share this date with a balance reminder. Both are expected
+                    # and independently deduplicated.
+                    expected_sent = 1 + int(
+                        reminder_day == date(2026, 10, 4) - timedelta(days=30)
+                    )
+                    assert result == {"sent": expected_sent, "skipped": 0, "failed": 0}
                     saved_reminder = db.scalar(select(ReminderLog).where(
                         ReminderLog.booking_id == wedding_data["id"],
                         ReminderLog.reminder_key == reminder_key,

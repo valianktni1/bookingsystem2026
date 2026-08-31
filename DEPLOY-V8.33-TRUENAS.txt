@@ -1,0 +1,25 @@
+BookingSystem2026 V8.33 - TrueNAS deployment
+
+1. Extract this complete ZIP over the GitHub working copy, commit and push it.
+2. In the TrueNAS shell run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v833-$(date +%Y%m%d-%H%M%S).dump"
+
+docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > "$BOOKING_BACKUP"
+
+ls -lh "$BOOKING_BACKUP"
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+curl -sS http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.08.30-final-timings-shortcut-v8.33
+
+3. On mobile, close the booking-system tab completely and reopen it. On desktop, use a hard refresh.
+
+4. Open a wedding and press Final timings. A submitted form opens immediately; otherwise the existing timings status and controls are shown.

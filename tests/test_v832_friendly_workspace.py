@@ -78,10 +78,10 @@ def test_mobile_workspace_has_large_direct_actions_and_no_horizontal_workflow():
     assert ".v832-quick-actions button{min-height:68px" in css
     assert ".v830-booking-open .client-cell strong{font-size:19px" in css
     assert ".v8301-mobile-section>button strong{font-size:18px" in css
-    assert "/static/v832.css?v=friendly-workspace-v8-32" in index
-    assert "/static/v832.js?v=friendly-workspace-v8-32" in index
+    assert "/static/v832.css?v=final-timings-shortcut-v8-33" in index
+    assert "/static/v832.js?v=final-timings-shortcut-v8-33" in index
     assert index.index("v8301.js") < index.index("v832.js")
-    assert "FRIENDLY WORKSPACE V8.32" in index
+    assert "FINAL TIMINGS SHORTCUT V8.33" in index
 
 
 def teardown_module():

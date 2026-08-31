@@ -32,6 +32,21 @@
     document.querySelector("#close-modal").onclick=document.querySelector("#close-final-answers").onclick=closeModal;
   }
 
+  window.openFinalTimingsRecord=async function(r){
+    const portal=state.currentPortal||{},submission=(portal.submissions||[]).find(item=>item.form_type==="final_timings");
+    if(submission){showCompleteFinalTimings(r,submission);return}
+    await selectRecordTab(r,"Journey",true);
+    let attempts=0;
+    const reveal=()=>{
+      const panel=document.querySelector("#drawer .v820-final");
+      if(panel){panel.scrollIntoView({behavior:"smooth",block:"start"});return}
+      attempts+=1;
+      if(attempts<20)setTimeout(reveal,75);
+      else toast("Final Wedding Timings has not been submitted yet");
+    };
+    reveal();
+  };
+
   function waitingPanel(r, portal) {
     const isLegacy=r.legacy_source==="studio_ninja",eligible=isLegacy&&dateAfterStudioNinjaCutoff(r.event_date),available=Boolean(portal.final_timings?.available);
     const safety=isLegacy
@@ -91,5 +106,5 @@
     if(review)review.onclick=async()=>{try{await api(`/api/bookings/${r.id}/final-timings/review`,{method:"POST"});toast("Final wedding timings marked as reviewed");await refresh();openDrawer(r.id,"Journey")}catch(error){toast(error.message,"error")}};
   }
 
-  renderTab=async function(r,tab,target=null){await baseRenderTabV820(r,tab,target);if(tab==="Journey")appendFinalTimings(r,target||document.querySelector("#drawer-body"))};
+  renderTab=async function(r,tab,target=null){await baseRenderTabV820(r,tab,target);if(tab==="Journey"||tab==="Quote")appendFinalTimings(r,target||document.querySelector("#drawer-body"))};
 })();

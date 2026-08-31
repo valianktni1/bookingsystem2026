@@ -255,7 +255,7 @@ def test_v820_assets_and_old_final_questionnaire_remain_blocked():
     root = Path(__file__).parents[1]
     index = (root / "app/static/index.html").read_text()
     client_html = (root / "app/static/client.html").read_text()
-    assert "/static/v820.js?v=final-timings-records-v8-21" in index
+    assert "/static/v820.js?v=final-timings-shortcut-v8-33" in index
     assert "/static/client-v820.js?v=durable-form-drafts-v8-29" in client_html
     assert "only automatic email permitted" in (root / "app/main.py").read_text()
     assert 'pattern="^(booking_form|final_timings)$"' in (root / "app/schemas.py").read_text()

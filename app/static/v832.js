@@ -1,4 +1,4 @@
-/* V8.32 - genuinely friendly desktop/mobile workspace and direct job actions. */
+/* V8.33 - friendly workspace with a direct Final Wedding Timings action. */
 (() => {
   "use strict";
 
@@ -18,7 +18,7 @@
       ${quickAction("✉", "Email", "email")}
       ${record.client.phone ? quickAction("☎", "Call", "call") : quickAction("☎", "Call", "call", "disabled aria-disabled=\"true\"")}
       ${quickAction("£", "Invoice", "invoice")}
-      ${quickAction("?", "Questionnaire", "forms")}
+      ${record.kind === "wedding" ? quickAction("◷", "Final timings", "timings") : quickAction("?", "Questionnaire", "forms")}
       ${quickAction("✎", "Notes", "notes")}
       ${quickAction("•••", "More", "more")}
     </nav>`);
@@ -28,6 +28,7 @@
       if (action === "email") $("#record-email-client-top", drawer)?.click();
       else if (action === "call" && record.client.phone) location.href = `tel:${record.client.phone}`;
       else if (action === "invoice") selectRecordTab(record, "Payments", true);
+      else if (action === "timings") window.openFinalTimingsRecord?.(record);
       else if (action === "forms") selectRecordTab(record, "Forms", true);
       else if (action === "notes") selectRecordTab(record, "Notes", true);
       else if (action === "more") {

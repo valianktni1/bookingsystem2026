@@ -1,4 +1,4 @@
-/* V8.32 - friendly, readable Studio-style working screens. */
+/* V8.33 - friendly, readable workspace with direct Final Timings access. */
 
 .v832-quick-actions{width:min(1320px,calc(100% - 44px));display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;margin:15px auto 0}
 .v832-quick-actions button{min-height:62px;display:flex;align-items:center;justify-content:center;gap:9px;padding:8px 12px;border:1px solid #cfdcdd;border-radius:11px;color:#18383d;background:#fff;font-size:14px;font-weight:800;box-shadow:0 5px 16px #102b340d}
