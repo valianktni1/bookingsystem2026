@@ -1,5 +1,21 @@
-BookingSystem2026 - Streaming Complete Backup
-Build: 2026.08.31-streaming-complete-backup-v8.33.2
+BookingSystem2026 - Holidays & Manual Date Blocks
+Build: 2026.09.03-manual-date-blocks-v8.35
+
+V8.35 manual holidays and blocked dates:
+- Calendar has a clear Block dates / holiday button for one day or an inclusive date range.
+- Each private block makes the public website checker return Booked without exposing its label or notes.
+- New enquiries on blocked dates show a prominent DATE BLOCKED warning in the admin workspace.
+- A single private all-day Google Calendar event is created, updated or removed with the block.
+- Blocks never create a client, quote, invoice or client email and are included in complete backups.
+
+V8.34 protected accepted-invoice amendments:
+- Adds an Amend invoice button to a native accepted quote invoice while money remains outstanding.
+- Keeps the same invoice number and protects every original accepted package line.
+- Adds later-agreed zero-price or charged items, including a one-click Complimentary extra hour.
+- Keeps the accepted quote, booking value, client portal, PDF, balance and payment schedule aligned.
+- Preserves money already paid and any individually agreed final payment date.
+- Requires a private audit reason and sends no email or Accounts request.
+- Locks editing on paid-in-full, cancelled, void and imported invoices.
 
 V8.33.2 streaming complete backup:
 - Fixes the apparent 32% freeze while large live databases regenerate invoices, receipts and signed agreements.

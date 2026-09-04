@@ -28,12 +28,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from .config import get_settings
 from .database import Base
-from .models import (Booking, BusinessProfile, ContractAcceptance, Invoice,
+from .models import (Booking, BusinessProfile, ContractAcceptance, DateBlock, Invoice,
                      Payment)
 from .pdf import contract_acceptance_pdf, invoice_pdf
 
 
-BACKUP_BUILD = "2026.08.31-streaming-complete-backup-v8.33.2"
+BACKUP_BUILD = "2026.09.03-manual-date-blocks-v8.35"
 BACKUP_LOCK = threading.Lock()
 SENSITIVE_SETTING_KEYS = {
     "google_calendar_connection",
@@ -131,6 +131,7 @@ def _readable_registers(db: Session) -> dict[str, bytes]:
     payments = db.scalars(
         select(Payment).options(selectinload(Payment.invoice)).order_by(Payment.created_at)
     ).all()
+    date_blocks = db.scalars(select(DateBlock).order_by(DateBlock.start_date)).all()
     return {
         "registers/bookings.csv": _csv_bytes(
             ["id", "brand", "kind", "status", "couple_or_client", "email", "phone",
@@ -197,6 +198,21 @@ def _readable_registers(db: Session) -> dict[str, bytes]:
                 "legacy_reference": item.legacy_reference,
                 "created_at": item.created_at,
             } for item in payments],
+        ),
+        "registers/date-blocks.csv": _csv_bytes(
+            ["id", "start_date", "end_date", "label", "notes", "calendar_status",
+             "created_at", "updated_at", "deleted_at"],
+            [{
+                "id": item.id,
+                "start_date": item.start_date,
+                "end_date": item.end_date,
+                "label": item.label,
+                "notes": item.notes,
+                "calendar_status": (item.google_calendar_state or {}).get("status"),
+                "created_at": item.created_at,
+                "updated_at": item.updated_at,
+                "deleted_at": item.deleted_at,
+            } for item in date_blocks],
         ),
     }
 

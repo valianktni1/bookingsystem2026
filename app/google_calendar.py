@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db
-from .models import (Admin, AuditLog, Booking, Brand, Invoice, Payment, Quote,
+from .models import (Admin, AuditLog, Booking, Brand, DateBlock, Invoice, Payment, Quote,
                      RecordKind, RecordStatus, SystemSetting)
 from .security import current_admin
 
@@ -216,6 +216,40 @@ def calendar_event_payload(booking: Booking) -> dict:
     }
 
 
+def _date_block_calendar_state(block: DateBlock) -> dict:
+    return dict(block.google_calendar_state or {})
+
+
+def _save_date_block_calendar_state(block: DateBlock, state: dict) -> None:
+    block.google_calendar_state = state
+
+
+def _deterministic_date_block_event_id(block: DateBlock) -> str:
+    return f"d{hashlib.sha256(block.id.encode('utf-8')).hexdigest()[:40]}"
+
+
+def date_block_event_payload(block: DateBlock) -> dict:
+    """Create one private all-day event for the inclusive blocked period."""
+    return {
+        "id": _deterministic_date_block_event_id(block),
+        "summary": f"Unavailable — {block.label}",
+        "description": "\n".join(filter(None, [
+            block.notes,
+            "",
+            "Private availability block managed automatically by BookingSystem2026.",
+        ])),
+        "start": {"date": block.start_date.isoformat()},
+        # Google all-day event end dates are exclusive. The app's end date is
+        # inclusive, so add one day here to cover the user's complete range.
+        "end": {"date": (block.end_date + timedelta(days=1)).isoformat()},
+        "transparency": "opaque",
+        "extendedProperties": {"private": {
+            "booking_system": "BookingSystem2026",
+            "date_block_id": block.id,
+        }},
+    }
+
+
 def _calendar_request(method: str, path: str, token: str, *, json: dict | None = None) -> httpx.Response:
     try:
         return httpx.request(
@@ -331,6 +365,132 @@ def sync_booking_calendar_safely(db: Session, booking: Booking) -> dict:
         return failed
 
 
+def sync_date_block_calendar_safely(db: Session, block: DateBlock) -> dict:
+    """Create, update or remove a manual availability block without failing its save."""
+    current = _date_block_calendar_state(block)
+    event_id = current.get("event_id")
+    should_exist = block.deleted_at is None
+    uncertain_create = (
+        current.get("status") in {"pending", "error"}
+        and current.get("desired_action") in {"create", "update"}
+    )
+    if not event_id and not should_exist and uncertain_create:
+        event_id = _deterministic_date_block_event_id(block)
+    wants_delete = bool(event_id) and not should_exist
+    if not should_exist and not wants_delete:
+        return current
+
+    desired_action = "delete" if wants_delete else ("update" if event_id else "create")
+    attempted_at = datetime.now(timezone.utc).isoformat()
+    connection = _connection(db)
+    if not google_calendar_configured() or not connection:
+        pending = {
+            **current,
+            "status": "pending_delete" if wants_delete else "pending",
+            "desired_action": desired_action,
+            "last_attempt_at": attempted_at,
+            "last_error": "Google Calendar is not connected.",
+        }
+        _save_date_block_calendar_state(block, pending)
+        db.commit()
+        return pending
+
+    calendar_id = str(connection.get("calendar_id") or "primary")
+    try:
+        access_token = _access_token(connection)
+        if wants_delete:
+            response = _calendar_request(
+                "DELETE",
+                f"/calendars/{quote(calendar_id, safe='')}/events/{quote(str(event_id), safe='')}",
+                access_token,
+            )
+            if response.status_code not in (204, 404, 410):
+                raise _oauth_error(response, "Google Calendar could not remove the blocked period")
+            result = {
+                "status": "removed",
+                "calendar_id": calendar_id,
+                "removed_event_id": event_id,
+                "last_synced_at": attempted_at,
+                "last_attempt_at": attempted_at,
+                "last_error": None,
+                "desired_action": None,
+            }
+            action = "remove"
+        else:
+            payload = date_block_event_payload(block)
+            response = None
+            action = "create"
+            if event_id:
+                action = "update"
+                response = _calendar_request(
+                    "PUT",
+                    f"/calendars/{quote(calendar_id, safe='')}/events/{quote(str(event_id), safe='')}",
+                    access_token,
+                    json=payload,
+                )
+            if response is None or response.status_code in (404, 410):
+                action = "create"
+                response = _calendar_request(
+                    "POST",
+                    f"/calendars/{quote(calendar_id, safe='')}/events",
+                    access_token,
+                    json=payload,
+                )
+                if response.status_code == 409:
+                    action = "update"
+                    response = _calendar_request(
+                        "PUT",
+                        f"/calendars/{quote(calendar_id, safe='')}/events/{quote(payload['id'], safe='')}",
+                        access_token,
+                        json=payload,
+                    )
+            if response.status_code >= 400:
+                raise _oauth_error(response, "Google Calendar could not save the blocked period")
+            event = response.json()
+            result = {
+                "status": "synced",
+                "calendar_id": calendar_id,
+                "event_id": event.get("id") or payload["id"],
+                "html_link": event.get("htmlLink"),
+                "last_synced_at": attempted_at,
+                "last_attempt_at": attempted_at,
+                "last_error": None,
+                "desired_action": None,
+            }
+        _save_date_block_calendar_state(block, result)
+        db.add(AuditLog(
+            action=f"google_calendar_date_block_{action}",
+            entity_type="date_block",
+            entity_id=block.id,
+            details={
+                "event_id": result.get("event_id") or result.get("removed_event_id"),
+                "start_date": block.start_date.isoformat(),
+                "end_date": block.end_date.isoformat(),
+            },
+        ))
+        db.commit()
+        return result
+    except Exception as exc:
+        message = str(exc)[:1000] or "Unknown Google Calendar error"
+        failed = {
+            **current,
+            "status": "pending_delete" if wants_delete else "error",
+            "calendar_id": calendar_id,
+            "desired_action": desired_action,
+            "last_attempt_at": attempted_at,
+            "last_error": message,
+        }
+        _save_date_block_calendar_state(block, failed)
+        db.add(AuditLog(
+            action="google_calendar_date_block_error",
+            entity_type="date_block",
+            entity_id=block.id,
+            details={"desired_action": desired_action, "error": message},
+        ))
+        db.commit()
+        return failed
+
+
 def retry_pending_calendar_syncs(db: Session) -> dict:
     """Retry only previously pending/failed one-way calendar work."""
     if not google_calendar_configured() or not _connection(db):
@@ -344,7 +504,12 @@ def retry_pending_calendar_syncs(db: Session) -> dict:
     candidates = [row for row in rows if _booking_calendar_state(row).get("status") in {
         "pending", "pending_delete", "error",
     }]
+    block_rows = db.scalars(select(DateBlock)).all()
+    block_candidates = [row for row in block_rows if _date_block_calendar_state(row).get("status") in {
+        "pending", "pending_delete", "error",
+    }]
     results = [sync_booking_calendar_safely(db, row) for row in candidates]
+    results.extend(sync_date_block_calendar_safely(db, row) for row in block_candidates)
     return {
         "checked": len(results),
         "synced": sum(row.get("status") == "synced" for row in results),
@@ -357,21 +522,30 @@ def retry_pending_calendar_syncs(db: Session) -> dict:
 def google_calendar_status(db: Session) -> dict:
     connection = _connection(db)
     bookings = db.scalars(select(Booking).where(Booking.kind == RecordKind.WEDDING)).all()
+    blocks = db.scalars(select(DateBlock)).all()
     states = [_booking_calendar_state(item) for item in bookings]
+    block_states = [_date_block_calendar_state(item) for item in blocks]
     problems = [
         {"booking_id": booking.id, "title": booking.title,
          "status": state.get("status"), "error": state.get("last_error")}
         for booking, state in zip(bookings, states)
         if state.get("status") in ("error", "pending", "pending_delete")
     ]
+    problems.extend([
+        {"date_block_id": block.id, "title": block.label,
+         "status": state.get("status"), "error": state.get("last_error")}
+        for block, state in zip(blocks, block_states)
+        if state.get("status") in ("error", "pending", "pending_delete")
+    ])
+    all_states = states + block_states
     return {
         "configured": google_calendar_configured(),
         "connected": bool(connection),
         "calendar": "Primary Google Calendar",
         "redirect_uri": google_calendar_redirect_uri(),
-        "synced": sum(state.get("status") == "synced" for state in states),
-        "pending": sum(state.get("status") in ("pending", "pending_delete") for state in states),
-        "errors": sum(state.get("status") == "error" for state in states),
+        "synced": sum(state.get("status") == "synced" for state in all_states),
+        "pending": sum(state.get("status") in ("pending", "pending_delete") for state in all_states),
+        "errors": sum(state.get("status") == "error" for state in all_states),
         "problems": problems[:20],
         "connected_at": connection.get("connected_at") if connection else None,
     }
@@ -475,6 +649,13 @@ def register_google_calendar_routes(app: FastAPI) -> None:
             before = _booking_calendar_state(booking)
             if _should_have_event(db, booking) or before.get("event_id"):
                 results.append(sync_booking_calendar_safely(db, booking))
+        blocks = db.scalars(select(DateBlock)).all()
+        for block in blocks:
+            before = _date_block_calendar_state(block)
+            if block.deleted_at is None or before.get("event_id") or before.get("status") in {
+                "pending", "pending_delete", "error",
+            }:
+                results.append(sync_date_block_calendar_safely(db, block))
         return {
             "ok": True,
             "checked": len(results),

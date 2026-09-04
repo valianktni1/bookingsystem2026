@@ -122,6 +122,20 @@ class Booking(Base):
     quotes: Mapped[list["Quote"]] = relationship(back_populates="booking", cascade="all, delete-orphan")
 
 
+class DateBlock(Base):
+    """A private period when Weddings By Mark is unavailable for bookings."""
+    __tablename__ = "date_blocks"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    start_date: Mapped[date] = mapped_column(Date, index=True)
+    end_date: Mapped[date] = mapped_column(Date, index=True)
+    label: Mapped[str] = mapped_column(String(160), default="Holiday")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    google_calendar_state: Mapped[dict] = mapped_column(JSON, default=dict)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class PackageOption(Base):
     __tablename__ = "package_options"
     __table_args__ = (UniqueConstraint("brand", "code", name="uq_package_option_brand_code"),)

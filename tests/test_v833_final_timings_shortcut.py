@@ -29,10 +29,10 @@ def test_v833_build_and_cache_markers_are_consistent():
     main = (ROOT / "app/main.py").read_text()
     build = (ROOT / "BUILD-VERSION.txt").read_text()
 
-    expected = "2026.08.31-streaming-complete-backup-v8.33.2"
+    expected = "2026.09.03-manual-date-blocks-v8.35"
     assert expected in backup
     assert expected in build
-    assert 'version="2.8.33.2-streaming-complete-backup"' in main
+    assert 'version="2.8.35-manual-date-blocks"' in main
     assert "/static/v820.js?v=final-timings-pdf-download-v8-33-1" in index
     assert "/static/v832.js?v=final-timings-shortcut-v8-33" in index
     assert "FINAL TIMINGS PDF V8.33.1" in index

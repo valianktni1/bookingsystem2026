@@ -29,6 +29,7 @@ from .booking_forms import public_booking_form, validate_booking_answers, valida
 from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
+from .date_blocks import register_date_block_routes
 from .email_service import (preview_template_email, send_rendered_email,
                             send_template_email, smtp_credentials, smtp_ready)
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
@@ -46,14 +47,14 @@ from .legacy_import import register_legacy_import_routes
 from .mail_routes import register_mail_routes
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
-                     EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, LoginAttempt,
+                     DateBlock, EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, LoginAttempt,
                      PackageOption, Payment,
                      Quote, RecordKind, RecordStatus, ReminderLog, SystemSetting, Task)
 from .pdf import contract_acceptance_pdf, final_timings_pdf, invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
                       BookingFormTemplateIn, EnquiryFormTemplateIn,
-                      InvoiceDueDatePatch, InvoiceIn,
+                      InvoiceAmendmentIn, InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       ClientEmailComposeIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn, QuoteSendIn,
                       FinalCallPackIn, SendEmailIn, TaskIn, TaskPatch,
@@ -105,7 +106,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.33.2-streaming-complete-backup", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.35-manual-date-blocks", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -448,6 +449,16 @@ def invoice_json(item: Invoice) -> dict:
     standard_due = standard_wedding_due_date(item)
     closed = item.status in ("void", "cancelled")
     balance = Decimal("0") if closed else item.total - item.paid
+    accepted_quote = next((
+        quote for quote in (item.booking.quotes if item.booking else [])
+        if quote.status == "accepted" and quote.invoice_id == item.id
+    ), None)
+    accepted_quote_invoice = bool(
+        accepted_quote and item.booking and item.booking.brand == Brand.WBM
+        and item.booking.kind == RecordKind.WEDDING
+        and not item.booking.legacy_source and not item.legacy_source
+    )
+    amendment_allowed = bool(accepted_quote_invoice and not closed and balance > 0)
     refunded = sum(
         -Decimal(payment.amount)
         for payment in item.payments
@@ -475,6 +486,13 @@ def invoice_json(item: Invoice) -> dict:
             "total": money(item.total),
             "deposit_amount": money(item.booking.deposit_amount if item.booking else 0),
             "line_items": item.line_items or [],
+            "accepted_quote_invoice": accepted_quote_invoice,
+            "amendment_allowed": amendment_allowed,
+            "amendment_lock_reason": (
+                None if amendment_allowed else
+                "Paid in full" if accepted_quote_invoice and not closed and balance <= 0 else
+                "Closed invoice" if accepted_quote_invoice and closed else None
+            ),
             "payment_schedule": schedule,
             "legacy_number": item.legacy_number,
             "legacy_quote_number": item.legacy_quote_number,
@@ -879,6 +897,14 @@ def website_date_is_booked(db: Session, wedding_date: date) -> bool:
     Archived active jobs remain protected so hiding a record cannot accidentally
     advertise its date as available.
     """
+    manual_block = db.scalar(select(DateBlock.id).where(
+        DateBlock.deleted_at.is_(None),
+        DateBlock.start_date <= wedding_date,
+        DateBlock.end_date >= wedding_date,
+    ).limit(1))
+    if manual_block is not None:
+        return True
+
     genuine_payment = select(Payment.id).join(
         Invoice, Invoice.id == Payment.invoice_id
     ).where(Invoice.booking_id == Booking.id).exists()
@@ -925,6 +951,12 @@ def same_date_conflict_totals(db: Session) -> dict[date, Counter]:
         bucket = totals.setdefault(wedding_date, Counter())
         bucket["booked"] += int(booking_status in SAME_DATE_BOOKED_STATUSES)
         bucket["enquiries"] += int(booking_status in SAME_DATE_ENQUIRY_STATUSES)
+    blocks = db.scalars(select(DateBlock).where(DateBlock.deleted_at.is_(None))).all()
+    for block in blocks:
+        current_date = block.start_date
+        while current_date <= block.end_date:
+            totals.setdefault(current_date, Counter())["blocked"] += 1
+            current_date += timedelta(days=1)
     return totals
 
 
@@ -948,15 +980,21 @@ def add_same_date_conflict(data: dict, booking: Booking,
     own_enquiry = int(relevant and booking.status in SAME_DATE_ENQUIRY_STATUSES)
     other_booked = max(0, booked - own_booked)
     other_enquiries = max(0, enquiries - own_enquiry)
-    total = booked + enquiries
+    blocked = int(counts.get("blocked", 0))
+    total = booked + enquiries + blocked
     conflict = {
-        "has_conflict": bool(relevant and other_booked + other_enquiries > 0),
+        "has_conflict": bool(relevant and other_booked + other_enquiries + blocked > 0),
         "booked_weddings": booked,
         "open_enquiries": enquiries,
         "other_booked_weddings": other_booked,
         "other_open_enquiries": other_enquiries,
         "total_records": total,
     }
+    # Only add the V8.35 fields when a block exists so older cached clients and
+    # exact legacy API consumers keep receiving the original object shape.
+    if blocked:
+        conflict["blocked_dates"] = blocked
+        conflict["is_manually_blocked"] = True
     # Retain the original field for older cached admin JavaScript. Its value is
     # now the total number of live records sharing the date, while the structured
     # object above supplies the accurate wording to V8.31.1 and later.
@@ -1798,6 +1836,26 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
     if not item:
         raise HTTPException(404, "Record not found")
     values = payload.model_dump(exclude_unset=True)
+    accepted_quote = db.scalar(select(Quote).where(
+        Quote.booking_id == item.id,
+        Quote.status == "accepted",
+    ).limit(1))
+    if accepted_quote:
+        changed_financial_fields = []
+        if "package_name" in values and values["package_name"] != item.package_name:
+            changed_financial_fields.append("package")
+        if ("quoted_total" in values
+                and money(values["quoted_total"]) != money(item.quoted_total)):
+            changed_financial_fields.append("quoted total")
+        if ("deposit_amount" in values
+                and money(values["deposit_amount"]) != money(item.deposit_amount)):
+            changed_financial_fields.append("deposit amount")
+        if changed_financial_fields:
+            raise HTTPException(
+                409,
+                "This booking has an accepted invoice. Use Amend invoice in Payments "
+                "so the quote, invoice PDF and balance stay together",
+            )
     requested_status = values.get("status")
     if requested_status == RecordStatus.CANCELLED and item.status != RecordStatus.CANCELLED:
         raise HTTPException(409, "Use Cancel record so links, tasks and the cancellation reason are handled safely")
@@ -2009,7 +2067,8 @@ def list_invoices(brand: Brand | None = None, archived: bool = False,
     # active balances screen.
     stmt = (select(Invoice)
             .join(Booking)
-            .options(selectinload(Invoice.booking), selectinload(Invoice.payments))
+            .options(selectinload(Invoice.booking).selectinload(Booking.quotes),
+                     selectinload(Invoice.payments))
             .where(Booking.archived_at.is_not(None) if archived else Booking.archived_at.is_(None)))
     if brand:
         stmt = stmt.where(Invoice.brand == brand)
@@ -2060,12 +2119,130 @@ def create_invoice(booking_id: str, payload: InvoiceIn, _: Admin = Depends(curre
     return invoice_json(full_invoice(db, invoice.id))
 
 
-def full_invoice(db: Session, invoice_id: str) -> Invoice:
-    invoice = db.scalar(select(Invoice).options(selectinload(Invoice.booking).selectinload(Booking.client),
-                                               selectinload(Invoice.payments)).where(Invoice.id == invoice_id))
+def full_invoice(db: Session, invoice_id: str, *, for_update: bool = False) -> Invoice:
+    stmt = select(Invoice).options(
+        selectinload(Invoice.booking).selectinload(Booking.client),
+        selectinload(Invoice.booking).selectinload(Booking.quotes),
+        selectinload(Invoice.payments),
+    ).where(Invoice.id == invoice_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    invoice = db.scalar(stmt)
     if not invoice:
         raise HTTPException(404, "Invoice not found")
     return invoice
+
+
+def invoice_manual_amendments(invoice: Invoice) -> list[dict]:
+    return [
+        dict(item) for item in (invoice.line_items or [])
+        if isinstance(item, dict) and item.get("manual_amendment") is True
+    ]
+
+
+@app.put("/api/invoices/{invoice_id}/amendment")
+def amend_accepted_invoice(invoice_id: str, payload: InvoiceAmendmentIn,
+                           admin: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    """Safely add later-agreed items while an accepted invoice remains outstanding."""
+    invoice = full_invoice(db, invoice_id, for_update=True)
+    booking = invoice.booking
+    quote = next((
+        row for row in booking.quotes
+        if row.status == "accepted" and row.invoice_id == invoice.id
+    ), None) if booking else None
+    if (not booking or booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING
+            or booking.legacy_source or invoice.legacy_source or not quote):
+        raise HTTPException(409, "Only a native accepted wedding invoice can be amended here")
+    if invoice.status in ("void", "cancelled"):
+        raise HTTPException(409, "A closed invoice cannot be amended")
+
+    current_total = Decimal(invoice.total or 0).quantize(Decimal("0.01"))
+    current_paid = Decimal(invoice.paid or 0).quantize(Decimal("0.01"))
+    if current_paid >= current_total or invoice.status == "paid":
+        raise HTTPException(409, "This invoice is paid in full and is permanently locked")
+    if (Decimal(payload.expected_total).quantize(Decimal("0.01")) != current_total
+            or Decimal(payload.expected_paid).quantize(Decimal("0.01")) != current_paid):
+        raise HTTPException(409, "This invoice changed while the editor was open. Close it and try again")
+    reason = payload.reason.strip()
+    if len(reason) < 3:
+        raise HTTPException(422, "Add a clear reason for changing this invoice")
+
+    original_items = [
+        dict(item) for item in (invoice.line_items or [])
+        if isinstance(item, dict) and item.get("manual_amendment") is not True
+    ]
+    if not original_items:
+        raise HTTPException(409, "The protected accepted package lines could not be found")
+
+    additional_items = []
+    for index, item in enumerate(payload.additional_items, 1):
+        name = item.name.strip()
+        if not name:
+            raise HTTPException(422, "Give every added invoice item a name")
+        quantity = int(item.quantity)
+        unit_price = Decimal(item.unit_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        line_total = (unit_price * quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        additional_items.append({
+            "type": "addon",
+            "code": f"manual_amendment_{index}",
+            "name": name,
+            "description": item.description.strip() if item.description else "",
+            "quantity": quantity,
+            "unit_price": money(unit_price),
+            "total": money(line_total),
+            "required": True,
+            "manual_amendment": True,
+        })
+
+    revised_items = original_items + additional_items
+    revised_total = sum(
+        (Decimal(str(item.get("total") or 0)) for item in revised_items),
+        Decimal("0"),
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if revised_total > Decimal("1000000"):
+        raise HTTPException(422, "The amended invoice total is above the protected limit")
+    if revised_total < current_paid:
+        raise HTTPException(
+            422,
+            f"The amended total cannot be less than the £{money(current_paid):,.2f} already paid",
+        )
+
+    before_items = invoice_manual_amendments(invoice)
+    preserved_due_date = invoice.due_date
+    standard_due = standard_wedding_due_date(invoice)
+    preserved_agreed_due_date = bool(
+        preserved_due_date and standard_due and preserved_due_date != standard_due
+    )
+    invoice.line_items = revised_items
+    invoice.total = revised_total
+    invoice.status = invoice_status(revised_total, current_paid)
+    quote.line_items = revised_items
+    quote.total = revised_total
+    booking.quoted_total = revised_total
+
+    if revised_total != current_total:
+        apply_payment_plan(db, booking, payment_plan_code(booking))
+        if preserved_agreed_due_date and preserved_due_date:
+            invoice.due_date = preserved_due_date
+            booking.balance_due_date = preserved_due_date
+            replace_final_schedule_due_date(invoice, preserved_due_date)
+            replace_balance_note(invoice, preserved_due_date)
+
+    audit(db, "amend_accepted_invoice", "booking", booking.id, {
+        "invoice_id": invoice.id,
+        "invoice_number": invoice.number,
+        "before_total": money(current_total),
+        "after_total": money(revised_total),
+        "paid_preserved": money(current_paid),
+        "before_additional_items": before_items,
+        "after_additional_items": additional_items,
+        "reason": reason,
+        "admin": admin.email,
+        "invoice_number_changed": False,
+        "emails_sent": 0,
+    })
+    db.commit()
+    return invoice_json(full_invoice(db, invoice.id))
 
 
 def replace_final_schedule_due_date(invoice: Invoice, due_date: date) -> None:
@@ -2129,7 +2306,9 @@ def change_invoice_due_date(invoice_id: str, payload: InvoiceDueDatePatch,
 
 @app.post("/api/invoices/{invoice_id}/payments", status_code=201)
 def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
-    invoice = full_invoice(db, invoice_id)
+    # Lock the invoice row so a payment and an invoice amendment cannot race
+    # each other in two browser tabs and leave an incorrect balance/status.
+    invoice = full_invoice(db, invoice_id, for_update=True)
     if invoice.status in ("void", "cancelled"):
         raise HTTPException(409, "A payment cannot be added to a closed invoice")
     if payload.amount > invoice.total - invoice.paid:
@@ -4156,6 +4335,7 @@ async def calendar_retry_loop():
 
 register_v82_routes(app)
 register_v84_routes(app)
+register_date_block_routes(app)
 register_google_calendar_routes(app)
 register_mail_routes(app)
 register_legacy_import_routes(app)

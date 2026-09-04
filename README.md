@@ -1,9 +1,32 @@
-# Mark's Business Studio — Version 8.33.2
+# Mark's Business Studio — Version 8.35
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.23.2, including browser-history
+build includes every cumulative feature through V8.35, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.35 holidays and blocked dates
+
+The Calendar now has a clear **Block dates / holiday** action for one day or
+an inclusive date range. Each block is a private availability record: the
+public website checker returns only **Booked**, a new enquiry on that date gets
+a prominent **DATE BLOCKED** admin warning, and one private all-day Google
+Calendar event covers the complete period. Editing a block updates that event;
+removing it removes the event and releases the website dates unless a genuine
+wedding still protects them. Private labels and notes never reach the public
+checker, and no client, quote, invoice or client email is created. Date blocks
+and their audit history are included in complete backups.
+
+## Version 8.34 protected accepted-invoice amendments
+
+The accepted BookingSystem invoice can now be amended while it still has an
+outstanding balance. Mark can add later-agreed lines—including a zero-price
+**Complimentary extra hour**—without replacing or renumbering the invoice. The
+accepted quote snapshot, client portal, invoice PDF, booking total and payment
+schedule stay aligned; existing payments and an individually agreed final due
+date are preserved. Every amendment requires a private reason and is retained
+in the audit history. Paid-in-full, cancelled, void and imported invoices remain
+locked, and saving an amendment sends no email or Accounts request.
 
 ## Version 8.33.2 streaming complete backup
 

@@ -106,6 +106,20 @@ class InvoiceDueDatePatch(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class InvoiceAmendmentItemIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=1000)
+    quantity: int = Field(default=1, ge=1, le=24)
+    unit_price: Decimal = Field(default=Decimal("0"), ge=0, le=100000)
+
+
+class InvoiceAmendmentIn(BaseModel):
+    additional_items: list[InvoiceAmendmentItemIn] = Field(default_factory=list, max_length=20)
+    reason: str = Field(min_length=3, max_length=500)
+    expected_total: Decimal = Field(ge=0, le=1000000)
+    expected_paid: Decimal = Field(ge=0, le=1000000)
+
+
 class PaymentIn(BaseModel):
     amount: Decimal = Field(gt=0)
     paid_date: date = Field(default_factory=date.today)

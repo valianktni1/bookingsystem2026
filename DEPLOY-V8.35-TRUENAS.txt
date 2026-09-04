@@ -1,0 +1,53 @@
+BookingSystem2026 V8.35 - TrueNAS deployment
+================================================
+
+This V8.35 release is cumulative. It includes V8.34, which was not deployed yet.
+
+1. Extract the complete V8.35 repository over the BookingSystem2026 repository
+   managed by GitHub Desktop.
+2. Review, commit and push every changed/new file to the GitHub main branch.
+3. If required by the current Dockge Git build, temporarily make the repository
+   public while TrueNAS builds it. Return it to private after deployment.
+4. In the TrueNAS shell, run exactly:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v835-$(date +%Y%m%d-%H%M%S).dump"
+
+sudo sh -c "docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > '$BOOKING_BACKUP'"
+
+sudo ls -lh "$BOOKING_BACKUP"
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+STOP if the build reports any error. Do not run the next commands until the
+build has completed successfully.
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+
+curl -fsS http://127.0.0.1:30049/api/health
+
+echo
+
+Expected health build:
+2026.09.03-manual-date-blocks-v8.35
+
+Expected app container:
+bookingsystem2026-app   Healthy
+
+After verification, return the GitHub repository to private if it was made
+public for the build.
+
+Quick browser checks
+--------------------
+1. Hard-refresh the booking app.
+2. Calendar -> Block dates / holiday.
+3. Create a future one-day test block with a private label.
+4. Confirm the block appears and Google Calendar says synced (or gives a clear
+   retry state if Google is temporarily unavailable).
+5. Check the same date on the public website: it must say Booked only.
+6. Edit the date, then remove the test block. The website date should return to
+   Available unless a genuine wedding also protects it.
+7. Confirm no client email or invoice was created.
