@@ -238,7 +238,7 @@ def test_frontend_and_build_expose_clear_mobile_date_block_controls():
     assert "@media(max-width:700px)" in css
     assert "/static/v835.js?v=manual-date-blocks-v8-35" in index
     assert "/static/v835.css?v=manual-date-blocks-v8-35" in index
-    assert "MANUAL DATE BLOCKS V8.35" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.36.1" in index
 
 
 def teardown_module():

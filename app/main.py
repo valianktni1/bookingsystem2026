@@ -107,7 +107,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.36-owner-progress-notifications", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.36.1-clean-version-label", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")

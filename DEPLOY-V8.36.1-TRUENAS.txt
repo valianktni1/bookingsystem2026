@@ -1,0 +1,43 @@
+BookingSystem2026 V8.36.1 - TrueNAS deployment
+==================================================
+
+This is a presentation-only header tidy-up. No compose.yaml, environment or
+database migration change is required.
+
+1. Extract the complete V8.36.1 repository over the BookingSystem2026
+   repository managed by GitHub Desktop.
+2. Review, commit and push every changed/new file to the GitHub main branch.
+3. If required by the current Dockge Git build, temporarily make the repository
+   public while TrueNAS builds it. Return it to private after deployment.
+4. In the TrueNAS shell, run exactly:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v8361-$(date +%Y%m%d-%H%M%S).dump"
+
+sudo sh -c "docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > '$BOOKING_BACKUP'"
+
+sudo ls -lh "$BOOKING_BACKUP"
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+STOP if the build reports any error. Do not run the next commands until the
+build has completed successfully.
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+
+curl -fsS http://127.0.0.1:30049/api/health
+
+echo
+
+Expected health build:
+2026.09.05-clean-version-label-v8.36.1
+
+Expected app container:
+bookingsystem2026-app   Healthy
+
+After deployment, hard-refresh the booking app. The top banner should read:
+BOOKINGSYSTEM2026 · COMPLETE V8.36.1
+

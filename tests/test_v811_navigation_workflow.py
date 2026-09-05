@@ -37,9 +37,9 @@ def test_v811_direct_workspace_and_booking_urls_return_the_admin_app():
         booking = client.get("/bookings/example-booking/journey")
         assert dashboard.status_code == 200
         assert booking.status_code == 200
-        assert "/static/v811.js?v=owner-progress-notifications-v8-36" in dashboard.text
+        assert "/static/v811.js?v=clean-version-label-v8-36-1" in dashboard.text
         assert "/static/v811.css?v=client-receipt-open-v8-28-4-2" in dashboard.text
-        assert "COMPLETE BACKUP V8.14" in dashboard.text
+        assert "BOOKINGSYSTEM2026 · COMPLETE V8.36.1" in dashboard.text
         assert "/static/v812.js?v=google-calendar-v8-12" in dashboard.text
         assert "/static/v812.css?v=google-calendar-v8-12" in dashboard.text
         assert client.get("/not-a-real-workspace").status_code == 404

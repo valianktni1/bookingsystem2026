@@ -1,9 +1,15 @@
-# Mark's Business Studio — Version 8.36
+# Mark's Business Studio — Version 8.36.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.36, including browser-history
+build includes every cumulative feature through V8.36.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.36.1 clean current-version label
+
+The header now shows one concise **BOOKINGSYSTEM2026 · COMPLETE V8.36.1** label
+instead of an increasingly long list of earlier feature releases. This is a
+presentation-only tidy-up and changes no booking-system behaviour.
 
 ## Version 8.36 private owner progress notifications
 

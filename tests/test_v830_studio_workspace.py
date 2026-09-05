@@ -102,7 +102,7 @@ def test_studio_style_assets_and_requested_wedding_tabs_are_loaded():
 
     assert "/static/v830.css?v=studio-style-workspace-v8-30" in index
     assert "/static/v830.js?v=friendly-workspace-v8-32" in index
-    assert "EMAIL OPENING V8.31" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.36.1" in index
     assert "Upcoming weddings" in script
     assert "All bookings" in script
     assert "Past weddings awaiting completion" in script

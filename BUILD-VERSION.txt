@@ -1,5 +1,9 @@
-BookingSystem2026 - Private Owner Progress Notifications
-Build: 2026.09.05-owner-progress-notifications-v8.36
+BookingSystem2026 - Clean Current Version Label
+Build: 2026.09.05-clean-version-label-v8.36.1
+
+V8.36.1 clean current-version label:
+- Replaces the growing feature-history strip at the top of the app with one tidy current complete-version label.
+- Changes no booking, email, payment, form, calendar, backup or automation behaviour.
 
 V8.36 private owner progress notifications:
 - Emails Mark when a couple accepts a quote, submits or updates either wedding form, or signs the agreement.

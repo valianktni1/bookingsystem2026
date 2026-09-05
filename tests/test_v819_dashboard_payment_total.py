@@ -17,7 +17,7 @@ def test_payment_due_card_keeps_count_and_adds_filtered_amount_total():
 
 def test_current_build_identifier_is_exposed_by_health_endpoint():
     backup_py = (ROOT / "app" / "backup.py").read_text()
-    assert 'BACKUP_BUILD = "2026.09.05-owner-progress-notifications-v8.36"' in backup_py
+    assert 'BACKUP_BUILD = "2026.09.05-clean-version-label-v8.36.1"' in backup_py
 
 
 def test_upcoming_weddings_are_before_the_work_queues():
