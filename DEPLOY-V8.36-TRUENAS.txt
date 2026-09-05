@@ -1,0 +1,56 @@
+BookingSystem2026 V8.36 - TrueNAS deployment
+================================================
+
+This V8.36 release is cumulative and includes all previous V8.35 changes.
+It uses the existing ADMIN_EMAIL and SMTP configuration. No compose.yaml or
+environment change is required.
+
+1. Extract the complete V8.36 repository over the BookingSystem2026 repository
+   managed by GitHub Desktop.
+2. Review, commit and push every changed/new file to the GitHub main branch.
+3. If required by the current Dockge Git build, temporarily make the repository
+   public while TrueNAS builds it. Return it to private after deployment.
+4. In the TrueNAS shell, run exactly:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v836-$(date +%Y%m%d-%H%M%S).dump"
+
+sudo sh -c "docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > '$BOOKING_BACKUP'"
+
+sudo ls -lh "$BOOKING_BACKUP"
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+STOP if the build reports any error. Do not run the next commands until the
+build has completed successfully.
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+
+curl -fsS http://127.0.0.1:30049/api/health
+
+echo
+
+Expected health build:
+2026.09.05-owner-progress-notifications-v8.36
+
+Expected app container:
+bookingsystem2026-app   Healthy
+
+After verification, return the GitHub repository to private if it was made
+public for the build.
+
+Quick browser checks
+--------------------
+1. Hard-refresh the booking app after deployment.
+2. Settings -> Email Templates: confirm the four private owner notification
+   templates are present.
+3. Use Testing Mode for a safe end-to-end check if wanted. Accept a test quote
+   and confirm the selected test mailbox receives the private alert.
+4. Confirm the alert's button opens the correct private booking and replying is
+   addressed to the couple/test client.
+5. Confirm Today -> New client updates shows the recent quote acceptance.
+6. Confirm the private alert does not appear in the couple's portal email list.
+

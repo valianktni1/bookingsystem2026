@@ -25,6 +25,7 @@ from .mail_service import (append_to_sent, build_reply_message, friendly_mail_er
 from .models import (Admin, AuditLog, Booking, Brand, BusinessProfile, Client,
                      ClientPortalToken, EmailLog, FormSubmission, MailboxReply,
                      RecordStatus)
+from .owner_notifications import OWNER_NOTIFICATION_KEYS
 from .security import current_admin
 from .services import audit
 
@@ -253,7 +254,7 @@ def register_mail_routes(app: FastAPI) -> None:
         logs = db.scalars(select(EmailLog).where(
             EmailLog.booking_id == booking.id,
             EmailLog.status == "sent",
-            EmailLog.template_key != "new_enquiry_admin",
+            EmailLog.template_key.notin_(tuple(OWNER_NOTIFICATION_KEYS)),
             func.lower(EmailLog.recipient).in_(client_emails),
         ).order_by(EmailLog.sent_at).limit(limit)).all()
         for row in logs:

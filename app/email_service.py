@@ -315,14 +315,15 @@ def render_template_content(booking: Booking, profile: BusinessProfile,
 
 def send_rendered_email(booking: Booking, profile: BusinessProfile, recipient: str,
                         subject: str, body: str,
-                        open_tracking_url: str | None = None) -> None:
+                        open_tracking_url: str | None = None,
+                        reply_to: str | None = None) -> None:
     """Send a previously rendered, audit-retained message exactly as written."""
     username, _ = smtp_credentials(booking.brand)
     if not smtp_ready(booking.brand):
         raise RuntimeError(f"SMTP is not configured for {profile.display_name}")
     message = build_email_message(
         booking, profile, subject, body, username, recipient=recipient,
-        open_tracking_url=open_tracking_url,
+        open_tracking_url=open_tracking_url, reply_to=reply_to,
     )
     send_email_message(message, booking.brand)
 

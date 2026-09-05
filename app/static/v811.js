@@ -17,7 +17,7 @@
   const slugSections = Object.fromEntries(Object.entries(sectionSlugs).map(([key, value]) => [value, key]));
   const queueCopy = {
     communication_failures: ["Communication problems", "Emails that need a retry or your review", "!"],
-    client_updates: ["New client updates", "Forms, signed agreements and replies waiting for you", "●"],
+    client_updates: ["New client updates", "Quote acceptances, forms, signed agreements and replies", "●"],
     overdue_payments: ["Overdue payments", "Payment date has passed", "!"],
     new_enquiries: ["New enquiries", "Review the details and prepare the quote", "◎"],
     quotes_waiting: ["Quotes awaiting acceptance", "The couple has not chosen their package", "✉"],
@@ -487,8 +487,9 @@
     const received = row.occurred_at ? ` · ${fmtDateTime(row.occurred_at)}` : "";
     const mailData = row.action === "open_email" ? ` data-mail-brand="${attr(row.mail_brand)}" data-mail-uid="${attr(row.mail_uid)}"` : "";
     const failureData = row.failure_id ? ` data-failure-kind="${attr(row.failure_kind)}" data-failure-id="${attr(row.failure_id)}"` : "";
+    const ownerData = row.private_owner_notification ? ` data-private-owner="1"` : "";
     const openLabel = row.action === "open_email" ? "Read email" : row.action === "retry_communication" ? "Retry now" : row.update_type ? "Review" : "Open";
-    return `<button class="v811-queue-item" data-queue-record="${attr(row.booking_id)}" data-section="${attr(row.section)}" data-action="${attr(row.action)}"${mailData}${failureData}><span class="record-avatar ${row.brand}">${esc(row.title.split(/\s+|&/).filter(Boolean).slice(0, 2).map(word => word[0]).join(""))}</span><span><strong>${esc(row.title)}</strong><small>${esc(row.detail)}${esc(received)}${esc(due)}${esc(amount)}</small></span><b>${openLabel} →</b></button>`;
+    return `<button class="v811-queue-item" data-queue-record="${attr(row.booking_id)}" data-section="${attr(row.section)}" data-action="${attr(row.action)}"${mailData}${failureData}${ownerData}><span class="record-avatar ${row.brand}">${esc(row.title.split(/\s+|&/).filter(Boolean).slice(0, 2).map(word => word[0]).join(""))}</span><span><strong>${esc(row.title)}</strong><small>${esc(row.detail)}${esc(received)}${esc(due)}${esc(amount)}</small></span><b>${openLabel} →</b></button>`;
   }
 
   function queueCard(key, rows) {
@@ -528,11 +529,12 @@
       if (button.dataset.action === "open_email" && window.openInboxMessageFromDashboard) {
         window.openInboxMessageFromDashboard(button.dataset.mailBrand, button.dataset.mailUid);
       } else if (button.dataset.action === "retry_communication") {
-        if (!confirm("Retry this client email now?")) return;
+        const ownerNotification = button.dataset.privateOwner === "1";
+        if (!confirm(ownerNotification ? "Retry this private notification to Mark now?" : "Retry this client email now?")) return;
         button.disabled = true;
         button.querySelector("b").textContent = "Retrying…";
         api(`/api/communications/failures/${encodeURIComponent(button.dataset.failureKind)}/${encodeURIComponent(button.dataset.failureId)}/retry`, {method:"POST"})
-          .then(async()=>{workflowQueueCache=null;toast("Email sent successfully");await refresh();renderDashboard()})
+          .then(async()=>{workflowQueueCache=null;toast(ownerNotification ? "Private notification sent successfully" : "Email sent successfully");await refresh();renderDashboard()})
           .catch(error=>{button.disabled=false;button.querySelector("b").textContent="Retry now →";toast(error.message,"error")});
       } else {
         openDrawer(button.dataset.queueRecord, button.dataset.section, { action: button.dataset.action });

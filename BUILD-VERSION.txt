@@ -1,5 +1,12 @@
-BookingSystem2026 - Holidays & Manual Date Blocks
-Build: 2026.09.03-manual-date-blocks-v8.35
+BookingSystem2026 - Private Owner Progress Notifications
+Build: 2026.09.05-owner-progress-notifications-v8.36
+
+V8.36 private owner progress notifications:
+- Emails Mark when a couple accepts a quote, submits or updates either wedding form, or signs the agreement.
+- Each private alert links directly to the relevant booking section and replies go to the couple.
+- Recent quote acceptances and completed agreements appear prominently under New client updates.
+- Alert failures never undo a client action and remain safely retryable from Communication problems.
+- Private owner alerts are excluded from the couple's portal and conversation history.
 
 V8.35 manual holidays and blocked dates:
 - Calendar has a clear Block dates / holiday button for one day or an inclusive date range.

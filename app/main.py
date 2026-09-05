@@ -50,6 +50,7 @@ from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, 
                      DateBlock, EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, LoginAttempt,
                      PackageOption, Payment,
                      Quote, RecordKind, RecordStatus, ReminderLog, SystemSetting, Task)
+from .owner_notifications import OWNER_NOTIFICATION_KEYS, send_owner_notification_safely
 from .pdf import contract_acceptance_pdf, final_timings_pdf, invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
@@ -106,7 +107,7 @@ async def lifespan(_: FastAPI):
         await accounts_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.35-manual-date-blocks", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.36-owner-progress-notifications", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1592,6 +1593,15 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
         "final_calls": [],
     }
     today = date.today()
+    recent_progress_cutoff = datetime.now(timezone.utc) - timedelta(days=2)
+
+    def recent_progress(timestamp: datetime | None) -> bool:
+        if not timestamp:
+            return False
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        return timestamp >= recent_progress_cutoff
+
     # Payment planning is useful further ahead than the short operational task
     # window. Keep final-detail calls at 14 days while showing Mark every open
     # payment due during the next 60 days.
@@ -1634,6 +1644,19 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             task.workflow_key for task in booking.tasks if not task.completed and task.workflow_key
         }
 
+        quote_just_accepted = bool(
+            native_workflow and accepted_quote and not has_payment
+            and recent_progress(accepted_quote.accepted_at)
+        )
+        if quote_just_accepted:
+            queues["client_updates"].append(item(
+                booking,
+                f"Quote accepted · {booking.package_name or 'package selected'} · look out for the first payment",
+                "Payments", "record_payment",
+                occurred_at=accepted_quote.accepted_at,
+                update_type="quote_accepted",
+            ))
+
         booking_form_submission = booking_form_submissions.get(booking.id)
         if (workflow_active and booking_form_submission
                 and "wbm_review_booking_form" in open_task_keys):
@@ -1663,6 +1686,15 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                 occurred_at=contract.accepted_at,
                 update_type="agreement",
             ))
+        elif (workflow_active and contract and not contract.is_legacy_import
+              and contract.supplier_signed_at and recent_progress(contract.accepted_at)):
+            queues["client_updates"].append(item(
+                booking,
+                f"Wedding agreement signed by {contract.accepted_name} and safely completed",
+                "Journey", "review_forms",
+                occurred_at=contract.accepted_at,
+                update_type="agreement_completed",
+            ))
 
         if native_workflow and booking.status == RecordStatus.ENQUIRY and not accepted_quote:
             queues["new_enquiries"].append(item(
@@ -1675,11 +1707,12 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                 "Journey", "view_quote",
             ))
         elif native_workflow and accepted_quote and not has_payment:
-            queues["accepted_payment"].append(item(
-                booking, f"{booking.package_name or 'Package'} accepted · first payment not recorded",
-                "Payments", "record_payment",
-                amount=booking.deposit_amount,
-            ))
+            if not quote_just_accepted:
+                queues["accepted_payment"].append(item(
+                    booking, f"{booking.package_name or 'Package'} accepted · first payment not recorded",
+                    "Payments", "record_payment",
+                    amount=booking.deposit_amount,
+                ))
         elif native_workflow and has_payment and not booking_form_complete:
             queues["forms_waiting"].append(item(
                 booking, "Wedding Booking Form has not been submitted",
@@ -1733,13 +1766,15 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             continue
         row = item(
             booking,
-            f"{failed_email.subject} · {failed_email.error or 'Delivery failed'}",
+            (("Private notification to Mark · " if failed_email.template_key in OWNER_NOTIFICATION_KEYS else "")
+             + f"{failed_email.subject} · {failed_email.error or 'Delivery failed'}"),
             "Activity", "retry_communication" if failed_email.body else "review_communication",
             occurred_at=failed_email.sent_at,
             update_type="email_failure",
         )
         row.update({"failure_kind": "email", "failure_id": failed_email.id,
-                    "retryable": bool(failed_email.body)})
+                    "retryable": bool(failed_email.body),
+                    "private_owner_notification": failed_email.template_key in OWNER_NOTIFICATION_KEYS})
         queues["communication_failures"].append(row)
 
     failed_reminders = db.scalars(select(ReminderLog).where(
@@ -2582,7 +2617,10 @@ def resolve_portal(db: Session, token: str) -> ClientPortalToken:
 def portal_status_json(db: Session, booking: Booking) -> dict:
     submissions = db.scalars(select(FormSubmission).where(FormSubmission.booking_id == booking.id)).all()
     acceptance = db.scalar(select(ContractAcceptance).where(ContractAcceptance.booking_id == booking.id))
-    logs = db.scalars(select(EmailLog).where(EmailLog.booking_id == booking.id)
+    logs = db.scalars(select(EmailLog).where(
+                      EmailLog.booking_id == booking.id,
+                      EmailLog.template_key.notin_(tuple(OWNER_NOTIFICATION_KEYS)),
+                      )
                       .order_by(EmailLog.sent_at.desc()).limit(100)).all()
     quote = db.scalar(select(Quote).where(Quote.booking_id == booking.id)
                       .order_by(Quote.created_at.desc()).limit(1))
@@ -2593,7 +2631,7 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
     client_templates = db.scalars(select(EmailTemplate).where(
         EmailTemplate.brand == booking.brand,
         EmailTemplate.is_active.is_(True),
-        EmailTemplate.template_key.notin_(("new_enquiry_admin", "contract_completed")),
+        EmailTemplate.template_key.notin_(tuple(OWNER_NOTIFICATION_KEYS | {"contract_completed"})),
     ).order_by(EmailTemplate.display_name)).all()
     final_submission = next((x for x in submissions if x.form_type == FINAL_TIMINGS_FORM_TYPE), None)
     final_workflow = (booking.workflow_state or {}).get("final_timings_review") or {}
@@ -2702,6 +2740,10 @@ WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
     "payment_received": ("action", "Used when you record a payment and its confirmation is sent"),
     "enquiry_received": ("automatic", "Automatic acknowledgement after a website enquiry"),
     "new_enquiry_admin": ("automatic", "Automatic private notification to Mark after a website enquiry"),
+    "quote_accepted_admin": ("automatic", "Private notification to Mark immediately after the couple accepts their quote"),
+    "booking_form_submitted_admin": ("automatic", "Private notification to Mark when the Wedding Booking Form is submitted or updated"),
+    "final_timings_submitted_admin": ("automatic", "Private notification to Mark when the Final Wedding Timings Form is submitted or updated"),
+    "contract_signed_admin": ("automatic", "Private notification to Mark when the wedding agreement is signed"),
     "quote_accepted": ("automatic", "Automatic confirmation after the couple accepts their package"),
     "contract_completed": ("automatic", "Automatic confirmation after both agreement signatures; manually retryable"),
     "final_questionnaire": ("obsolete", "Not used - final details are completed by telephone"),
@@ -3069,7 +3111,8 @@ def send_booking_email(booking_id: str, payload: SendEmailIn, _: Admin = Depends
             raise HTTPException(422, "Add a short reason for this one-off email")
     template = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == booking.brand,
                                                      EmailTemplate.template_key == payload.template_key,
-                                                     EmailTemplate.is_active.is_(True)))
+                                                     EmailTemplate.is_active.is_(True),
+                                                     EmailTemplate.template_key.notin_(tuple(OWNER_NOTIFICATION_KEYS))))
     if not template:
         raise HTTPException(404, "Active email template not found")
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
@@ -3123,7 +3166,7 @@ def client_email_centre(booking_id: str, _: Admin = Depends(current_admin),
     templates = list(db.scalars(select(EmailTemplate).where(
         EmailTemplate.brand == booking.brand,
         EmailTemplate.is_active.is_(True),
-        EmailTemplate.template_key != "new_enquiry_admin",
+        EmailTemplate.template_key.notin_(tuple(OWNER_NOTIFICATION_KEYS)),
     ).order_by(EmailTemplate.display_name)).all())
     available_keys = {item.template_key for item in templates}
     has_booking_form = bool(db.scalar(select(FormSubmission.id).where(
@@ -3196,7 +3239,7 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
             EmailTemplate.brand == booking.brand,
             EmailTemplate.template_key == payload.template_key,
             EmailTemplate.is_active.is_(True),
-            EmailTemplate.template_key != "new_enquiry_admin",
+            EmailTemplate.template_key.notin_(tuple(OWNER_NOTIFICATION_KEYS)),
         ))
         if not source_template:
             raise HTTPException(404, "Active client email template not found")
@@ -3547,6 +3590,18 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
            "total": money(total), "invoice": number,
            "acceptance_email_sent": acceptance_email_sent})
     db.commit()
+    send_owner_notification_safely(
+        db,
+        booking,
+        "quote_accepted_admin",
+        section="payments",
+        extra_values={
+            "invoice_number": number,
+            "accepted_package": package.name,
+            "accepted_addons": (", ".join(item["name"] for item in line_items[1:])
+                                or "No additional items"),
+        },
+    )
     calendar_sync = sync_booking_calendar_safely(db, booking)
     return {"ok": True, "quote": quote_json(quote), "invoice": invoice_json(invoice),
             "acceptance_email_sent": acceptance_email_sent,
@@ -3578,6 +3633,7 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
         form_template_updated_at = template.updated_at.isoformat()
     row = db.scalar(select(FormSubmission).where(FormSubmission.booking_id == booking.id,
                                                  FormSubmission.form_type == payload.form_type))
+    was_updated = row is not None
     if row:
         row.data = form_values
         row.updated_at = datetime.now(timezone.utc)
@@ -3675,6 +3731,23 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
         "pdf_document_id": final_document.id if final_document else None,
     })
     db.commit()
+    owner_template = (
+        "booking_form_submitted_admin"
+        if payload.form_type == "booking_form"
+        else "final_timings_submitted_admin"
+    )
+    send_owner_notification_safely(
+        db,
+        booking,
+        owner_template,
+        section="journey",
+        extra_values={
+            "form_name": ("Wedding Booking Form/questionnaire"
+                          if payload.form_type == "booking_form"
+                          else "Final Wedding Timings Form"),
+            "submission_action": "updated" if was_updated else "submitted",
+        },
+    )
     if payload.form_type in ("booking_form", FINAL_TIMINGS_FORM_TYPE):
         sync_booking_calendar_safely(db, booking)
     return {"ok": True, "submitted_at": row.submitted_at.isoformat(),
@@ -3913,6 +3986,16 @@ def accept_contract(token: str, payload: ContractAcceptIn, request: Request, db:
            "supplier_signed_name": row.supplier_signed_name,
            "completion_email_sent": completion_email_sent})
     db.commit()
+    send_owner_notification_safely(
+        db,
+        booking,
+        "contract_signed_admin",
+        section="journey",
+        extra_values={
+            "accepted_name": row.accepted_name,
+            "contract_version": row.contract_version,
+        },
+    )
     return {"ok": True, "accepted_at": row.accepted_at.isoformat(),
             "supplier_signed_name": row.supplier_signed_name,
             "supplier_signed_at": row.supplier_signed_at.isoformat(),
@@ -4274,9 +4357,12 @@ def retry_failed_communication(
     booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(
         Booking.id == email.booking_id
     ))
-    if not booking or booking.status == RecordStatus.CANCELLED:
+    owner_notification = email.template_key in OWNER_NOTIFICATION_KEYS
+    if not booking:
+        raise HTTPException(409, "The booking for this email no longer exists")
+    if booking.status == RecordStatus.CANCELLED and not owner_notification:
         raise HTTPException(409, "This booking is no longer eligible for client email")
-    if booking.legacy_source or not automations_allowed(booking):
+    if not owner_notification and (booking.legacy_source or not automations_allowed(booking)):
         raise HTTPException(409, "Protected or paused bookings cannot be retried from this queue")
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
     if not profile:
@@ -4286,10 +4372,11 @@ def retry_failed_communication(
     email.last_attempt_at = now
     db.commit()
     try:
-        tracking_token = secrets.token_urlsafe(32)
+        tracking_token = None if owner_notification else secrets.token_urlsafe(32)
         send_rendered_email(
             booking, profile, email.recipient, email.subject, email.body,
-            open_tracking_url=email_open_url(tracking_token),
+            open_tracking_url=(email_open_url(tracking_token) if tracking_token else None),
+            reply_to=(booking.client.email if owner_notification else None),
         )
     except Exception as exc:
         email.error = str(exc)[:2000]
@@ -4305,13 +4392,14 @@ def retry_failed_communication(
         subject=email.subject,
         body=email.body,
         status="sent",
-        tracking_token_hash=token_digest(tracking_token),
+        tracking_token_hash=(token_digest(tracking_token) if tracking_token else None),
         retry_count=email.retry_count,
         last_attempt_at=now,
         sent_at=now,
     ))
     audit(db, "retry_failed_email", "booking", booking.id, {
         "template": email.template_key, "attempt": email.retry_count,
+        "private_owner_notification": owner_notification,
     })
     db.commit()
     return {"ok": True, "status": "sent", "attempts": email.retry_count}

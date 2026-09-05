@@ -169,7 +169,7 @@ def test_v828_dashboard_and_record_actions_are_explicit_and_mobile_friendly():
     css = (root / "app/static/v811.css").read_text()
     assert "EMAIL OPENING V8.31" in index
     assert "/static/app.js?v=enquiry-date-clash-v8-31-1" in index
-    assert "/static/v811.js?v=studio-style-workspace-v8-30" in index
+    assert "/static/v811.js?v=owner-progress-notifications-v8-36" in index
     assert "Needs your action" in dashboard_js
     assert "Waiting and upcoming" in dashboard_js
     assert "new Set(actionQueueOrder.flatMap" in dashboard_js
