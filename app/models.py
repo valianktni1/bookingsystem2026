@@ -259,6 +259,26 @@ class AccountsSyncState(Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class GrowthSyncState(Base):
+    """Last booking revision safely acknowledged by the Growth Engine."""
+    __tablename__ = "growth_sync_states"
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id", ondelete="CASCADE"), primary_key=True)
+    payload_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class GrowthLeadLink(Base):
+    """Idempotent link for a manual lead created first in the Growth Engine."""
+    __tablename__ = "growth_lead_links"
+    growth_lead_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    booking_id: Mapped[str] = mapped_column(ForeignKey("bookings.id", ondelete="CASCADE"), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 class BookingNote(Base):
     __tablename__ = "booking_notes"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

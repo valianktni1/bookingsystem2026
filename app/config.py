@@ -1,4 +1,5 @@
 from functools import lru_cache
+from datetime import date
 from pathlib import Path
 
 from pydantic import Field, model_validator
@@ -56,6 +57,12 @@ class Settings(BaseSettings):
     accounts_api_url: str | None = None
     accounts_integration_key: str | None = None
     accounts_sync_minutes: int = Field(default=10, ge=2, le=1440)
+    growth_integration_enabled: bool = False
+    growth_integration_auto_sync: bool = False
+    growth_api_url: str | None = None
+    growth_integration_key: str | None = None
+    growth_sync_minutes: int = Field(default=5, ge=1, le=1440)
+    growth_sync_from_date: date | None = date(2026, 9, 7)
 
     @model_validator(mode="after")
     def reject_placeholder_production_secrets(self):
@@ -71,6 +78,11 @@ class Settings(BaseSettings):
                     raise ValueError("ACCOUNTS_API_URL must be a complete http:// or https:// address")
                 if not self.accounts_integration_key or len(self.accounts_integration_key) < 32:
                     raise ValueError("ACCOUNTS_INTEGRATION_KEY must contain at least 32 characters")
+            if self.growth_integration_enabled:
+                if not self.growth_api_url or not self.growth_api_url.startswith(("http://", "https://")):
+                    raise ValueError("GROWTH_API_URL must be a complete http:// or https:// address")
+                if not self.growth_integration_key or len(self.growth_integration_key) < 32:
+                    raise ValueError("GROWTH_INTEGRATION_KEY must contain at least 32 characters")
             if bool(self.google_calendar_client_id) != bool(self.google_calendar_client_secret):
                 raise ValueError("GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET must be set together")
         return self

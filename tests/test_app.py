@@ -220,10 +220,12 @@ def test_phase_two_b_flow(monkeypatch):
         assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
                                  "imap_configured": False,
-                                 "accounts_integration_enabled": False,
-                                 "accounts_auto_sync": False,
-                                 "google_calendar_configured": False,
-                                       "build": "2026.09.05-clean-version-label-v8.36.1"}
+                                     "accounts_integration_enabled": False,
+                                     "accounts_auto_sync": False,
+                                     "growth_integration_enabled": False,
+                                     "growth_auto_sync": False,
+                                     "google_calendar_configured": False,
+                                           "build": "2026.09.07-growth-engine-connector-v8.37"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

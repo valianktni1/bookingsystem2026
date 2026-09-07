@@ -1,5 +1,18 @@
-BookingSystem2026 - Clean Current Version Label
-Build: 2026.09.05-clean-version-label-v8.36.1
+BookingSystem2026 - Growth Engine Connector
+Build: 2026.09.07-growth-engine-connector-v8.37
+
+V8.37 Growth Engine connector:
+- Adds an opt-in authenticated connection to the separate WBM Growth Engine.
+- Sends idempotent booking snapshots without allowing an unavailable Growth
+  Engine to block or roll back normal booking work.
+- Detects later quote, payment, booking, completion and cancellation changes
+  from the saved booking record, so individual workflow routes stay unchanged.
+- Adds durable sync state and automatic retry support.
+- Accepts manual Growth Engine enquiries through a private integration route,
+  creates each booking once and sends no client email.
+- Defaults enabled=false and auto_sync=false. Deployment itself sends nothing.
+- Existing booking, invoice, payment, email, Calendar, Accounts, form and backup
+  behaviour is unchanged.
 
 V8.36.1 clean current-version label:
 - Replaces the growing feature-history strip at the top of the app with one tidy current complete-version label.

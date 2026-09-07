@@ -35,6 +35,7 @@ from .email_service import (preview_template_email, send_rendered_email,
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
 from .google_calendar import (google_calendar_configured, register_google_calendar_routes,
                               retry_pending_calendar_syncs, sync_booking_calendar_safely)
+from .growth_integration import growth_sync_loop, register_growth_integration_routes
 from .final_timings import (FORM_TYPE as FINAL_TIMINGS_FORM_TYPE,
                             booking_coverage_allowance, final_timings_unlocked,
                             studio_ninja_final_timings_email_due,
@@ -95,19 +96,23 @@ async def lifespan(_: FastAPI):
     reminder_task = asyncio.create_task(reminder_loop())
     calendar_retry_task = asyncio.create_task(calendar_retry_loop())
     accounts_task = asyncio.create_task(accounts_sync_loop())
+    growth_task = asyncio.create_task(growth_sync_loop())
     yield
     reminder_task.cancel()
     calendar_retry_task.cancel()
     accounts_task.cancel()
+    growth_task.cancel()
     with suppress(asyncio.CancelledError):
         await reminder_task
     with suppress(asyncio.CancelledError):
         await calendar_retry_task
     with suppress(asyncio.CancelledError):
         await accounts_task
+    with suppress(asyncio.CancelledError):
+        await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.36.1-clean-version-label", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.37-growth-connector", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -871,6 +876,8 @@ def health():
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
             "accounts_integration_enabled": settings.accounts_integration_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
+            "growth_integration_enabled": settings.growth_integration_enabled,
+            "growth_auto_sync": settings.growth_integration_auto_sync,
             "google_calendar_configured": google_calendar_configured(),
             "build": BACKUP_BUILD}
 
@@ -4429,6 +4436,7 @@ register_mail_routes(app)
 register_legacy_import_routes(app)
 register_legacy_archive_import_routes(app)
 register_accounts_integration_routes(app)
+register_growth_integration_routes(app)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

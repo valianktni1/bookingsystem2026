@@ -1,0 +1,22 @@
+BookingSystem2026 V8.37 - Growth Engine connector
+
+Do not deploy this booking-system update until Growth Engine V1.0.3 has been
+pulled and rebuilt. Take the normal booking database backup first.
+
+Add these lines to the existing private booking-system .env file:
+
+GROWTH_INTEGRATION_ENABLED=false
+GROWTH_INTEGRATION_AUTO_SYNC=false
+GROWTH_API_URL=https://growth.weddingsbymark.uk
+GROWTH_INTEGRATION_KEY=<same secret as Growth Engine BOOKING_WEBHOOK_KEY>
+GROWTH_SYNC_MINUTES=5
+GROWTH_SYNC_FROM_DATE=2026-09-07
+
+Build and start the app using the normal V8 deployment commands. The new
+connector tables are created automatically. With both switches false, startup
+sends no Growth Engine request and no email.
+
+After both apps are healthy, set GROWTH_INTEGRATION_ENABLED=true but leave
+GROWTH_INTEGRATION_AUTO_SYNC=false. Rebuild/recreate the booking app, run the
+connection check, then synchronise one test record. Only enable automatic sync
+after that record updates correctly in both applications.
