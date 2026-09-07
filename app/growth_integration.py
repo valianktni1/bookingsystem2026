@@ -18,12 +18,12 @@ from urllib.request import Request, urlopen
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import select, func
+from sqlalchemy.orm import Session, selectinload, object_session
 
 from .config import get_settings
 from .database import SessionLocal, get_db
-from .models import (Admin, Booking, Brand, Client, GrowthLeadLink,
+from .models import (Admin, Booking, Brand, Client, GrowthLeadLink, EmailLog, MailboxReply, GrowthMailEvidence,
                      GrowthSyncState, Quote, RecordKind, RecordStatus)
 from .security import current_admin
 from .services import audit, create_default_tasks
@@ -74,6 +74,63 @@ def _booking_query():
     return query
 
 
+def communication_facts(booking: Booking) -> dict:
+    """Local evidence only; status checks must never contact the mailbox."""
+    db = object_session(booking)
+    logs = list(db.scalars(select(EmailLog).where(EmailLog.booking_id == booking.id,
+        func.lower(EmailLog.recipient) == booking.client.email.lower(), EmailLog.status == 'sent')).all()) if db else []
+    replies = list(db.scalars(select(MailboxReply).where(MailboxReply.booking_id == booking.id,
+        MailboxReply.status == 'sent')).all()) if db else []
+    def latest(values):
+        return max((v.replace(tzinfo=timezone.utc).isoformat() for v in values if v), default=None)
+    quotes = [x for x in logs if x.template_key == 'quote']
+    cached = db.get(GrowthMailEvidence, booking.id) if db else None
+    return {
+        'version': 1,
+        'source_created_at': booking.created_at.isoformat(),
+        'archived': bool(booking.archived_at),
+        'suppressed': bool(booking.automation_suppressed),
+        'is_test': bool(booking.is_test),
+        'booking_status': booking.status.value,
+        'deposit_paid': bool(booking.deposit_paid_date),
+        'quote_accepted': any(q.status == 'accepted' for q in booking.quotes),
+        'quote_sent_at': latest(x.sent_at for x in quotes),
+        'last_contact_at': latest([x.sent_at for x in logs] + [x.sent_at for x in replies]),
+        'quote_link_at': latest(x.last_link_accessed_at for x in quotes),
+        'quote_link_count': sum(x.link_access_count or 0 for x in quotes),
+        **dict(cached.facts if cached else {}),
+    }
+
+
+def refresh_mail_evidence(db: Session, bookings: list[Booking]) -> None:
+    """One bounded read-only header scan. No bodies, attachments or read flags change."""
+    from .mail_service import imap_ready, list_inbox_messages
+    status, rows = 'not_configured', []
+    if any(not b.is_test for b in bookings) and imap_ready(Brand.WBM):
+        try:
+            rows = list_inbox_messages(Brand.WBM, limit=200)
+            status = 'recent_inbox'
+        except Exception:
+            status = 'unavailable'
+    checked = datetime.now(timezone.utc).isoformat()
+    for booking in bookings:
+        if booking.is_test:
+            continue
+        cached = db.get(GrowthMailEvidence, booking.id)
+        evidence = dict(cached.facts if cached else {})
+        dates = [r['date'] for r in rows if r.get('date') and
+                 r.get('from_email', '').lower() == booking.client.email.lower()]
+        incoming = max(dates, default=None)
+        if incoming and incoming > (evidence.get('last_incoming_at') or ''):
+            evidence['last_incoming_at'] = incoming
+        evidence.update(mail_status=status, mail_checked_at=checked)
+        if cached:
+            cached.facts = evidence
+        else:
+            db.add(GrowthMailEvidence(booking_id=booking.id, facts=evidence))
+    db.commit()
+
+
 def build_booking_payload(booking: Booking) -> tuple[dict, str]:
     referral_source, message = _source_details(booking)
     accepted_quote = next((row for row in booking.quotes if row.status == "accepted"), None)
@@ -94,6 +151,7 @@ def build_booking_payload(booking: Booking) -> tuple[dict, str]:
             "required": bool(raw.get("required", False)),
         })
     payload = {
+        'intelligence': communication_facts(booking),
         "booking_id": booking.id,
         "primary_first_name": booking.client.first_name,
         "partner_first_name": booking.client.partner_name or "Partner",
@@ -131,7 +189,7 @@ def _request_json(path: str, *, method: str = "GET", body: dict | None = None) -
         "Accept": "application/json",
         "Content-Type": "application/json",
         "X-Integration-Key": settings.growth_integration_key or "",
-        "User-Agent": "WBM-Booking-System/8.38",
+        "User-Agent": "WBM-Booking-System/8.39",
     })
     try:
         with urlopen(request, timeout=20) as response:
@@ -178,7 +236,11 @@ def sync_pending(*, maximum: int = 100) -> dict:
         raise RuntimeError("Growth Engine integration is disabled")
     attempted = synced = failed = 0
     with SessionLocal() as db:
-        for booking in db.scalars(_booking_query()).unique().all():
+        bookings = list(db.scalars(_booking_query()).unique().all())
+        refresh_mail_evidence(db, bookings)
+        sync_times = {s.booking_id: s.last_synced_at for s in db.scalars(select(GrowthSyncState)).all()}
+        bookings.sort(key=lambda b: str(sync_times.get(b.id) or ''))
+        for booking in bookings:
             if attempted >= maximum or not booking.event_date:
                 continue
             payload, payload_hash = build_booking_payload(booking)

@@ -1,7 +1,7 @@
 BookingSystem2026 - Growth Engine Connector
-Build: 2026.09.07-growth-quote-details-v8.38
+Build: 2026.09.07-growth-intelligence-v8.39
 
-V8.38 Growth quote-detail connector:
+V8.39 Growth intelligence connector:
 - sends the real quote line-items, selected add-ons, discounts, booking fee and quote status to Growth
 - keeps BookingSystem2026 authoritative for all package, quote and client communication data
 - Adds an opt-in authenticated connection to the separate WBM Growth Engine.

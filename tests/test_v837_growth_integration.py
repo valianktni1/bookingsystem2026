@@ -16,6 +16,7 @@ from app import growth_integration
 from app.database import SessionLocal
 from app.main import app
 from app.models import Booking, GrowthLeadLink, Quote
+from app.models import EmailLog
 
 
 def test_secure_manual_growth_enquiry_is_idempotent_and_sends_no_email(monkeypatch):
@@ -86,3 +87,37 @@ def test_booking_snapshot_event_id_changes_only_when_booking_changes():
         changed, changed_hash = growth_integration.build_booking_payload(booking)
         assert changed["event_id"] != first["event_id"]
         assert changed_hash != first_hash
+
+
+def test_activity_changes_snapshot_and_mail_failure_preserves_evidence(monkeypatch):
+    from datetime import datetime, timezone
+    from app import mail_service
+    monkeypatch.setattr(mail_service, 'imap_ready', lambda _: True)
+    with SessionLocal() as db:
+        booking = db.query(Booking).order_by(Booking.created_at.desc()).first()
+        booking.is_test = False
+        db.commit()
+        before = booking.updated_at
+        payload, old_hash = growth_integration.build_booking_payload(booking)
+        log = EmailLog(booking_id=booking.id, recipient=booking.client.email, template_key='quote',
+                       subject='Quote', status='sent', last_link_accessed_at=datetime.now(timezone.utc), link_access_count=2)
+        db.add(log)
+        db.commit()
+        _, new_hash = growth_integration.build_booking_payload(booking)
+        assert old_hash != new_hash
+        def inbox(brand, limit):
+            assert limit == 200
+            return [{'from_email':booking.client.email, 'date':'2026-09-07T11:00:00+00:00'}]
+        monkeypatch.setattr(mail_service, 'list_inbox_messages', inbox)
+        growth_integration.refresh_mail_evidence(db, [booking])
+        facts = growth_integration.build_booking_payload(booking)[0]['intelligence']
+        assert facts['last_incoming_at'].startswith('2026-09-07')
+        assert facts['quote_link_count'] >= 2
+        assert booking.updated_at == before
+        def fail(*args, **kwargs):
+            raise RuntimeError('offline')
+        monkeypatch.setattr(mail_service, 'list_inbox_messages', fail)
+        growth_integration.refresh_mail_evidence(db, [booking])
+        facts = growth_integration.build_booking_payload(booking)[0]['intelligence']
+        assert facts['mail_status'] == 'unavailable'
+        assert facts['last_incoming_at'].startswith('2026-09-07')

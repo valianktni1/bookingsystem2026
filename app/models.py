@@ -437,6 +437,12 @@ class EmailLog(Base):
     booking: Mapped[Booking] = relationship()
 
 
+class GrowthMailEvidence(Base):
+    __tablename__ = 'growth_mail_evidence'
+    booking_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    facts: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
 class MailboxReply(Base):
     """A durable audit copy of replies sent from the unified admin inbox.
 
