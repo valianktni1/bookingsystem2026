@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app import growth_integration
 from app.database import SessionLocal
 from app.main import app
-from app.models import Booking, GrowthLeadLink
+from app.models import Booking, GrowthLeadLink, Quote
 
 
 def test_secure_manual_growth_enquiry_is_idempotent_and_sends_no_email(monkeypatch):
@@ -58,10 +58,30 @@ def test_secure_manual_growth_enquiry_is_idempotent_and_sends_no_email(monkeypat
 def test_booking_snapshot_event_id_changes_only_when_booking_changes():
     with SessionLocal() as db:
         booking = db.query(Booking).filter(Booking.is_test.is_(True)).order_by(Booking.created_at.desc()).first()
+        quote = Quote(
+            booking_id=booking.id,
+            status="accepted",
+            line_items=[
+                {"type": "package", "code": "gold", "name": "Gold", "quantity": 1,
+                 "unit_price": 899, "total": 899},
+                {"type": "addon", "code": "extra-hour", "name": "Extra hour", "quantity": 1,
+                 "unit_price": 150, "total": 150},
+            ],
+            total=1049,
+            deposit_amount=100,
+        )
+        booking.deposit_amount = 100
+        booking.quoted_total = 1049
+        db.add(quote)
+        db.commit()
+        db.refresh(booking)
         first, first_hash = growth_integration.build_booking_payload(booking)
         second, second_hash = growth_integration.build_booking_payload(booking)
         assert first["event_id"] == second["event_id"]
         assert first_hash == second_hash
+        assert first["quote_status"] == "accepted"
+        assert first["quote_items"][1]["name"] == "Extra hour"
+        assert first["deposit_amount"] == 100
         booking.package_name = "Platinum"
         changed, changed_hash = growth_integration.build_booking_payload(booking)
         assert changed["event_id"] != first["event_id"]

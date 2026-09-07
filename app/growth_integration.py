@@ -77,6 +77,22 @@ def _booking_query():
 def build_booking_payload(booking: Booking) -> tuple[dict, str]:
     referral_source, message = _source_details(booking)
     accepted_quote = next((row for row in booking.quotes if row.status == "accepted"), None)
+    latest_quote = max(booking.quotes, key=lambda row: row.created_at, default=None)
+    current_quote = accepted_quote or latest_quote
+    quote_items = []
+    for raw in (current_quote.line_items if current_quote else []) or []:
+        if not isinstance(raw, dict):
+            continue
+        quote_items.append({
+            "type": str(raw.get("type") or "item")[:30],
+            "code": str(raw.get("code") or "")[:80],
+            "name": str(raw.get("name") or "Item")[:180],
+            "description": str(raw.get("description") or "")[:1000],
+            "quantity": _money(raw.get("quantity") or 1),
+            "unit_price": _money(raw.get("unit_price")),
+            "total": _money(raw.get("total")),
+            "required": bool(raw.get("required", False)),
+        })
     payload = {
         "booking_id": booking.id,
         "primary_first_name": booking.client.first_name,
@@ -91,7 +107,10 @@ def build_booking_payload(booking: Booking) -> tuple[dict, str]:
         "message": message,
         "booking_status": booking.status.value,
         "quote_accepted": bool(accepted_quote),
+        "quote_status": current_quote.status if current_quote else None,
+        "quote_items": quote_items,
         "deposit_paid": bool(booking.deposit_paid_date),
+        "deposit_amount": _money(booking.deposit_amount),
         "estimated_value": _money(booking.quoted_total),
         "is_test": bool(booking.is_test),
         "received_at": booking.created_at.isoformat(),
@@ -112,7 +131,7 @@ def _request_json(path: str, *, method: str = "GET", body: dict | None = None) -
         "Accept": "application/json",
         "Content-Type": "application/json",
         "X-Integration-Key": settings.growth_integration_key or "",
-        "User-Agent": "WBM-Booking-System/8.37",
+        "User-Agent": "WBM-Booking-System/8.38",
     })
     try:
         with urlopen(request, timeout=20) as response:

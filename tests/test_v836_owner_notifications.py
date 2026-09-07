@@ -227,9 +227,9 @@ def test_v836_templates_usage_cache_busting_and_build_markers():
     ):
         assert key in bootstrap
         assert key in main or key in (root / "app/owner_notifications.py").read_text()
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.37" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.38" in index
     assert "OWNER PROGRESS ALERTS V8.36 ·" not in index
-    assert "/static/v811.js?v=growth-connector-v8-37" in index
+    assert "/static/v811.js?v=growth-quote-details-v8-38" in index
     assert "Quote acceptances, forms, signed agreements and replies" in dashboard
     assert "Retry this private notification to Mark now?" in dashboard
 
