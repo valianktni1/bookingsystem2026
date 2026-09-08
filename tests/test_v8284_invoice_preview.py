@@ -35,7 +35,7 @@ def test_final_call_pack_includes_direct_invoice_access():
     assert "button.dataset.finalCallInvoice" in script
     assert ".v823-invoice-reference" in css
     assert "/static/v823.js?v=invoice-preview-v8-28-4" in index
-    assert "/static/v82.js?v=invoice-preview-v8-28-4" in index
+    assert "/static/v82.js?v=invoice-email-v8-40" in index
 
 
 def test_client_receipt_email_opens_receipt_and_keeps_download_choice():

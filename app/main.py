@@ -112,7 +112,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.39-growth-intelligence", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.40-invoice-email", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -2486,6 +2486,71 @@ def delete_payment(payment_id: str, _: Admin = Depends(current_admin), db: Sessi
     db.commit()
     if booking:
         sync_booking_calendar_safely(db, booking)
+
+
+def invoice_email_context(db: Session, invoice_id: str):
+    invoice = full_invoice(db, invoice_id)
+    booking = invoice.booking
+    if invoice.status in ("void", "cancelled") or booking.status == RecordStatus.CANCELLED:
+        raise HTTPException(409, "Closed invoices or cancelled bookings cannot be emailed")
+    manual_only = not automations_allowed(booking)
+    if manual_only and booking.legacy_source != "studio_ninja":
+        raise HTTPException(409, "Client communication is paused for this booking")
+    recipient = client_email_recipient(db, booking)
+    if not recipient:
+        raise HTTPException(422, "Add the client's email address first")
+    return invoice, booking, recipient, manual_only
+
+
+@app.get("/api/invoices/{invoice_id}/email")
+def preview_invoice_email(invoice_id: str, _: Admin = Depends(current_admin),
+                          db: Session = Depends(get_db)):
+    invoice, booking, recipient, manual_only = invoice_email_context(db, invoice_id)
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    return {"recipient": recipient, "manual_only": manual_only,
+            "subject": f"Invoice {invoice.number} — {profile.display_name}",
+            "body": f"Hi {booking.client.first_name or 'there'},\n\nPlease find invoice {invoice.number} attached. Your invoice includes the payment details and any payments already recorded.\n\nIf you have any questions, please reply to this email.\n\n{profile.display_name}",
+            "filename": f"{invoice.number}.pdf"}
+
+
+@app.post("/api/invoices/{invoice_id}/email")
+def email_selected_invoice(invoice_id: str, payload: ClientEmailComposeIn,
+                           _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    from .email_service import build_email_message, send_email_message, smtp_ready
+    invoice, booking, recipient, manual_only = invoice_email_context(db, invoice_id)
+    if manual_only:
+        if payload.manual_confirmation != "SEND ONE MANUAL EMAIL":
+            raise HTTPException(422, "Type SEND ONE MANUAL EMAIL exactly to confirm")
+        if not payload.manual_reason or len(payload.manual_reason.strip()) < 3:
+            raise HTTPException(422, "Add a short reason for this one-off email")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    if not smtp_ready(booking.brand):
+        raise HTTPException(503, "Email sending is not configured for this business")
+    if any(c in payload.subject for c in ('\r', '\n')):
+        raise HTTPException(422, "The email subject must be a single line")
+    username, _password = smtp_credentials(booking.brand)
+    message = build_email_message(booking, profile, payload.subject, payload.body,
+                                  username, recipient=recipient)
+    message.add_attachment(invoice_pdf(invoice, profile), maintype="application",
+                           subtype="pdf", filename=f"{invoice.number}.pdf")
+    log = EmailLog(booking_id=booking.id, template_key="manual_invoice",
+                   recipient=recipient, subject=payload.subject, body=payload.body)
+    try:
+        send_email_message(message, booking.brand)
+    except Exception:
+        log.status = "failed"
+        log.error = "SMTP did not confirm delivery; check the mailbox before retrying"
+        db.add(log)
+        db.commit()
+        raise HTTPException(503, log.error)
+    log.status = "sent"
+    db.add(log)
+    audit(db, "send_invoice_email", "booking", booking.id,
+          {"invoice_id": invoice.id, "invoice": invoice.number,
+           "recipient": recipient, "manual_only": manual_only,
+           "reason": payload.manual_reason})
+    db.commit()
+    return {"ok": True, "recipient": recipient, "invoice": invoice.number}
 
 
 @app.get("/api/invoices/{invoice_id}/pdf")
