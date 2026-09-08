@@ -10,6 +10,7 @@
   const sectionSlugs = {
     Overview: "overview",
     Journey: "journey",
+    Emails: "emails",
     Payments: "payments",
     Files: "files",
     Activity: "activity",
@@ -47,12 +48,16 @@
   let workflowQueueCache = null;
   let searchIndexCache = null;
   let dashboardRenderNumber = 0;
+  let dashboardMailCache = null;
+  let dashboardMailCheckedAt = 0;
+  let dashboardMailPromise = null;
   let searchTimer = null;
 
   function canonicalSection(tab) {
     return ({
       Quote: "Journey", Journey: "Journey", Forms: "Journey", Questionnaires: "Journey",
       "Client portal": "Journey", Workflow: "Overview", Finance: "Payments",
+      Email: "Emails", Mail: "Emails", Emails: "Emails",
       Documents: "Files", Notes: "Activity", "Notes & activity": "Activity",
     })[tab] || (sectionSlugs[tab] ? tab : "Overview");
   }
@@ -198,6 +203,7 @@
     return {
       Overview: `${(r.tasks || []).filter(task => !task.completed).length} to do`,
       Journey: `${Number(Boolean(facts.quote)) + Number(Boolean(facts.bookingForm)) + Number(agreementComplete)}/3 complete`,
+      Emails: `${(portal?.emails || []).length} recorded`,
       Payments: outstanding > 0 ? `${money(outstanding)} due` : "Clear",
       Files: `${(r.documents || []).length}`,
       Activity: `${(r.activity || []).length} events`,
@@ -211,6 +217,7 @@
     const sections = [
       ["Overview", "⌂", "Overview"],
       ["Journey", "✓", "Journey"],
+      ["Emails", "✉", "Emails"],
       ["Payments", "£", "Payments"],
       ["Files", "▤", "Files"],
       ["Activity", "◷", "Activity"],
@@ -545,29 +552,56 @@
     $$('[data-action="toggle-task"]', $("#content")).forEach(button => button.onclick = () => toggleTask(button.closest("[data-task]")));
   }
 
+  function loadDashboardMail() {
+    if (dashboardMailCache && Date.now() - dashboardMailCheckedAt < 60000) {
+      return Promise.resolve(dashboardMailCache);
+    }
+    if (dashboardMailPromise) return dashboardMailPromise;
+    dashboardMailPromise = api("/api/mail/messages?unread_only=true&limit=30")
+      .then(mail => {
+        dashboardMailCache = mail;
+        dashboardMailCheckedAt = Date.now();
+        return mail;
+      })
+      .catch(() => ({messages: []}))
+      .finally(() => { dashboardMailPromise = null; });
+    return dashboardMailPromise;
+  }
+
+  function mergeDashboardMail(data, mail) {
+    const emailUpdates = (mail.messages || []).filter(message => message.unread && message.booking).map(message => ({
+      booking_id: message.booking.id,
+      title: message.booking.title,
+      detail: `Email reply · ${message.subject || "No subject"} · ${message.from_email}`,
+      section: "Emails",
+      action: "open_email",
+      brand: message.booking.brand,
+      event_date: message.booking.event_date,
+      due_date: null,
+      amount: null,
+      occurred_at: message.date,
+      update_type: "email_reply",
+      mail_brand: message.brand,
+      mail_uid: message.uid,
+    }));
+    return {...data, queues: {...data.queues, client_updates: [...(data.queues.client_updates || []), ...emailUpdates]
+      .sort((a,b) => String(b.occurred_at || "").localeCompare(String(a.occurred_at || "")))}};
+  }
+
   renderDashboard = function () {
     const renderNumber = ++dashboardRenderNumber;
     $("#content").innerHTML = `<div class="panel loading">Building today's working queues…</div>`;
     const workflowRequest = workflowQueueCache ? Promise.resolve(workflowQueueCache) : api("/api/workflow-queues").then(data => (workflowQueueCache = data));
-    const mailRequest = api("/api/mail/messages?unread_only=true&limit=30").catch(() => ({ messages: [] }));
-    Promise.all([workflowRequest, mailRequest]).then(([data, mail]) => {
-      const emailUpdates = (mail.messages || []).filter(message => message.unread && message.booking).map(message => ({
-        booking_id: message.booking.id,
-        title: message.booking.title,
-        detail: `Email reply · ${message.subject || "No subject"} · ${message.from_email}`,
-        section: "Activity",
-        action: "open_email",
-        brand: message.booking.brand,
-        event_date: message.booking.event_date,
-        due_date: null,
-        amount: null,
-        occurred_at: message.date,
-        update_type: "email_reply",
-        mail_brand: message.brand,
-        mail_uid: message.uid,
-      }));
-      const merged = {...data, queues: {...data.queues, client_updates: [...(data.queues.client_updates || []), ...emailUpdates].sort((a,b) => String(b.occurred_at || "").localeCompare(String(a.occurred_at || "")))}};
-      renderTodayDashboard(merged, renderNumber);
+    workflowRequest.then(data => {
+      // Local booking data is shown first. A slow external mailbox must never
+      // hold the complete dashboard on its loading screen.
+      renderTodayDashboard(data, renderNumber);
+      setMode();
+      loadDashboardMail().then(mail => {
+        if (renderNumber !== dashboardRenderNumber || state.view !== "dashboard") return;
+        renderTodayDashboard(mergeDashboardMail(data, mail), renderNumber);
+        setMode();
+      });
     }).catch(error => showError(error));
   };
 

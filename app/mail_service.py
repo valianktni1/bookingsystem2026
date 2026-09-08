@@ -7,6 +7,7 @@ import imaplib
 import re
 import ssl
 import time
+from threading import Lock
 from contextlib import contextmanager, suppress
 from email import policy
 from email.header import decode_header, make_header
@@ -20,6 +21,16 @@ from typing import Iterator
 from .config import get_settings
 from .email_service import BRAND_ASSETS, _body_html, smtp_credentials
 from .models import Brand, BusinessProfile
+
+
+# Hostinger is an external service and can occasionally take several seconds to
+# answer. Keep a short header cache and one lock per brand so the dashboard,
+# Inbox and Growth synchroniser cannot start duplicate scans at the same time.
+# Message bodies are never cached here.
+_INBOX_CACHE_SECONDS = 60
+_inbox_cache: dict[tuple[Brand, bool, int], tuple[float, list[dict]]] = {}
+_inbox_cache_guard = Lock()
+_inbox_locks = {brand: Lock() for brand in Brand}
 
 
 def imap_credentials(brand: Brand) -> tuple[str | None, str | None]:
@@ -144,9 +155,34 @@ def mailbox_status(brand: Brand) -> dict:
     return result
 
 
-def list_inbox_messages(brand: Brand, limit: int | None = None, unread_only: bool = False) -> list[dict]:
-    settings = get_settings()
-    count = max(1, min(limit or settings.mail_list_limit, 200))
+def _copy_rows(rows: list[dict]) -> list[dict]:
+    """Return copies because API matching adds booking data to each row."""
+    return [dict(row) for row in rows]
+
+
+def _cached_inbox_rows(brand: Brand, count: int, unread_only: bool, now: float) -> list[dict] | None:
+    with _inbox_cache_guard:
+        exact = _inbox_cache.get((brand, unread_only, count))
+        if exact and now - exact[0] <= _INBOX_CACHE_SECONDS:
+            return _copy_rows(exact[1])
+
+        # A recent larger ALL scan can answer a smaller request, including an
+        # unread-only dashboard request, without another IMAP login.
+        candidates: list[tuple[int, list[dict]]] = []
+        for (cached_brand, cached_unread, cached_count), (stored_at, rows) in _inbox_cache.items():
+            if cached_brand != brand or cached_unread or cached_count < count:
+                continue
+            if now - stored_at <= _INBOX_CACHE_SECONDS:
+                candidates.append((cached_count, rows))
+    if not candidates:
+        return None
+    rows = min(candidates, key=lambda item: item[0])[1]
+    if unread_only:
+        rows = [row for row in rows if row.get("unread")]
+    return _copy_rows(rows[:count])
+
+
+def _fetch_inbox_messages_uncached(brand: Brand, count: int, unread_only: bool) -> list[dict]:
     with imap_connection(brand) as connection:
         status, data = connection.uid("search", None, "UNSEEN" if unread_only else "ALL")
         if status != "OK":
@@ -189,6 +225,36 @@ def list_inbox_messages(brand: Brand, limit: int | None = None, unread_only: boo
             })
         rows.sort(key=lambda item: (item.get("date") or "", int(item["uid"])), reverse=True)
         return rows
+
+
+def list_inbox_messages(
+    brand: Brand,
+    limit: int | None = None,
+    unread_only: bool = False,
+    *,
+    force_refresh: bool = False,
+) -> list[dict]:
+    settings = get_settings()
+    count = max(1, min(limit or settings.mail_list_limit, 200))
+    now = time.monotonic()
+    if not force_refresh:
+        cached = _cached_inbox_rows(brand, count, unread_only, now)
+        if cached is not None:
+            return cached
+
+    with _inbox_locks[brand]:
+        now = time.monotonic()
+        if not force_refresh:
+            cached = _cached_inbox_rows(brand, count, unread_only, now)
+            if cached is not None:
+                return cached
+        rows = _fetch_inbox_messages_uncached(brand, count, unread_only)
+        with _inbox_cache_guard:
+            if force_refresh:
+                for key in [key for key in _inbox_cache if key[0] == brand]:
+                    _inbox_cache.pop(key, None)
+            _inbox_cache[(brand, unread_only, count)] = (time.monotonic(), _copy_rows(rows))
+        return _copy_rows(rows)
 
 
 class _TextExtractor(HTMLParser):

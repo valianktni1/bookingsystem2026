@@ -179,6 +179,7 @@ def register_mail_routes(app: FastAPI) -> None:
     def mail_messages(
         brand: Brand | None = None,
         unread_only: bool = False,
+        refresh: bool = False,
         limit: int = Query(default=60, ge=10, le=200),
         _: Admin = Depends(current_admin),
         db: Session = Depends(get_db),
@@ -189,7 +190,13 @@ def register_mail_routes(app: FastAPI) -> None:
             if not imap_ready(mail_brand):
                 return mail_brand, [], "Mailbox not configured"
             try:
-                return mail_brand, list_inbox_messages(mail_brand, limit, unread_only), None
+                if refresh:
+                    rows = list_inbox_messages(
+                        mail_brand, limit, unread_only, force_refresh=True
+                    )
+                else:
+                    rows = list_inbox_messages(mail_brand, limit, unread_only)
+                return mail_brand, rows, None
             except Exception as exc:
                 return mail_brand, [], friendly_mail_error(exc)
 

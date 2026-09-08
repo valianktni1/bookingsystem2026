@@ -121,3 +121,20 @@ def test_activity_changes_snapshot_and_mail_failure_preserves_evidence(monkeypat
         facts = growth_integration.build_booking_payload(booking)[0]['intelligence']
         assert facts['mail_status'] == 'unavailable'
         assert facts['last_incoming_at'].startswith('2026-09-07')
+
+
+def test_growth_status_prepares_communication_evidence_in_batches(monkeypatch):
+    original = growth_integration.communication_facts
+    prepared_arguments = []
+
+    def observed(booking, prepared=None):
+        prepared_arguments.append(prepared)
+        return original(booking, prepared)
+
+    monkeypatch.setattr(growth_integration, 'communication_facts', observed)
+    with SessionLocal() as db:
+        status = growth_integration.integration_status(db)
+
+    assert status['eligible'] >= 1
+    assert prepared_arguments
+    assert all(prepared is not None for prepared in prepared_arguments)

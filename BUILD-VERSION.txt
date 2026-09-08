@@ -1,5 +1,13 @@
-BookingSystem2026 - Growth Engine Connector
-Build: 2026.09.08-growth-availability-v8.41
+BookingSystem2026 - Fast Couple Email Workspace
+Build: 2026.09.08-fast-email-workspace-v8.42
+
+V8.42 fast booking workspace:
+- shows the booking dashboard from local data without waiting for Hostinger IMAP
+- adds a short, protected mailbox-header cache and prevents duplicate same-brand scans
+- gives every couple a direct Emails area for sent, opened, link and reply evidence
+- makes the main mobile Emails shortcut open the history rather than a blank composer
+- batches Growth communication evidence instead of querying it separately per booking
+- preserves every V8.41 Growth availability route and payload
 
 V8.39 Growth intelligence connector:
 - sends the real quote line-items, selected add-ons, discounts, booking fee and quote status to Growth

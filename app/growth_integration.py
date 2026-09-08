@@ -75,17 +75,23 @@ def _booking_query():
     return query
 
 
-def communication_facts(booking: Booking) -> dict:
+def communication_facts(booking: Booking, prepared: dict | None = None) -> dict:
     """Local evidence only; status checks must never contact the mailbox."""
     db = object_session(booking)
-    logs = list(db.scalars(select(EmailLog).where(EmailLog.booking_id == booking.id,
-        func.lower(EmailLog.recipient) == booking.client.email.lower(), EmailLog.status == 'sent')).all()) if db else []
-    replies = list(db.scalars(select(MailboxReply).where(MailboxReply.booking_id == booking.id,
-        MailboxReply.status == 'sent')).all()) if db else []
+    if prepared is None:
+        logs = list(db.scalars(select(EmailLog).where(EmailLog.booking_id == booking.id,
+            func.lower(EmailLog.recipient) == booking.client.email.lower(), EmailLog.status == 'sent')).all()) if db else []
+        replies = list(db.scalars(select(MailboxReply).where(MailboxReply.booking_id == booking.id,
+            MailboxReply.status == 'sent')).all()) if db else []
+        cached = db.get(GrowthMailEvidence, booking.id) if db else None
+    else:
+        logs = [row for row in prepared.get('logs', []) if row.status == 'sent'
+                and row.recipient.lower() == booking.client.email.lower()]
+        replies = [row for row in prepared.get('replies', []) if row.status == 'sent']
+        cached = prepared.get('cached')
     def latest(values):
         return max((v.replace(tzinfo=timezone.utc).isoformat() for v in values if v), default=None)
     quotes = [x for x in logs if x.template_key == 'quote']
-    cached = db.get(GrowthMailEvidence, booking.id) if db else None
     return {
         'version': 1,
         'source_created_at': booking.created_at.isoformat(),
@@ -100,6 +106,31 @@ def communication_facts(booking: Booking) -> dict:
         'quote_link_at': latest(x.last_link_accessed_at for x in quotes),
         'quote_link_count': sum(x.link_access_count or 0 for x in quotes),
         **dict(cached.facts if cached else {}),
+    }
+
+
+def _communication_fact_map(db: Session, bookings: list[Booking]) -> dict[str, dict]:
+    """Load all Growth communication evidence in three bounded queries."""
+    booking_ids = [booking.id for booking in bookings]
+    if not booking_ids:
+        return {}
+    logs_by_booking: dict[str, list[EmailLog]] = {booking_id: [] for booking_id in booking_ids}
+    replies_by_booking: dict[str, list[MailboxReply]] = {booking_id: [] for booking_id in booking_ids}
+    for row in db.scalars(select(EmailLog).where(EmailLog.booking_id.in_(booking_ids))).all():
+        logs_by_booking[row.booking_id].append(row)
+    for row in db.scalars(select(MailboxReply).where(MailboxReply.booking_id.in_(booking_ids))).all():
+        replies_by_booking[row.booking_id].append(row)
+    cached_by_booking = {
+        row.booking_id: row for row in db.scalars(
+            select(GrowthMailEvidence).where(GrowthMailEvidence.booking_id.in_(booking_ids))
+        ).all()
+    }
+    return {
+        booking.id: communication_facts(booking, {
+            'logs': logs_by_booking[booking.id],
+            'replies': replies_by_booking[booking.id],
+            'cached': cached_by_booking.get(booking.id),
+        }) for booking in bookings
     }
 
 
@@ -132,7 +163,7 @@ def refresh_mail_evidence(db: Session, bookings: list[Booking]) -> None:
     db.commit()
 
 
-def build_booking_payload(booking: Booking) -> tuple[dict, str]:
+def build_booking_payload(booking: Booking, communication: dict | None = None) -> tuple[dict, str]:
     referral_source, message = _source_details(booking)
     accepted_quote = next((row for row in booking.quotes if row.status == "accepted"), None)
     latest_quote = max(booking.quotes, key=lambda row: row.created_at, default=None)
@@ -152,7 +183,7 @@ def build_booking_payload(booking: Booking) -> tuple[dict, str]:
             "required": bool(raw.get("required", False)),
         })
     payload = {
-        'intelligence': communication_facts(booking),
+        'intelligence': communication if communication is not None else communication_facts(booking),
         "booking_id": booking.id,
         "primary_first_name": booking.client.first_name,
         "partner_first_name": booking.client.partner_name or "Partner",
@@ -208,12 +239,15 @@ def connection_check() -> dict:
 
 def integration_status(db: Session) -> dict:
     eligible = pending = synced = errors = 0
-    for booking in db.scalars(_booking_query()).unique().all():
+    bookings = list(db.scalars(_booking_query()).unique().all())
+    facts_by_booking = _communication_fact_map(db, bookings)
+    states = {state.booking_id: state for state in db.scalars(select(GrowthSyncState)).all()}
+    for booking in bookings:
         if not booking.event_date:
             continue
         eligible += 1
-        _, payload_hash = build_booking_payload(booking)
-        state = db.get(GrowthSyncState, booking.id)
+        _, payload_hash = build_booking_payload(booking, facts_by_booking[booking.id])
+        state = states.get(booking.id)
         if state and state.status == "synced" and state.payload_hash == payload_hash:
             synced += 1
         else:
@@ -239,17 +273,20 @@ def sync_pending(*, maximum: int = 100) -> dict:
     with SessionLocal() as db:
         bookings = list(db.scalars(_booking_query()).unique().all())
         refresh_mail_evidence(db, bookings)
-        sync_times = {s.booking_id: s.last_synced_at for s in db.scalars(select(GrowthSyncState)).all()}
+        facts_by_booking = _communication_fact_map(db, bookings)
+        states = {state.booking_id: state for state in db.scalars(select(GrowthSyncState)).all()}
+        sync_times = {booking_id: state.last_synced_at for booking_id, state in states.items()}
         bookings.sort(key=lambda b: str(sync_times.get(b.id) or ''))
         for booking in bookings:
             if attempted >= maximum or not booking.event_date:
                 continue
-            payload, payload_hash = build_booking_payload(booking)
-            state = db.get(GrowthSyncState, booking.id)
+            payload, payload_hash = build_booking_payload(booking, facts_by_booking[booking.id])
+            state = states.get(booking.id)
             if state and state.status == "synced" and state.payload_hash == payload_hash:
                 continue
             attempted += 1
             state = state or GrowthSyncState(booking_id=booking.id)
+            states[booking.id] = state
             state.event_id = payload["event_id"]
             state.last_attempt_at = datetime.now(timezone.utc)
             try:
@@ -269,7 +306,14 @@ def sync_pending(*, maximum: int = 100) -> dict:
                 failed += 1
             db.add(state)
             db.commit()
-        remaining = integration_status(db)["pending"]
+        remaining = 0
+        for booking in bookings:
+            if not booking.event_date:
+                continue
+            _, payload_hash = build_booking_payload(booking, facts_by_booking[booking.id])
+            state = states.get(booking.id)
+            if not (state and state.status == "synced" and state.payload_hash == payload_hash):
+                remaining += 1
     return {"attempted": attempted, "synced": synced, "failed": failed, "remaining": remaining}
 
 

@@ -43,7 +43,7 @@
     try {
       const [status, inbox] = await Promise.all([
         api("/api/mail/status"),
-        api(`/api/mail/messages?limit=100${state.mailUnreadOnly ? "&unread_only=true" : ""}`)
+        api(`/api/mail/messages?limit=100${state.mailUnreadOnly ? "&unread_only=true" : ""}${force ? "&refresh=true" : ""}`)
       ]);
       state.mailAccounts = status.accounts || [];
       state.mailMessages = inbox.messages || [];

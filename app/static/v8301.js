@@ -15,7 +15,8 @@
     const openTasks = (record.tasks || []).filter(task => !task.completed).length;
     return [
       {tab: "Overview", icon: "♙", label: "Couple & wedding", help: `${record.venue_or_project || "Venue not set"} · ${fmtDate(record.event_date)}`},
-      {tab: "Quote", icon: "✉", label: "Quote & mail", help: portal?.quote ? "Quote accepted · open email controls" : "Quote, client area and email conversation"},
+      {tab: "Emails", icon: "✉", label: "Emails", help: `${(portal?.emails || []).length} sent record${(portal?.emails || []).length === 1 ? "" : "s"} · opens, links and replies`},
+      {tab: "Quote", icon: "✓", label: "Quote & booking journey", help: portal?.quote ? "Quote accepted · booking steps and forms" : "Quote, client area and booking progress"},
       {tab: "Payments", icon: "£", label: "Invoices & payments", help: balance > 0 ? `${money(balance)} outstanding` : `${invoices.length} invoice${invoices.length === 1 ? "" : "s"} · account clear`},
       {tab: "Forms", icon: "✓", label: "Agreement & forms", help: `${submissions.length} submitted · agreement ${signed ? "complete" : "waiting"}`},
       {tab: "Files", icon: "▤", label: "Files", help: `${(record.documents || []).length} retained document${(record.documents || []).length === 1 ? "" : "s"}`},

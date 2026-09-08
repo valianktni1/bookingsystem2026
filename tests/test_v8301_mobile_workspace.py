@@ -10,14 +10,15 @@ def test_mobile_workspace_assets_and_five_item_navigation_are_loaded():
     css = (ROOT / "app/static/v8301.css").read_text(encoding="utf-8")
 
     assert "/static/v8301.css?v=studio-mobile-workspace-v8-30-1" in index
-    assert "/static/v8301.js?v=studio-mobile-workspace-v8-30-1" in index
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.39" in index
+    assert "/static/v8301.js?v=mobile-email-workspace-v8-42" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.42" in index
     for view in ("dashboard", "enquiries", "weddings", "calendar", "invoices"):
         assert f'data-view="{view}"' in index
     assert "v8301-mobile-shortcuts" in script
     assert "v8301-mobile-sections" in script
     assert "Couple & wedding" in script
-    assert "Quote & mail" in script
+    assert "Emails" in script
+    assert "Quote & booking journey" in script
     assert "Invoices & payments" in script
     assert "Agreement & forms" in script
     assert "@media(max-width:760px)" in css

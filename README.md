@@ -1,9 +1,20 @@
-# Mark's Business Studio — Version 8.36.1
+# Mark's Business Studio — Version 8.42
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.36.1, including browser-history
+build includes every cumulative feature through V8.42, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.42 fast dashboard and couple emails
+
+The Today dashboard now displays its local booking queues immediately and checks
+Hostinger for replies afterward, so a slow external mailbox cannot hold the whole
+app on its loading screen. Short-lived mailbox-header caching and per-business
+scan locking stop the dashboard, Inbox and Growth synchroniser from opening the
+same mailbox scan repeatedly. Each couple now has a direct **Emails** workspace
+on desktop and mobile showing sent, opened and secure-link evidence immediately,
+with the full private conversation loaded beneath it. Growth communication facts
+are loaded in batches; the V8.41 Growth availability contract is unchanged.
 
 ## Version 8.36.1 clean current-version label
 

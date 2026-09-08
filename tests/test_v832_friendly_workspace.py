@@ -69,7 +69,7 @@ def test_mobile_workspace_has_large_direct_actions_and_no_horizontal_workflow():
     js = (root / "app/static/v832.js").read_text()
     index = (root / "app/static/index.html").read_text()
 
-    for label in ("Email", "Call", "Invoice", "Questionnaire", "Notes", "More"):
+    for label in ("Emails", "Call", "Invoice", "Final timings", "Notes", "More"):
         assert f'"{label}"' in js
     assert 'selectRecordTab(record, "Payments", true)' in js
     assert 'selectRecordTab(record, "Forms", true)' in js
@@ -79,9 +79,9 @@ def test_mobile_workspace_has_large_direct_actions_and_no_horizontal_workflow():
     assert ".v830-booking-open .client-cell strong{font-size:19px" in css
     assert ".v8301-mobile-section>button strong{font-size:18px" in css
     assert "/static/v832.css?v=final-timings-shortcut-v8-33" in index
-    assert "/static/v832.js?v=final-timings-shortcut-v8-33" in index
+    assert "/static/v832.js?v=email-shortcut-v8-42" in index
     assert index.index("v8301.js") < index.index("v832.js")
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.39" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.42" in index
 
 
 def teardown_module():
