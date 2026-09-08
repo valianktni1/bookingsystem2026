@@ -596,11 +596,9 @@
       // Local booking data is shown first. A slow external mailbox must never
       // hold the complete dashboard on its loading screen.
       renderTodayDashboard(data, renderNumber);
-      setMode();
       loadDashboardMail().then(mail => {
         if (renderNumber !== dashboardRenderNumber || state.view !== "dashboard") return;
         renderTodayDashboard(mergeDashboardMail(data, mail), renderNumber);
-        setMode();
       });
     }).catch(error => showError(error));
   };

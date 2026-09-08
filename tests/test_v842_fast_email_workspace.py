@@ -22,6 +22,7 @@ def test_dashboard_does_not_wait_for_live_mailbox():
     mailbox_load = script.index("loadDashboardMail().then")
 
     assert blocking not in script
+    assert "setMode();" not in script
     assert first_render < mailbox_load
     assert "A slow external mailbox must never" in script
     assert 'section: "Emails"' in script
@@ -34,7 +35,7 @@ def test_direct_email_workspace_is_loaded_on_desktop_and_mobile():
     mobile = (ROOT / "app/static/v8301.js").read_text(encoding="utf-8")
     shortcuts = (ROOT / "app/static/v832.js").read_text(encoding="utf-8")
 
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.42" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.42.1" in index
     assert 'Emails: "emails"' in navigation
     assert '["Emails", "✉", "Emails"]' in navigation
     assert 'selected==="Emails"' in app

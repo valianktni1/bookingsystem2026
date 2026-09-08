@@ -1,9 +1,16 @@
-# Mark's Business Studio — Version 8.42
+# Mark's Business Studio — Version 8.42.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.42, including browser-history
+build includes every cumulative feature through V8.42.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.42.1 dashboard hotfix
+
+Removes an obsolete browser helper call that could replace Today with
+`setMode is not defined`. A new cache marker ensures browsers fetch the repaired
+dashboard script. No booking data, workflow, email or integration behaviour is
+changed.
 
 ## Version 8.42 fast dashboard and couple emails
 

@@ -1,5 +1,9 @@
 BookingSystem2026 - Fast Couple Email Workspace
-Build: 2026.09.08-fast-email-workspace-v8.42
+Build: 2026.09.08-fast-email-workspace-v8.42.1
+
+V8.42.1 dashboard hotfix:
+- removes an obsolete setMode call from the non-blocking dashboard renderer
+- adds a fresh browser cache marker so the corrected script loads immediately
 
 V8.42 fast booking workspace:
 - shows the booking dashboard from local data without waiting for Hostinger IMAP

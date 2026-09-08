@@ -1,4 +1,9 @@
-# BookingSystem2026 V8.42
+# BookingSystem2026 V8.42.1
+
+## V8.42.1 hotfix
+
+- Removes the obsolete `setMode()` call that prevented Today from displaying.
+- Changes the dashboard script cache marker so browsers load the repair immediately.
 
 ## Faster dashboard
 
