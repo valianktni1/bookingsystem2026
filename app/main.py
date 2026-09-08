@@ -112,7 +112,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.40-invoice-email", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.41-growth-availability", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")

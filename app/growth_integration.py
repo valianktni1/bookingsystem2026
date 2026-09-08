@@ -11,12 +11,13 @@ import asyncio
 import hashlib
 import hmac
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session, selectinload, object_session
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session, selectinload, object_session
 from .config import get_settings
 from .database import SessionLocal, get_db
 from .models import (Admin, Booking, Brand, Client, GrowthLeadLink, EmailLog, MailboxReply, GrowthMailEvidence,
-                     GrowthSyncState, Quote, RecordKind, RecordStatus)
+                     GrowthSyncState, Quote, RecordKind, RecordStatus, DateBlock, PackageOption)
 from .security import current_admin
 from .services import audit, create_default_tasks
 
@@ -292,7 +293,38 @@ def _require_key(value: str | None) -> None:
         raise HTTPException(401, "Integration key is missing or invalid")
 
 
+def growth_availability(db: Session, start: date, end: date) -> dict:
+    today = datetime.now(ZoneInfo("Europe/London")).date()
+    if start < today or end < start or (end - start).days > 183:
+        raise HTTPException(422, "Choose today or later, with at most 184 days per request")
+    # Conservative sales planning: every confirmed wedding protects its date,
+    # including archived/imported bookings and those awaiting payment entry.
+    booked = set(db.scalars(select(Booking.event_date).where(
+        Booking.brand == Brand.WBM, Booking.kind == RecordKind.WEDDING,
+        Booking.is_test.is_(False), Booking.event_date >= start, Booking.event_date <= end,
+        Booking.status.in_([RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED]))))
+    blocks = db.scalars(select(DateBlock).where(DateBlock.deleted_at.is_(None),
+        DateBlock.start_date <= end, DateBlock.end_date >= start)).all()
+    packages = db.scalars(select(PackageOption).where(PackageOption.brand == Brand.WBM,
+        PackageOption.is_active.is_(True)).order_by(PackageOption.display_order)).all()
+    days = []
+    for offset in range((end-start).days+1):
+        day = start + timedelta(days=offset)
+        status = 'blocked' if any(b.start_date <= day <= b.end_date for b in blocks) else ('booked' if day in booked else 'available')
+        days.append({'date': day.isoformat(), 'status': status})
+    return {'start': start.isoformat(), 'end': end.isoformat(),
+            'checked_at': datetime.now(timezone.utc).isoformat(), 'days': days,
+            'packages': [{'id': p.id, 'name': p.name, 'price': str(p.price)} for p in packages]}
+
+
 def register_growth_integration_routes(app: FastAPI) -> None:
+    @app.get("/api/integrations/growth/availability")
+    def availability_range(start: date = Query(...), end: date = Query(...),
+                           x_integration_key: str | None = Header(default=None),
+                           db: Session = Depends(get_db)):
+        _require_key(x_integration_key)
+        return growth_availability(db, start, end)
+
     @app.get("/api/integrations/growth/health")
     def inbound_health(x_integration_key: str | None = Header(default=None)):
         _require_key(x_integration_key)

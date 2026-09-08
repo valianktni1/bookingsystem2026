@@ -1,5 +1,5 @@
 BookingSystem2026 - Growth Engine Connector
-Build: 2026.09.07-invoice-email-v8.40
+Build: 2026.09.08-growth-availability-v8.41
 
 V8.39 Growth intelligence connector:
 - sends the real quote line-items, selected add-ons, discounts, booking fee and quote status to Growth
