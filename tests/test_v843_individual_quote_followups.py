@@ -142,6 +142,7 @@ def test_each_quote_followup_can_be_paused_independently(monkeypatch):
 
 def test_followup_controls_are_clear_in_email_workspace_and_templates():
     script = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
+    navigation_script = (ROOT / "app/static/v811.js").read_text(encoding="utf-8")
     css = (ROOT / "app/static/v842.css").read_text(encoding="utf-8")
     bootstrap = (ROOT / "app/bootstrap.py").read_text(encoding="utf-8")
     main = (ROOT / "app/main.py").read_text(encoding="utf-8")
@@ -150,6 +151,7 @@ def test_followup_controls_are_clear_in_email_workspace_and_templates():
     assert "Pause this follow-up" in script
     assert "Resume this follow-up" in script
     assert "Changing one switch never changes the other" in script
+    assert 'else if (selected === "Emails") renderBookingEmails(r, body);' in navigation_script
     assert ".v843-followups" in css
     assert "Quote follow-up - next day" in bootstrap
     assert "Quote follow-up - final check" in bootstrap

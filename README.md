@@ -1,9 +1,16 @@
-# Mark's Business Studio — Version 8.43
+# Mark's Business Studio — Version 8.43.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.43, including browser-history
+build includes every cumulative feature through V8.43.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.43.1 email workspace hotfix
+
+Fixes the booking navigation compatibility fault that could highlight **Emails**
+while displaying **Notes & Activity** underneath. The Emails tab now always
+renders the email workspace, including both independent quote follow-up controls.
+No reminder timing, booking data or email automation is changed.
 
 ## Version 8.43 individual quote follow-ups
 

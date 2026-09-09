@@ -379,6 +379,7 @@
     const selected = canonicalSection(tab);
     if (!body) return;
     if (selected === "Journey") await renderJourneyV811(r, body);
+    else if (selected === "Emails") renderBookingEmails(r, body);
     else if (selected === "Activity") renderActivityV811(r, body);
     else await baseRenderTabV811(r, legacySection(selected), body);
   };

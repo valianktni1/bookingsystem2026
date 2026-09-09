@@ -1,0 +1,23 @@
+BookingSystem2026 V8.43.1 - TrueNAS deployment
+
+Push this complete repository to GitHub first. Then run each command in the
+TrueNAS shell. The database backup is created before the app image is rebuilt.
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v8431-$(date +%Y%m%d-%H%M%S).dump"
+
+sudo sh -c "docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > '$BOOKING_BACKUP'"
+
+sudo ls -lh "$BOOKING_BACKUP"
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+
+curl -fsS http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.09.09-email-tab-render-hotfix-v8.43.1

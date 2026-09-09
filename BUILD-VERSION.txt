@@ -1,5 +1,10 @@
-BookingSystem2026 - Individual Quote Follow-up Controls
-Build: 2026.09.09-individual-quote-followups-v8.43
+BookingSystem2026 - Email Workspace Rendering Hotfix
+Build: 2026.09.09-email-tab-render-hotfix-v8.43.1
+
+V8.43.1 email workspace hotfix:
+- fixes the Emails tab showing Notes & Activity even though Emails was highlighted
+- always renders the real email workspace and both individual quote follow-up controls
+- changes no reminder timing, booking data or email automation
 
 V8.43 individual quote follow-up controls:
 - adds separate Pause/Resume controls for the next-day and final nine-day quote checks
