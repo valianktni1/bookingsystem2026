@@ -102,6 +102,9 @@ def communication_facts(booking: Booking, prepared: dict | None = None) -> dict:
         'deposit_paid': bool(booking.deposit_paid_date),
         'quote_accepted': any(q.status == 'accepted' for q in booking.quotes),
         'quote_sent_at': latest(x.sent_at for x in quotes),
+        'first_quote_sent_at': min((x.sent_at.replace(tzinfo=timezone.utc).isoformat() for x in quotes if x.sent_at), default=None),
+        'quote_accepted_at': min((q.accepted_at.replace(tzinfo=timezone.utc).isoformat() for q in booking.quotes if q.accepted_at), default=None),
+        'deposit_paid_date': booking.deposit_paid_date.isoformat() if booking.deposit_paid_date else None,
         'last_contact_at': latest([x.sent_at for x in logs] + [x.sent_at for x in replies]),
         'quote_link_at': latest(x.last_link_accessed_at for x in quotes),
         'quote_link_count': sum(x.link_access_count or 0 for x in quotes),
@@ -339,8 +342,8 @@ def _require_key(value: str | None) -> None:
 
 def growth_availability(db: Session, start: date, end: date) -> dict:
     today = datetime.now(ZoneInfo("Europe/London")).date()
-    if start < today or end < start or (end - start).days > 183:
-        raise HTTPException(422, "Choose today or later, with at most 184 days per request")
+    if start < today or end < start or (end - start).days > 731:
+        raise HTTPException(422, "Choose today or later, with at most 732 days per request")
     # Conservative sales planning: every confirmed wedding protects its date,
     # including archived/imported bookings and those awaiting payment entry.
     booked = set(db.scalars(select(Booking.event_date).where(
@@ -361,7 +364,32 @@ def growth_availability(db: Session, start: date, end: date) -> dict:
             'packages': [{'id': p.id, 'name': p.name, 'price': str(p.price)} for p in packages]}
 
 
+def growth_year_totals(db: Session, year: int) -> dict:
+    if not 2000 <= year <= 2100:
+        raise HTTPException(422, "Choose a year between 2000 and 2100")
+    rows = db.scalars(select(Booking).where(Booking.brand == Brand.WBM,
+        Booking.kind == RecordKind.WEDDING, Booking.is_test.is_(False),
+        Booking.event_date >= date(year,1,1), Booking.event_date <= date(year,12,31),
+        Booking.status.in_([RecordStatus.CONFIRMED,RecordStatus.IN_PROGRESS,RecordStatus.COMPLETED]))).all()
+    months = [{'month':m,'bookings':0,'booked_value':Decimal('0')} for m in range(1,13)]
+    for booking in rows:
+        month = months[booking.event_date.month-1]
+        month['bookings'] += 1
+        month['booked_value'] += booking.quoted_total or Decimal('0')
+    return {'year':year, 'checked_at':datetime.now(timezone.utc).isoformat(),
+            'bookings':len(rows), 'booked_value':str(sum((m['booked_value'] for m in months),Decimal('0'))),
+            'months':[{**m,'booked_value':str(m['booked_value'])} for m in months],
+            'scope':'All confirmed, in-progress and completed WBM weddings, including archived and imported records; excludes test and cancelled records.'}
+
+
 def register_growth_integration_routes(app: FastAPI) -> None:
+    @app.get("/api/integrations/growth/planning")
+    def planning_year(year: int = Query(..., ge=2000, le=2100),
+                      x_integration_key: str | None = Header(default=None),
+                      db: Session = Depends(get_db)):
+        _require_key(x_integration_key)
+        return growth_year_totals(db, year)
+
     @app.get("/api/integrations/growth/availability")
     def availability_range(start: date = Query(...), end: date = Query(...),
                            x_integration_key: str | None = Header(default=None),

@@ -225,7 +225,7 @@ def test_phase_two_b_flow(monkeypatch):
                                      "growth_integration_enabled": False,
                                      "growth_auto_sync": False,
                                      "google_calendar_configured": False,
-                                           "build": "2026.09.08-fast-email-workspace-v8.42.1"}
+                                           "build": "2026.09.08-fast-workspace-growth-v8.43.1"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

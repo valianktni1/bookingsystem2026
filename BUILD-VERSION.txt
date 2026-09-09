@@ -1,5 +1,5 @@
 BookingSystem2026 - Fast Couple Email Workspace
-Build: 2026.09.08-fast-email-workspace-v8.42.1
+Build: 2026.09.08-fast-workspace-growth-v8.43.1
 
 V8.42.1 dashboard hotfix:
 - removes an obsolete setMode call from the non-blocking dashboard renderer

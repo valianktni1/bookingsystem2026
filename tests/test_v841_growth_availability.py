@@ -42,7 +42,7 @@ def test_private_range_protects_confirmed_archived_and_holidays(monkeypatch):
                 for k,v in changes.items():setattr(booking,k,v)
                 db.commit()
             assert client.get(url,headers={'X-Integration-Key':key}).json()['days'][0]['status']=='available'
-        long=f'/api/integrations/growth/availability?start={start}&end={start+timedelta(days=184)}'
+        long=f'/api/integrations/growth/availability?start={start}&end={start+timedelta(days=732)}'
         assert client.get(long,headers={'X-Integration-Key':key}).status_code==422
         monkeypatch.setattr(integration.settings,'growth_integration_enabled',False)
         assert client.get(url,headers={'X-Integration-Key':key}).status_code==503
