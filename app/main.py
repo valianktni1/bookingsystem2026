@@ -66,7 +66,8 @@ from .services import (audit, create_default_tasks, dashboard_counts, invoice_st
                        next_invoice_number, payment_reference, sync_final_details_call_task,
                        visible_task_condition)
 from .v82_routes import register_v82_routes
-from .v84_routes import automations_allowed, final_details_unlocked, register_v84_routes
+from .v84_routes import (automations_allowed, final_details_unlocked,
+                         quote_followup_paused, register_v84_routes)
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -112,7 +113,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.43.1-fast-workspace-growth", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.43-individual-quote-followups", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -2707,6 +2708,37 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
     ).order_by(EmailTemplate.display_name)).all()
     final_submission = next((x for x in submissions if x.form_type == FINAL_TIMINGS_FORM_TYPE), None)
     final_workflow = (booking.workflow_state or {}).get("final_timings_review") or {}
+    quote_sent = next((x for x in logs if x.template_key == "quote" and x.status == "sent"), None)
+    quote_accepted = bool(db.scalar(select(Quote.id).where(
+        Quote.booking_id == booking.id, Quote.status == "accepted"
+    ).limit(1)))
+    followup_rows = []
+    for reminder_key, label, offset in (
+        ("quote_followup_1", "Next-day follow-up", 1),
+        ("quote_followup_final", "Final nine-day check", 9),
+    ):
+        sent_log = next((x for x in logs if x.template_key == reminder_key and x.status == "sent"), None)
+        paused = quote_followup_paused(booking, reminder_key)
+        if sent_log:
+            status = "sent"
+        elif quote_accepted:
+            status = "not_needed"
+        elif paused:
+            status = "paused"
+        elif quote_sent:
+            status = "active"
+        else:
+            status = "waiting"
+        followup_rows.append({
+            "reminder_key": reminder_key,
+            "label": label,
+            "paused": paused,
+            "status": status,
+            "scheduled_for": ((quote_sent.sent_at.date() + timedelta(days=offset)).isoformat()
+                              if quote_sent else None),
+            "sent_at": sent_log.sent_at.isoformat() if sent_log else None,
+            "can_change": not bool(sent_log or quote_accepted or booking.legacy_source),
+        })
     return {
         "submissions": [{"id": x.id, "form_type": x.form_type, "data": x.data,
                          "submission_source": x.submission_source,
@@ -2735,6 +2767,7 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "quote": quote_data,
         "quote_preparation": quote_preparation_json(booking),
         "automation_suppressed": booking.automation_suppressed,
+        "quote_followups": followup_rows,
         "final_details_unlocked": final_details_unlocked(db, booking),
         "final_timings": {
             "available": final_timings_unlocked(db, booking),
@@ -4301,9 +4334,9 @@ def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str
         ).order_by(EmailLog.sent_at.desc()).limit(1))
         if quote_sent_at:
             days_since_quote = (today - quote_sent_at.date()).days
-            if 1 <= days_since_quote < 9:
+            if 1 <= days_since_quote < 9 and not quote_followup_paused(booking, "quote_followup_1"):
                 reminders.append(("quote_followup_1", quote_sent_at.date() + timedelta(days=1)))
-            elif 9 <= days_since_quote <= 16:
+            elif 9 <= days_since_quote <= 16 and not quote_followup_paused(booking, "quote_followup_final"):
                 reminders.append(("quote_followup_final", quote_sent_at.date() + timedelta(days=9)))
 
     if accepted_quote:

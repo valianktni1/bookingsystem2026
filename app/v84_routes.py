@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -10,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Admin, Booking, FormSubmission, RecordKind
+from .models import Admin, Booking, EmailLog, FormSubmission, Quote, RecordKind
 from .security import current_admin
 from .services import audit
 
@@ -26,8 +27,17 @@ class FinalDetailsControlIn(BaseModel):
     reason: str = Field(min_length=3, max_length=1000)
 
 
+class QuoteFollowupControlIn(BaseModel):
+    paused: bool
+
+
 def automations_allowed(booking: Booking) -> bool:
     return not bool(booking.automation_suppressed)
+
+
+def quote_followup_paused(booking: Booking, reminder_key: str) -> bool:
+    controls = dict((booking.workflow_state or {}).get("quote_followup_controls") or {})
+    return bool((controls.get(reminder_key) or {}).get("paused"))
 
 
 def final_details_unlocked(db: Session, booking: Booking) -> bool:
@@ -47,6 +57,57 @@ def final_details_unlocked(db: Session, booking: Booking) -> bool:
 
 
 def register_v84_routes(app: FastAPI) -> None:
+    @app.put("/api/bookings/{booking_id}/quote-followups/{reminder_key}")
+    def control_quote_followup(
+        booking_id: str,
+        reminder_key: Literal["quote_followup_1", "quote_followup_final"],
+        payload: QuoteFollowupControlIn,
+        admin: Admin = Depends(current_admin),
+        db: Session = Depends(get_db),
+    ):
+        booking = db.get(Booking, booking_id)
+        if not booking:
+            raise HTTPException(404, "Record not found")
+        if booking.legacy_source == "studio_ninja":
+            raise HTTPException(409, "Studio Ninja quote follow-ups are already permanently blocked")
+        if booking.kind != RecordKind.WEDDING:
+            raise HTTPException(422, "Quote follow-ups only apply to wedding bookings")
+        if db.scalar(select(Quote.id).where(
+            Quote.booking_id == booking.id, Quote.status == "accepted"
+        ).limit(1)):
+            raise HTTPException(409, "The quote is accepted, so quote follow-ups are already stopped")
+        if db.scalar(select(EmailLog.id).where(
+            EmailLog.booking_id == booking.id,
+            EmailLog.template_key == reminder_key,
+            EmailLog.status == "sent",
+        ).limit(1)):
+            raise HTTPException(409, "This follow-up has already been sent")
+
+        workflow = dict(booking.workflow_state or {})
+        controls = dict(workflow.get("quote_followup_controls") or {})
+        controls[reminder_key] = {
+            "paused": payload.paused,
+            "changed_at": datetime.now(timezone.utc).isoformat(),
+            "changed_by": admin.email,
+        }
+        workflow["quote_followup_controls"] = controls
+        booking.workflow_state = workflow
+        label = "Next-day follow-up" if reminder_key == "quote_followup_1" else "Final nine-day check"
+        audit(
+            db,
+            "pause_quote_followup" if payload.paused else "resume_quote_followup",
+            "booking",
+            booking.id,
+            {"followup": label, "reminder_key": reminder_key, "admin": admin.email},
+        )
+        db.commit()
+        return {
+            "ok": True,
+            "reminder_key": reminder_key,
+            "paused": payload.paused,
+            "message": f"{label} {'paused' if payload.paused else 'active'}",
+        }
+
     @app.post("/api/bookings/{booking_id}/automations")
     def control_booking_automations(
         booking_id: str,

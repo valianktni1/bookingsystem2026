@@ -1,5 +1,12 @@
-BookingSystem2026 - Fast Couple Email Workspace
-Build: 2026.09.08-fast-workspace-growth-v8.43.1
+BookingSystem2026 - Individual Quote Follow-up Controls
+Build: 2026.09.09-individual-quote-followups-v8.43
+
+V8.43 individual quote follow-up controls:
+- adds separate Pause/Resume controls for the next-day and final nine-day quote checks
+- changing one follow-up never changes the other or any payment/wedding reminder
+- shows Active, Paused, Sent and Not needed states inside each couple's Emails area
+- records each pause and resume privately in the booking activity history
+- keeps both standard automatic templates editable under Email Templates
 
 V8.42.1 dashboard hotfix:
 - removes an obsolete setMode call from the non-blocking dashboard renderer

@@ -35,7 +35,7 @@ def test_direct_email_workspace_is_loaded_on_desktop_and_mobile():
     mobile = (ROOT / "app/static/v8301.js").read_text(encoding="utf-8")
     shortcuts = (ROOT / "app/static/v832.js").read_text(encoding="utf-8")
 
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.43.1" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.43" in index
     assert 'Emails: "emails"' in navigation
     assert '["Emails", "✉", "Emails"]' in navigation
     assert 'selected==="Emails"' in app

@@ -279,12 +279,14 @@
       reopen_booking: "Booking reopened",
       complete_booking: "Wedding marked complete",
       reopen_completed_booking: "Completed wedding reopened",
+      pause_quote_followup: "Quote follow-up paused",
+      resume_quote_followup: "Quote follow-up resumed",
     })[action] || baseStatusTextV811(action).replace(/\b\w/g, character => character.toUpperCase());
   }
 
   function activityDetail(details) {
     if (!details || typeof details !== "object") return "";
-    const preferred = ["subject", "template", "invoice", "amount", "form_type", "reason", "name"];
+    const preferred = ["subject", "template", "invoice", "amount", "form_type", "followup", "reason", "name"];
     return preferred.filter(key => details[key] !== undefined && details[key] !== null)
       .map(key => `${baseStatusTextV811(key)}: ${details[key]}`).join(" · ");
   }
