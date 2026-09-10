@@ -26,4 +26,4 @@ def test_nested_more_actions_button_has_explicit_header_contrast():
     assert "color:#fff" in css
     assert "background:#ffffff12" in css
     assert "/static/v895.css?v=visible-record-actions-v8-28-3" in index
-    assert "/static/v895.js?v=journey-quote-routing-v8-45-2" in index
+    assert "/static/v895.js?v=after-wedding-v8-46" in index

@@ -69,6 +69,7 @@ from .v82_routes import register_v82_routes
 from .v84_routes import (automations_allowed, final_details_unlocked,
                          quote_followup_paused, register_v84_routes)
 from .v845_routes import apply_quote_reply_safety, register_v845_routes
+from .v846_routes import after_wedding_readiness, register_v846_routes
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -114,7 +115,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.45.2-journey-quote-routing", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.46-after-wedding", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1964,6 +1965,14 @@ def complete_wedding(booking_id: str, admin: Admin = Depends(current_admin),
     if item.status == RecordStatus.COMPLETED:
         return get_booking(item.id, admin, db)
 
+    after_wedding = after_wedding_readiness(db, item)
+    if not after_wedding["ready_to_complete"]:
+        raise HTTPException(
+            409,
+            "Finish the after-wedding checklist first: "
+            + "; ".join(after_wedding["blockers"]),
+        )
+
     completed_at = datetime.now(timezone.utc)
     previous_status = item.status.value
     workflow = dict(item.workflow_state or {})
@@ -2854,6 +2863,7 @@ WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
     "booking_link": ("manual", "Manual option when you deliberately send a booking link"),
     "booking_form_reminder": ("manual", "Manual Wedding Booking Form reminder; reviewed and sent by you for one couple"),
     "contract_reminder": ("manual", "Manual reminder offered when the form is complete but the agreement is unsigned"),
+    "review_request": ("manual", "After-wedding review request; Mark reviews and edits the exact message before deliberately sending it"),
     "quote_followup_1": ("automatic", "Automatic quote follow-up one day after a successful quote"),
     "quote_followup_final": ("automatic", "Automatic final quote follow-up nine days after a successful quote"),
     "deposit_due_1": ("automatic", "Automatic booking-fee reminder on its due date"),
@@ -3405,6 +3415,24 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
                   "manual_only": manual_only,
                   "reason": payload.manual_reason.strip() if manual_only else None,
               })
+        if template_key == "review_request":
+            sent_at = datetime.now(timezone.utc)
+            workflow = dict(booking.workflow_state or {})
+            after_wedding = dict(workflow.get("after_wedding") or {})
+            after_wedding["review_request"] = {
+                "sent_at": sent_at.isoformat(),
+                "sent_by": _.email,
+                "subject": subject,
+            }
+            after_wedding["updated_at"] = sent_at.isoformat()
+            after_wedding["updated_by"] = _.email
+            workflow["after_wedding"] = after_wedding
+            booking.workflow_state = workflow
+            audit(db, "send_review_request", "booking", booking.id, {
+                "subject": subject,
+                "recipient": recipient,
+                "client_email_sent": True,
+            })
         db.commit()
         return {
             "ok": True,
@@ -4558,6 +4586,7 @@ register_v845_routes(
     refresh_payment_dates=refresh_wedding_payment_dates,
     sync_final_call_task=sync_final_details_call_task,
 )
+register_v846_routes(app)
 register_date_block_routes(app)
 register_google_calendar_routes(app)
 register_mail_routes(app)

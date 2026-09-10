@@ -50,4 +50,4 @@ def test_client_receipt_email_opens_receipt_and_keeps_download_choice():
     assert "/receipt.pdf?inline=true" in script
     assert ">View receipt</button>" in script
     assert ">Download receipt</a>" in script
-    assert "/static/client.js?v=client-receipt-open-v8-28-4-2" in client_page
+    assert "/static/client.js?v=package-choice-v8-46" in client_page

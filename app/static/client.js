@@ -163,7 +163,7 @@ function quotePanel() {
     return;
   }
   const packages = data.catalog.packages;
-  $("#panel").innerHTML = `<h2>Choose your wedding package</h2><p class="intro">You can choose a different package from the one mentioned on your enquiry. Select one package, add any extras and check the live total before accepting.</p><form id="quote-form"><div class="package-grid">${packages.map((item,index) => `<label class="package-card"><input type="radio" name="package_id" value="${item.id}" ${index === 0 ? "checked" : ""}><span class="package-check">✓</span><span class="package-name"><strong>${esc(item.name)}</strong><b>${money(item.price)}</b></span><small>${esc(item.description)}</small><em>${money(item.deposit_amount)} booking fee · due within one day of accepting</em></label>`).join("")}</div><section class="addon-section"><h3>Add-ons and adjustments</h3><p>Required items are already included and cannot be removed. Other available extras remain your choice.</p><div id="addon-list"></div></section><div class="quote-payment-reference"><small>YOUR BANK-TRANSFER PAYMENT REFERENCE</small><strong>${esc(data.record.payment_reference || "Shown after acceptance")}</strong><span>Once you accept your package, please use this same reference for every wedding payment.</span></div><div class="quote-footer"><div><small>TOTAL</small><strong id="quote-total">£0.00</strong><span id="quote-deposit"></span></div><label class="quote-confirm"><input type="checkbox" name="confirmed" required><span>I confirm that this package, the selected add-ons and the total shown are correct.</span></label><button class="primary" type="submit">Accept package & create invoice</button></div></form>`;
+  $("#panel").innerHTML = `<h2>Choose your wedding package</h2><p class="intro">No package has been selected for you. Tap the package you want, add any optional extras and check the live total before accepting.</p><form id="quote-form"><div class="package-grid">${packages.map(item => `<label class="package-card"><input type="radio" name="package_id" value="${item.id}"><span class="package-check">✓</span><span class="package-name"><strong>${esc(item.name)}</strong><b>${money(item.price)}</b></span><small>${esc(item.description)}</small><em>${money(item.deposit_amount)} booking fee · due within one day of accepting</em></label>`).join("")}</div><section class="addon-section"><h3>Add-ons and adjustments</h3><p>Required items are already included and cannot be removed. Other available extras remain your choice after selecting a package.</p><div id="addon-list"></div></section><div class="quote-payment-reference"><small>YOUR BANK-TRANSFER PAYMENT REFERENCE</small><strong>${esc(data.record.payment_reference || "Shown after acceptance")}</strong><span>Once you accept your package, please use this same reference for every wedding payment.</span></div><div class="quote-footer"><div><small>TOTAL</small><strong id="quote-total">Choose a package</strong><span id="quote-deposit">Nothing has been selected yet</span></div><label class="quote-confirm"><input type="checkbox" name="confirmed" required disabled><span>I confirm that this package, the selected add-ons and the total shown are correct.</span></label><button class="primary" type="submit" disabled>Choose a package first</button></div></form>`;
   document.querySelectorAll('input[name="package_id"]').forEach(input => input.onchange = renderAddons);
   $("#quote-form").onsubmit = acceptSelectedQuote;
   renderAddons();
@@ -191,16 +191,27 @@ function selectedPackage() {
 function renderAddons() {
   const selected = selectedPackage();
   const preparation=data.quote_preparation||{required_addons:[],discounts:[]},requiredIds=preparation.required_addons.map(x=>x.addon_id);
-  const eligible = data.catalog.addons.filter(item => !requiredIds.includes(item.id) && (!item.eligible_package_codes.length || item.eligible_package_codes.includes(selected.code)));
+  const eligible = selected ? data.catalog.addons.filter(item => !requiredIds.includes(item.id) && (!item.eligible_package_codes.length || item.eligible_package_codes.includes(selected.code))) : [];
   const required=preparation.required_addons.map(item=>`<label class="addon-card required-addon"><input type="checkbox" checked disabled><span><strong>${esc(item.name)} <em>Required</em></strong><small>${esc(item.description)}</small></span><b>+${money(item.price)}</b></label>`).join("");
-  const optional=eligible.map(item => `<label class="addon-card"><input type="checkbox" name="addon_id" value="${item.id}"><span><strong>${esc(item.name)}</strong><small>${esc(item.description)}</small></span><b>+${money(item.price)}</b></label>`).join("");
+  const optional=selected ? eligible.map(item => `<label class="addon-card"><input type="checkbox" name="addon_id" value="${item.id}"><span><strong>${esc(item.name)}</strong><small>${esc(item.description)}</small></span><b>+${money(item.price)}</b></label>`).join("") : `<p class="no-addons">Choose a package above to see its optional extras.</p>`;
   const discounts=preparation.discounts.map(item=>`<div class="addon-card applied-discount"><span>−</span><span><strong>${esc(item.name)} <em>Applied</em></strong><small>${esc(item.description)}</small></span><b>−${money(item.price)}</b></div>`).join("");
   $("#addon-list").innerHTML = required+optional+discounts || `<p class="no-addons">No additional extras are needed or available for this package.</p>`;
   document.querySelectorAll('input[name="addon_id"]').forEach(input => input.onchange = updateQuoteTotal);
+  const confirmation = document.querySelector('input[name="confirmed"]');
+  const acceptButton = $("#quote-form button[type='submit']");
+  confirmation.disabled = !selected;
+  if (!selected) confirmation.checked = false;
+  acceptButton.disabled = !selected;
+  acceptButton.textContent = selected ? "Accept package & create invoice" : "Choose a package first";
   updateQuoteTotal();
 }
 function updateQuoteTotal() {
   const selected = selectedPackage();
+  if (!selected) {
+    $("#quote-total").textContent = "Choose a package";
+    $("#quote-deposit").textContent = "Nothing has been selected yet";
+    return;
+  }
   const selectedIds = [...document.querySelectorAll('input[name="addon_id"]:checked')].map(x => x.value);
   const preparation=data.quote_preparation||{required_addons:[],discounts:[]};
   const addonTotal = data.catalog.addons.filter(x => selectedIds.includes(x.id)).reduce((sum,x) => sum + Number(x.price),0)+preparation.required_addons.reduce((sum,x)=>sum+Number(x.price),0);
@@ -211,6 +222,10 @@ function updateQuoteTotal() {
 async function acceptSelectedQuote(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
+  if (!form.get("package_id")) {
+    toast("Please choose your wedding package first");
+    return;
+  }
   if (!confirm("Accept this package and create the invoice? Please check the package and add-ons shown first.")) return;
   try {
     await api(`/api/client/${token}/quote`, {method:"POST", body:JSON.stringify({package_id:form.get("package_id"), addon_ids:form.getAll("addon_id"), confirmed:form.get("confirmed") === "on"})});

@@ -1,0 +1,28 @@
+/* V8.46 - after-wedding workflow. */
+.v846-after-wedding{margin:14px 0;padding:18px;border:1px solid #c9d8d5;border-radius:14px;background:linear-gradient(145deg,#fff,#f1f7f6);box-shadow:0 8px 24px #153d3710}
+.v846-after-wedding.ready,.v846-after-wedding.completed{border-color:#76bbae;background:linear-gradient(145deg,#f8fffd,#e8f7f3)}
+.v846-after-wedding>header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:15px}
+.v846-after-wedding>header small,.v846-overview-card small{display:block;color:#11776d;font-size:9px;font-weight:900;letter-spacing:.12em}
+.v846-after-wedding>header h3{margin:4px 0;font-size:18px;color:#1d312e}
+.v846-after-wedding>header p{margin:0;color:#61716e;font-size:13px;line-height:1.5}
+.v846-after-wedding>header>b{padding:8px 11px;border-radius:999px;color:#0d695f;background:#fff;border:1px solid #c4ded9;font-size:11px;white-space:nowrap}
+.v846-delivery-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.v846-delivery-grid article{display:flex;align-items:flex-start;gap:10px;min-height:84px;padding:13px;border:1px solid #d8e2e0;border-radius:11px;background:#fff}
+.v846-delivery-grid article>i{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:50%;font-style:normal;font-size:11px;font-weight:900;color:#8b6a23;background:#fff5db}
+.v846-delivery-grid article.complete>i{color:#fff;background:#158174}.v846-delivery-grid article.optional>i{color:#71550f;background:#fff4d1}
+.v846-delivery-grid article span{display:flex;flex-direction:column;gap:3px;min-width:0}.v846-delivery-grid small{font-size:8px;font-weight:900;letter-spacing:.1em;color:#71807d}
+.v846-delivery-grid strong{font-size:13px;color:#243531}.v846-delivery-grid em{font-size:11px;font-style:normal;color:#6f7d7a;line-height:1.4}
+.v846-delivery-grid a{font-size:11px;font-weight:800;color:#08756a;text-decoration:none}
+.v846-readiness{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:12px}
+.v846-readiness span{display:flex;align-items:center;gap:6px;padding:9px;border-radius:9px;background:#fff5e1;color:#755918;font-size:10px;font-weight:800}
+.v846-readiness span.complete{background:#e4f5f1;color:#08685e}.v846-readiness i{font-style:normal}
+.v846-after-wedding>footer{display:flex;justify-content:flex-end;align-items:center;gap:9px;margin-top:14px;padding-top:14px;border-top:1px solid #dae6e3}
+.v846-after-wedding>footer button[disabled]{opacity:.58;cursor:not-allowed}.v846-complete-label{margin-left:auto;color:#087066;font-size:12px;font-weight:900}
+.v846-manual-note{display:flex;gap:8px;margin-top:12px;padding:10px 12px;border-radius:9px;color:#785b19;background:#fff6df;font-size:11px}.v846-manual-note span{color:#796f57}
+.v846-overview-card{display:flex;align-items:center;gap:13px;margin-bottom:12px;padding:14px;border:1px solid #d2dfdc;border-radius:12px;background:#f7fbfa}
+.v846-overview-card>i{display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:50%;color:#fff;background:#168276;font-style:normal;font-weight:900}
+.v846-overview-card>div{display:flex;flex:1;flex-direction:column;gap:3px;min-width:0}.v846-overview-card strong{font-size:14px;color:#223632}.v846-overview-card span{font-size:11px;color:#687773;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.v846-modal-note,.v846-recipient{padding:12px;border-radius:10px;background:#edf8f5;color:#20554e}.v846-modal-note strong,.v846-modal-note span,.v846-recipient strong,.v846-recipient span{display:block}.v846-modal-note span,.v846-recipient span{margin-top:4px;font-size:11px;color:#5f7772}
+.v846-recipient small{font-size:8px;font-weight:900;letter-spacing:.12em}
+@media(max-width:760px){.v846-delivery-grid{grid-template-columns:1fr}.v846-readiness{grid-template-columns:1fr 1fr}.v846-after-wedding>footer{align-items:stretch;flex-direction:column}.v846-after-wedding>footer button,.v846-complete-label{width:100%;margin:0;text-align:center}.v846-overview-card{align-items:stretch;flex-wrap:wrap}.v846-overview-card>div{width:calc(100% - 50px)}.v846-overview-card>button{width:100%}}
+@media(max-width:480px){.v846-after-wedding{padding:13px}.v846-after-wedding>header{flex-direction:column}.v846-readiness{grid-template-columns:1fr}.v846-delivery-grid article{min-height:0}.v846-overview-card span{white-space:normal}.v846-manual-note{flex-direction:column}}

@@ -1,9 +1,24 @@
-# Mark's Business Studio — Version 8.45.2
+# Mark's Business Studio — Version 8.46
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.45.2, including browser-history
+build includes every cumulative feature through V8.46, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.46 after-wedding workflow
+
+Past Weddings By Mark jobs now have one clear **After the Wedding** panel in
+Journey and a compact progress card in Overview. It tracks photograph and video
+delivery dates and links, album selection/design/order/delivery, and the account
+balance without changing the accepted quote, invoice number, payments, agreement
+or client files.
+
+**Mark wedding complete** unlocks only after the wedding date has passed, all
+contracted delivery is finished (or marked not required), and the balance is
+clear. The optional review request always opens for checking and editing before
+Mark deliberately sends it; nothing in this workflow sends automatically.
+Studio Ninja imports remain manual-only. The state is retained in the existing
+booking workflow record, so V8.46 requires no database migration.
 
 ## Version 8.45.2 Journey quote-routing hotfix
 

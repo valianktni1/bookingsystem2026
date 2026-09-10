@@ -53,6 +53,15 @@ def test_complete_and_reopen_wedding_are_deliberate_retained_actions():
         booking = client.post("/api/bookings", json=wedding_payload()).json()
         booking_id = booking["id"]
 
+        progress = client.put(f"/api/bookings/{booking_id}/after-wedding", json={
+            "photos_status": "delivered",
+            "photos_delivered_on": date.today().isoformat(),
+            "gallery_url": "https://weddingsbymark.uk/gallery/completion-test",
+            "video_status": "not_required",
+            "album_status": "not_required",
+        })
+        assert progress.status_code == 200, progress.text
+
         completed = client.post(f"/api/bookings/{booking_id}/complete")
         assert completed.status_code == 200, completed.text
         result = completed.json()
@@ -102,7 +111,7 @@ def test_studio_style_assets_and_requested_wedding_tabs_are_loaded():
 
     assert "/static/v830.css?v=studio-style-workspace-v8-30" in index
     assert "/static/v830.js?v=direct-email-history-v8-42" in index
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.45" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.46" in index
     assert "Upcoming weddings" in script
     assert "All bookings" in script
     assert "Past weddings awaiting completion" in script

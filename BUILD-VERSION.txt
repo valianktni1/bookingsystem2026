@@ -1,5 +1,16 @@
-BookingSystem2026 - Journey Quote Routing Hotfix
-Build: 2026.09.10-journey-quote-routing-v8.45.2
+BookingSystem2026 - After-wedding Workflow
+Build: 2026.09.10-after-wedding-v8.46
+
+V8.46 after-wedding workflow:
+- adds one clear After the Wedding panel to each eligible WBM wedding
+- tracks photograph and video delivery links/dates plus the complete album journey
+- protects Mark wedding complete until the date has passed, contracted delivery is
+  finished and the invoice balance is clear
+- adds an optional, deliberate review-and-send client review request
+- records delivery and review evidence without changing invoice or payment history
+- keeps Studio Ninja imports manual-only and introduces no database migration
+- leaves every client package unselected until the couple deliberately chooses one,
+  while retaining any required add-ons Mark placed on the quote
 
 V8.45.2 Journey quote routing:
 - repairs the final combined Journey renderer so Step 1 displays the real Quote

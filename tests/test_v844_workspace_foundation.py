@@ -13,9 +13,9 @@ def test_v844_assets_load_last_and_define_one_workspace_contract():
     css = (ROOT / "app/static/v844.css").read_text(encoding="utf-8")
 
     assert "/static/v844.css?v=workspace-foundation-v8-44" in index
-    assert "/static/v844.js?v=journey-quote-routing-v8-45-2" in index
-    assert "/static/v895.js?v=journey-quote-routing-v8-45-2" in index
-    assert "/static/v895.js?v=journey-quote-routing-v8-45-2" in index
+    assert "/static/v844.js?v=after-wedding-v8-46" in index
+    assert "/static/v895.js?v=after-wedding-v8-46" in index
+    assert "/static/v895.js?v=after-wedding-v8-46" in index
     assert index.rfind("/static/v844.js") > index.rfind("/static/v835.js")
     assert "one authoritative booking-workspace navigation controller" in script
     assert 'else if (selected === "Emails") renderBookingEmails(record, body);' in script
