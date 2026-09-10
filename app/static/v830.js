@@ -21,7 +21,7 @@
       <button class="v830-booking-open" data-record="${attr(record.id)}" type="button">
         <span class="client-cell"><i class="client-avatar ${record.brand}">${esc(initials(record))}</i><span class="v832-client-copy"><strong>${esc(record.title)}</strong><small>${esc(record.package_name || "Package not selected")}</small></span></span>
         <span>${esc(record.venue_or_project || "Not set")}</span>
-        <span class="booking-date-cell"><span>${esc(fmtDate(record.event_date))}</span>${sameDateBookingWarning(record)}</span>
+        <span class="booking-date-cell"><span>${esc(fmtEventDate(record.event_date))}</span>${sameDateBookingWarning(record)}</span>
         <span class="status ${recordStageClass(record)}" title="${attr(recordStage(record).help || "")}">${esc(recordStageLabel(record))}</span>
         <strong class="v832-money"><span>${money(record.outstanding_total)}</span><small>outstanding</small></strong>
       </button>
@@ -108,7 +108,7 @@
   async function completeWeddingV830(record, options = {}) {
     const future = Boolean(record.event_date && record.event_date >= today());
     const warning = future
-      ? `\n\nThis wedding date is ${fmtDate(record.event_date)}, which has not passed yet.` : "";
+      ? `\n\nThis wedding date is ${fmtEventDate(record.event_date)}, which has not passed yet.` : "";
     if (!confirm(`Mark ${record.title} as completed?${warning}\n\nIt will leave Upcoming Weddings but remain under All Bookings. Nothing is deleted, archived or emailed.`)) return;
     try {
       await api(`/api/bookings/${record.id}/complete`, {method: "POST"});
@@ -222,7 +222,7 @@
       </div>
       <div class="v830-job-right">
         <div class="v830-top-cards">
-          <article class="v830-info-card"><header><span>▣</span><strong>Job</strong><button class="mini" data-job-edit type="button">Edit</button></header><dl><dt>Wedding</dt><dd>${esc(record.title)}</dd><dt>Date</dt><dd>${esc(fmtDate(record.event_date))}</dd><dt>Venue</dt><dd>${directions ? `<a href="${attr(directions)}" target="_blank" rel="noopener">${esc(record.venue_or_project || record.venue_address)} ↗</a>` : esc(record.venue_or_project || "Not set")}</dd><dt>Package</dt><dd>${esc(record.package_name || "Not selected")}</dd></dl></article>
+          <article class="v830-info-card"><header><span>▣</span><strong>Job</strong><button class="mini" data-job-edit type="button">Edit</button></header><dl><dt>Wedding</dt><dd>${esc(record.title)}</dd><dt>Date</dt><dd>${esc(fmtEventDate(record.event_date))}</dd><dt>Venue</dt><dd>${directions ? `<a href="${attr(directions)}" target="_blank" rel="noopener">${esc(record.venue_or_project || record.venue_address)} ↗</a>` : esc(record.venue_or_project || "Not set")}</dd><dt>Package</dt><dd>${esc(record.package_name || "Not selected")}</dd></dl></article>
           <article class="v830-info-card"><header><span>♙</span><strong>Client</strong><button class="mini" data-job-edit type="button">Edit</button></header><dl><dt>Name</dt><dd>${esc([record.client.first_name, record.client.last_name].filter(Boolean).join(" "))}</dd>${record.client.partner_name ? `<dt>Partner</dt><dd>${esc(record.client.partner_name)}</dd>` : ""}<dt>Email</dt><dd><a href="mailto:${attr(record.client.email)}">${esc(record.client.email)}</a></dd><dt>Phone</dt><dd>${record.client.phone ? `<a href="tel:${attr(record.client.phone)}">${esc(record.client.phone)}</a>` : "Not set"}</dd></dl></article>
         </div>
         <div class="v830-summary-stack">

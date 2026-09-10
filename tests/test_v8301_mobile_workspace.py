@@ -10,7 +10,7 @@ def test_mobile_workspace_assets_and_five_item_navigation_are_loaded():
     css = (ROOT / "app/static/v8301.css").read_text(encoding="utf-8")
 
     assert "/static/v8301.css?v=studio-mobile-workspace-v8-30-1" in index
-    assert "/static/v8301.js?v=mobile-email-workspace-v8-42" in index
+    assert "/static/v8301.js?v=weekday-dates-v8-46" in index
     assert "BOOKINGSYSTEM2026 · COMPLETE V8.46" in index
     for view in ("dashboard", "enquiries", "weddings", "calendar", "invoices"):
         assert f'data-view="{view}"' in index

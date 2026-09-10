@@ -181,8 +181,8 @@
       return {
         label: "DATE BLOCKED",
         detail: enquiry
-          ? `This enquiry falls on a manually blocked date (${fmtDate(record.event_date)}). Review it before sending a quote.`
-          : `This wedding falls on a manually blocked date (${fmtDate(record.event_date)}). Review the holiday/date block in Calendar.`
+          ? `This enquiry falls on a manually blocked date (${fmtEventDate(record.event_date)}). Review it before sending a quote.`
+          : `This wedding falls on a manually blocked date (${fmtEventDate(record.event_date)}). Review the holiday/date block in Calendar.`
       };
     }
     return baseSameDateConflictTextV835(record);

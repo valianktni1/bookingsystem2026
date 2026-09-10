@@ -20,6 +20,11 @@ Mark deliberately sends it; nothing in this workflow sends automatically.
 Studio Ninja imports remain manual-only. The state is retained in the existing
 booking workflow record, so V8.46 requires no database migration.
 
+V8.46 also makes two small but useful client-workflow improvements: a quote opens
+with no package preselected, while required add-ons remain protected, and every
+admin wedding date now includes its full weekday in the dashboard, enquiry and
+wedding lists, mobile navigation, couple header and Overview.
+
 ## Version 8.45.2 Journey quote-routing hotfix
 
 The combined Journey screen now calls its real Quote and Booking Form renderers

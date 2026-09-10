@@ -14,7 +14,7 @@
     const signed = Boolean(contract && (contract.is_legacy_import || contract.fully_signed || contract.supplier_signed_at));
     const openTasks = (record.tasks || []).filter(task => !task.completed).length;
     return [
-      {tab: "Overview", icon: "♙", label: "Couple & wedding", help: `${record.venue_or_project || "Venue not set"} · ${fmtDate(record.event_date)}`},
+      {tab: "Overview", icon: "♙", label: "Couple & wedding", help: `${record.venue_or_project || "Venue not set"} · ${fmtEventDate(record.event_date)}`},
       {tab: "Emails", icon: "✉", label: "Emails", help: `${(portal?.emails || []).length} sent record${(portal?.emails || []).length === 1 ? "" : "s"} · opens, links and replies`},
       {tab: "Quote", icon: "✓", label: "Quote & booking journey", help: portal?.quote ? "Quote accepted · booking steps and forms" : "Quote, client area and booking progress"},
       {tab: "Payments", icon: "£", label: "Invoices & payments", help: balance > 0 ? `${money(balance)} outstanding` : `${invoices.length} invoice${invoices.length === 1 ? "" : "s"} · account clear`},

@@ -3,6 +3,19 @@
   "use strict";
 
   const baseRenderTabV846 = renderTab;
+  const baseRenderRecordsV846 = renderRecords;
+
+  renderRecords = function () {
+    baseRenderRecordsV846();
+    if (!["enquiries", "weddings"].includes(state.view)) return;
+    $$("[data-record]", $("#content")).forEach(row => {
+      const record = state.records.find(item => item.id === row.dataset.record);
+      const dateCell = row.querySelector(".booking-date-cell > span:first-child");
+      if (record?.kind === "wedding" && dateCell) {
+        dateCell.textContent = fmtEventDate(record.event_date);
+      }
+    });
+  };
 
   function localTodayV846() {
     const now = new Date();

@@ -1,4 +1,5 @@
 import os
+import subprocess
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -300,6 +301,30 @@ def test_client_must_deliberately_choose_a_package_while_required_extras_remain(
     assert "/static/client.js?v=package-choice-v8-46" in page
     assert "/static/client.css?v=package-choice-v8-46" in page
     assert ".primary:disabled" in css
+
+
+def test_wedding_dates_show_the_full_weekday_in_lists_and_the_couple_workspace():
+    app_js = (ROOT / "app/static/app.js").read_text(encoding="utf-8")
+    workspace_js = (ROOT / "app/static/v895.js").read_text(encoding="utf-8")
+    wedding_list_js = (ROOT / "app/static/v830.js").read_text(encoding="utf-8")
+    mobile_js = (ROOT / "app/static/v8301.js").read_text(encoding="utf-8")
+    final_js = (ROOT / "app/static/v846.js").read_text(encoding="utf-8")
+    assert "function fmtEventDate" in app_js
+    assert 'weekday:"long"' in app_js
+    assert "fmtEventDate(record.event_date)" in wedding_list_js
+    assert "fmtEventDate(record.event_date)" in mobile_js
+    assert workspace_js.count("fmtEventDate(r.event_date)") >= 3
+    assert 'dateCell.textContent = fmtEventDate(record.event_date)' in final_js
+
+    date_helpers = app_js[:app_js.index("function money")]
+    result = subprocess.run(
+        ["node", "-e", f'{date_helpers}\nprocess.stdout.write(fmtEventDate("2026-09-10"));'],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout.startswith("Thursday,")
+    assert result.stdout.endswith("2026")
 
 
 def teardown_module():

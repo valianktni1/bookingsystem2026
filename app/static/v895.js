@@ -77,7 +77,7 @@
     const facts = workspaceFacts(r, portal);
     const formCount = Number(Boolean(facts.bookingForm)) + Number(facts.contractFullySigned);
     return `<section class="record-snapshot">
-      <article><small>${r.kind === "wedding" ? "WEDDING DATE" : "TARGET DATE"}</small><strong>${esc(fmtDate(r.event_date))}</strong></article>
+      <article><small>${r.kind === "wedding" ? "WEDDING DATE" : "TARGET DATE"}</small><strong>${esc(r.kind === "wedding" ? fmtEventDate(r.event_date) : fmtDate(r.event_date))}</strong></article>
       <article><small>PACKAGE / SERVICE</small><strong>${esc(r.package_name || "Not selected")}</strong></article>
       <article class="${facts.outstanding > 0 ? "attention" : "complete"}"><small>OUTSTANDING</small><strong>${money(facts.outstanding)}</strong></article>
       <article><small>PAYMENT DUE</small><strong>${facts.outstanding > 0 ? esc(fmtDate(facts.nextDue)) : "Nothing due"}</strong></article>
@@ -188,7 +188,7 @@
           <div>
             <small>${r.legacy_source === "studio_ninja" ? "IMPORTED · MANUAL COMMUNICATION" : r.kind === "wedding" ? "WEDDING BOOKING" : "IVORY DIGITAL PROJECT"}</small>
             <div class="record-title-line"><h1>${esc(r.title)}</h1><span class="status ${statusClass(r.status)}">${esc(statusText(r.status))}</span></div>
-            <p>${esc(r.venue_or_project || "Venue or project not set")} · ${esc(fmtDate(r.event_date))}</p>
+            <p>${esc(r.venue_or_project || "Venue or project not set")} · ${esc(r.kind === "wedding" ? fmtEventDate(r.event_date) : fmtDate(r.event_date))}</p>
             <nav class="record-contact-actions">
               <button id="record-email-client" type="button">✉ Email client</button>
               <a href="mailto:${attr(r.client.email)}">✉ Inbox</a>
@@ -249,7 +249,7 @@
     body.innerHTML = `${legacy}${voidNotice}<div class="record-overview-grid">
       <section class="record-overview-main">
         <article class="detail"><header><h3>Couple / client</h3><button class="mini" data-overview-edit>Edit</button></header><dl><dt>Name</dt><dd>${esc([r.client.first_name, r.client.last_name].filter(Boolean).join(" "))}</dd>${r.client.partner_name ? `<dt>Partner</dt><dd>${esc(r.client.partner_name)}</dd>` : ""}<dt>Email</dt><dd><a href="mailto:${attr(r.client.email)}">${esc(r.client.email)}</a></dd><dt>Phone</dt><dd>${r.client.phone ? `<a href="tel:${attr(r.client.phone)}">${esc(r.client.phone)}</a>` : "Not set"}</dd><dt>Address</dt><dd>${esc(r.client.address || "Not set")}</dd></dl></article>
-        <article class="detail"><header><h3>${r.kind === "wedding" ? "Wedding" : "Project"}</h3><button class="mini" data-overview-edit>Edit</button></header><dl><dt>Date</dt><dd>${esc(fmtDate(r.event_date))}</dd><dt>${r.kind === "wedding" ? "Venue" : "Project"}</dt><dd>${directions ? `<a class="directions-link" href="${attr(directions)}" target="_blank" rel="noopener">${esc(r.venue_or_project || r.venue_address)} ↗</a>` : esc(r.venue_or_project || "Not set")}${r.venue_address && r.venue_address !== r.venue_or_project ? `<small>${esc(r.venue_address)}</small>` : ""}</dd><dt>Package</dt><dd>${esc(r.package_name || "Not selected")}</dd><dt>Quoted value</dt><dd>${money(r.quoted_total)}</dd></dl></article>
+        <article class="detail"><header><h3>${r.kind === "wedding" ? "Wedding" : "Project"}</h3><button class="mini" data-overview-edit>Edit</button></header><dl><dt>Date</dt><dd>${esc(r.kind === "wedding" ? fmtEventDate(r.event_date) : fmtDate(r.event_date))}</dd><dt>${r.kind === "wedding" ? "Venue" : "Project"}</dt><dd>${directions ? `<a class="directions-link" href="${attr(directions)}" target="_blank" rel="noopener">${esc(r.venue_or_project || r.venue_address)} ↗</a>` : esc(r.venue_or_project || "Not set")}${r.venue_address && r.venue_address !== r.venue_or_project ? `<small>${esc(r.venue_address)}</small>` : ""}</dd><dt>Package</dt><dd>${esc(r.package_name || "Not selected")}</dd><dt>Quoted value</dt><dd>${money(r.quoted_total)}</dd></dl></article>
         <article class="detail"><header><h3>Main notes</h3><button class="mini" data-overview-edit>Edit</button></header><p class="preline">${esc(r.notes || "No main notes added yet.")}</p></article>
       </section>
       <aside class="record-overview-side"><section class="overview-task-panel"><header><div><small>PRIVATE WORKFLOW</small><h3>Things to do</h3></div><button id="overview-add-task" class="secondary">＋ Add</button></header><div class="task-list">${tasks.map(task => taskRow(task)).join("") || `<div class="empty small-empty"><strong>Nothing needs doing</strong>You are all caught up.</div>`}</div></section></aside>

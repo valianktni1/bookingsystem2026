@@ -11,6 +11,8 @@ V8.46 after-wedding workflow:
 - keeps Studio Ninja imports manual-only and introduces no database migration
 - leaves every client package unselected until the couple deliberately chooses one,
   while retaining any required add-ons Mark placed on the quote
+- shows the full weekday beside wedding dates in dashboard lists, enquiry and
+  wedding lists, mobile shortcuts, and the complete couple Overview
 
 V8.45.2 Journey quote routing:
 - repairs the final combined Journey renderer so Step 1 displays the real Quote

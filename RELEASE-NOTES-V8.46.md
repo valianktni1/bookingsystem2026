@@ -35,5 +35,9 @@ history, documents and all delivery progress.
 - Client quotes no longer preselect the first (Bronze) package. The couple must tap
   their intended package before confirming, while Mark's required add-ons remain
   visible, included and protected.
+- Wedding dates now include the full weekday in the dashboard, enquiry and wedding
+  lists, mobile booking navigation, and each couple's header and Overview. This
+  makes weekday-dependent photographer or videographer availability visible without
+  opening a separate calendar.
 - V8.46 uses the existing booking workflow data, introduces no database migration
   and does not alter invoice or Accounts integration behaviour.

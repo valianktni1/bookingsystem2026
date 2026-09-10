@@ -67,7 +67,7 @@
   function openRescheduleV845(record) {
     showModal(
       "Move wedding date",
-      `<section class="full v845-safety-note"><i>↻</i><span><strong>${esc(fmtDate(record.event_date))} → choose the new date</strong><small>The same booking, invoice numbers, payments, files and signed agreement are retained.</small></span></section>
+      `<section class="full v845-safety-note"><i>↻</i><span><strong>${esc(fmtEventDate(record.event_date))} → choose the new date</strong><small>The same booking, invoice numbers, payments, files and signed agreement are retained.</small></span></section>
        <label>Current wedding date<input value="${attr(record.event_date || "")}" disabled></label>
        <label>New wedding date<input id="v845-new-date" type="date" min="${new Date().toISOString().slice(0, 10)}" required></label>
        <label class="full">Private reason for the move<textarea id="v845-reschedule-reason" minlength="3" maxlength="1000" rows="3" required placeholder="For example: Couple postponed the wedding"></textarea></label>
