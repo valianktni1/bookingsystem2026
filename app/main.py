@@ -114,7 +114,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.45-everyday-workflows", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.45.1-edit-sent-quote", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")

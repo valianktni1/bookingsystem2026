@@ -1,9 +1,17 @@
-# Mark's Business Studio — Version 8.45
+# Mark's Business Studio — Version 8.45.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.45, including browser-history
+build includes every cumulative feature through V8.45.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.45.1 sent-quote editing
+
+A quote that has been emailed but is still awaiting the couple's acceptance now
+keeps a clear **Edit quote** button in Journey. Required extras and private
+discounts can be changed safely; saving updates the couple's existing secure
+quote link without sending another email or creating an invoice. Once accepted,
+the quote and invoice remain locked exactly as before.
 
 ## Version 8.45 everyday workflows
 

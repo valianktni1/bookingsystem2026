@@ -168,7 +168,7 @@ def test_v828_dashboard_and_record_actions_are_explicit_and_mobile_friendly():
     dashboard_js = (root / "app/static/v811.js").read_text()
     css = (root / "app/static/v811.css").read_text()
     assert "BOOKINGSYSTEM2026 · COMPLETE V8.45" in index
-    assert "/static/app.js?v=individual-quote-followups-v8-43" in index
+    assert "/static/app.js?v=edit-sent-quote-v8-45-1" in index
     assert "/static/v811.js?v=email-tab-render-hotfix-v8-43-1" in index
     assert "Needs your action" in dashboard_js
     assert "Waiting and upcoming" in dashboard_js

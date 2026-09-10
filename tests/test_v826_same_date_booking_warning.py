@@ -112,7 +112,7 @@ def test_private_warning_is_wired_only_into_the_admin_booking_list():
     assert "sameDateBookingWarning" not in client_js
     assert "same_date_active_booking_count" not in client_js
     assert "/static/app.css?v=enquiry-date-clash-v8-31-1" in index
-    assert "/static/app.js?v=individual-quote-followups-v8-43" in index
+    assert "/static/app.js?v=edit-sent-quote-v8-45-1" in index
 
 
 def teardown_module():

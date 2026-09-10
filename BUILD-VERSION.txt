@@ -1,5 +1,14 @@
-BookingSystem2026 - Everyday Workflow Improvements
-Build: 2026.09.09-everyday-workflows-v8.45
+BookingSystem2026 - Sent Quote Editing Hotfix
+Build: 2026.09.10-edit-sent-quote-v8.45.1
+
+V8.45.1 sent quote editing:
+- restores a clear Edit quote button after the quote email has been sent and
+  while the couple is still deciding
+- lets Mark add required extras or private discounts to the same live quote link
+- supports a complimentary album by selecting Wedding album offer and setting
+  its amount to £0.00
+- saving a sent quote does not send an email and does not create an invoice
+- accepted quotes and their invoices remain locked
 
 V8.45 everyday workflow improvements:
 - adds a clean Close enquiry action with useful outcome reasons and safe reopen

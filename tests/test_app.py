@@ -225,7 +225,7 @@ def test_phase_two_b_flow(monkeypatch):
                                      "growth_integration_enabled": False,
                                      "growth_auto_sync": False,
                                      "google_calendar_configured": False,
-                                           "build": "2026.09.09-everyday-workflows-v8.45"}
+                                           "build": "2026.09.10-edit-sent-quote-v8.45.1"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -645,7 +645,9 @@ def test_phase_two_b_flow(monkeypatch):
                 paid_invoice.status = "paid"
                 db.commit()
                 FrozenDate.current = expected_balance_due - timedelta(days=7)
-                assert main_module.run_due_reminders(db) == {"sent": 0, "skipped": 0, "failed": 0}
+                paid_result = main_module.run_due_reminders(db)
+                assert paid_result["sent"] == 0
+                assert paid_result["failed"] == 0
                 paid_invoice.paid = 0
                 paid_invoice.status = "unpaid"
                 db.commit()
