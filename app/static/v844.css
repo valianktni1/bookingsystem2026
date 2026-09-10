@@ -1,0 +1,33 @@
+/* V8.44 - one calm, consistent booking workspace on desktop and mobile. */
+.v844-workspace-shell{display:block;margin-top:13px}
+.record-workspace-tabs.v844-tabs{position:sticky;z-index:12;top:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin:0;border:1px solid #d7e1e2;border-radius:14px 14px 0 0;background:#fff;box-shadow:0 8px 22px #102b3412;overflow:hidden}
+.record-workspace-tabs.v844-tabs button{min-width:0;min-height:72px;display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 10px;border:0;border-right:1px solid #e7eded;border-bottom:4px solid transparent;background:#fff;color:#617479;text-align:left;transition:background .15s ease,color .15s ease,border-color .15s ease}
+.record-workspace-tabs.v844-tabs button:last-child{border-right:0}
+.record-workspace-tabs.v844-tabs button:hover{background:#f5faf9;color:#164d52}
+.record-workspace-tabs.v844-tabs button.active{border-bottom-color:#15776f;background:#edf8f6;color:#105e59}
+.record-workspace-tabs.v844-tabs button>i{width:34px;height:34px;display:grid;flex:0 0 auto;place-items:center;border-radius:10px;background:#edf5f4;color:#17645f;font-size:16px;font-style:normal}
+.record-workspace-tabs.v844-tabs button.active>i{background:#15776f;color:#fff}
+.record-workspace-tabs.v844-tabs button>span,.record-workspace-tabs.v844-tabs strong,.record-workspace-tabs.v844-tabs small{display:block;min-width:0}
+.record-workspace-tabs.v844-tabs strong{font-size:14px;line-height:1.2}.record-workspace-tabs.v844-tabs small{margin-top:4px;overflow:hidden;color:#74868a;font-size:11px;line-height:1.2;text-overflow:ellipsis;white-space:nowrap}
+.v844-workspace-body{min-height:430px;padding:22px;border:1px solid #d7e1e2;border-top:0;border-radius:0 0 14px 14px;background:#f5f8f8;overflow:visible}
+.v844-section-error{display:grid;justify-items:start;gap:8px;padding:24px;border:1px solid #efc7c3;border-radius:14px;background:#fff6f5;color:#87332d}.v844-section-error strong{font-size:18px}.v844-section-error span{line-height:1.5}
+
+@media(max-width:900px){
+  .record-workspace-tabs.v844-tabs button{gap:7px;padding:8px 7px}.record-workspace-tabs.v844-tabs button>i{width:30px;height:30px}.record-workspace-tabs.v844-tabs strong{font-size:12px}.record-workspace-tabs.v844-tabs small{font-size:10px}
+}
+
+@media(max-width:760px){
+  .v844-workspace-shell{margin-top:10px}
+  .record-workspace-tabs.v844-tabs{position:sticky;top:0;grid-template-columns:repeat(3,minmax(0,1fr));border-radius:14px 14px 0 0}
+  .record-workspace-tabs.v844-tabs button{min-height:68px;justify-content:flex-start;gap:8px;padding:9px 10px;border-right:1px solid #e3ebeb;border-bottom:1px solid #e3ebeb}
+  .record-workspace-tabs.v844-tabs button:nth-child(3n){border-right:0}
+  .record-workspace-tabs.v844-tabs button:nth-child(n+4){border-bottom:4px solid transparent}
+  .record-workspace-tabs.v844-tabs button.active{border-bottom-color:#15776f}
+  .record-workspace-tabs.v844-tabs button>i{width:31px;height:31px;border-radius:9px;font-size:15px}
+  .record-workspace-tabs.v844-tabs strong{font-size:13px}.record-workspace-tabs.v844-tabs small{display:none}
+  .v844-workspace-body{min-height:360px;padding:13px;border-radius:0 0 14px 14px}
+}
+
+@media(max-width:390px){
+  .record-workspace-tabs.v844-tabs button{padding:8px 7px;gap:6px}.record-workspace-tabs.v844-tabs button>i{width:28px;height:28px}.record-workspace-tabs.v844-tabs strong{font-size:12px}
+}

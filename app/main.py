@@ -68,6 +68,7 @@ from .services import (audit, create_default_tasks, dashboard_counts, invoice_st
 from .v82_routes import register_v82_routes
 from .v84_routes import (automations_allowed, final_details_unlocked,
                          quote_followup_paused, register_v84_routes)
+from .v845_routes import apply_quote_reply_safety, register_v845_routes
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -113,7 +114,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.43.1-email-tab-render-hotfix", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.45-everyday-workflows", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -171,6 +172,7 @@ def issue_client_email_url(db: Session, booking: Booking, template_key: str,
         "quote": "quote",
         "quote_followup_1": "quote",
         "quote_followup_final": "quote",
+        "booking_form_reminder": "booking",
         "quote_accepted": "invoices",
         "deposit_due_1": "invoices",
         "payment_received": "invoices",
@@ -1899,6 +1901,17 @@ def patch_booking(booking_id: str, payload: BookingPatch, _: Admin = Depends(cur
                 "This booking has an accepted invoice. Use Amend invoice in Payments "
                 "so the quote, invoice PDF and balance stay together",
             )
+    if (
+        "event_date" in values
+        and values["event_date"] != item.event_date
+        and item.kind == RecordKind.WEDDING
+        and item.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)
+    ):
+        raise HTTPException(
+            409,
+            "This is a live booked wedding. Use Move wedding date so the calendar, "
+            "invoice dates, reminders and audit history stay together",
+        )
     requested_status = values.get("status")
     if requested_status == RecordStatus.CANCELLED and item.status != RecordStatus.CANCELLED:
         raise HTTPException(409, "Use Cancel record so links, tasks and the cancellation reason are handled safely")
@@ -2021,6 +2034,11 @@ def restore_booking(booking_id: str, _: Admin = Depends(current_admin), db: Sess
     item = db.get(Booking, booking_id)
     if not item:
         raise HTTPException(404, "Record not found")
+    if (item.workflow_state or {}).get("enquiry_closure"):
+        raise HTTPException(
+            409,
+            "Use Reopen enquiry so its previous status, tasks and email protection are restored safely",
+        )
     item.archived_at = None
     audit(db, "restore", "booking", item.id)
     db.commit()
@@ -2768,6 +2786,7 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "quote_preparation": quote_preparation_json(booking),
         "automation_suppressed": booking.automation_suppressed,
         "quote_followups": followup_rows,
+        "quote_reply_detection": (booking.workflow_state or {}).get("quote_reply_detection"),
         "final_details_unlocked": final_details_unlocked(db, booking),
         "final_timings": {
             "available": final_timings_unlocked(db, booking),
@@ -2833,6 +2852,7 @@ def require_booking_journey_unlocked(db: Session, booking: Booking) -> None:
 WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
     "quote": ("action", "Loaded into the final Review quote email window. Personal changes apply to that couple only and never alter this saved template"),
     "booking_link": ("manual", "Manual option when you deliberately send a booking link"),
+    "booking_form_reminder": ("manual", "Manual Wedding Booking Form reminder; reviewed and sent by you for one couple"),
     "contract_reminder": ("manual", "Manual reminder offered when the form is complete but the agreement is unsigned"),
     "quote_followup_1": ("automatic", "Automatic quote follow-up one day after a successful quote"),
     "quote_followup_final": ("automatic", "Automatic final quote follow-up nine days after a successful quote"),
@@ -4384,6 +4404,11 @@ def run_due_reminders(db: Session) -> dict:
     ).where(
         Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED
     )).all()
+    # V8.45 performs one cached, header-only mailbox check. A genuine reply
+    # after the quote pauses only the next-day delivery check. The independent
+    # final follow-up remains exactly as Mark configured it. IMAP failure never
+    # blocks or changes the established reminder runner.
+    apply_quote_reply_safety(db, bookings, today=today, now=now)
     for booking in bookings:
         for reminder_key, scheduled_for in _due_reminders(db, booking, today):
             reminder = db.scalar(select(ReminderLog).where(
@@ -4528,6 +4553,11 @@ async def calendar_retry_loop():
 
 register_v82_routes(app)
 register_v84_routes(app)
+register_v845_routes(
+    app,
+    refresh_payment_dates=refresh_wedding_payment_dates,
+    sync_final_call_task=sync_final_details_call_task,
+)
 register_date_block_routes(app)
 register_google_calendar_routes(app)
 register_mail_routes(app)

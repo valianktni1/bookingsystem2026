@@ -207,6 +207,7 @@ A £150 deposit secures your date."""),
     template_rows = {
         "quote": ("Quote email", "Your {business_name} quote", "Hi {client_first_name},\n\nThank you for getting in touch. Your quote for {package_name} is {quoted_total}.\n\nYou can review the details, complete your booking form and accept the agreement using your booking link:\n{portal_url}\n\nIf you have any questions, just reply to this email.\n\nMark\n{business_name}\n{business_phone}"),
         "booking_link": ("Booking link", "Your {business_name} booking link", "Hi {client_first_name},\n\nHere is your booking link:\n{portal_url}\n\nPlease complete the booking form and read and accept the agreement. Your date is secured as soon as I receive your first payment.\n\nMark\n{business_name}"),
+        "booking_form_reminder": ("Wedding Booking Form reminder", "A quick reminder about your Wedding Booking Form", "Hi {client_first_name},\n\nI hope you are both well. When you have a moment, please complete your Wedding Booking Form using your secure wedding booking link:\n\n[COMPLETE YOUR WEDDING BOOKING FORM]({portal_url})\n\nIt keeps all of the important details together in your wedding file. If you have any questions or need a hand with anything, simply reply to this email.\n\nThanks,\nMark\nWeddings By Mark"),
         "contract_reminder": ("Contract reminder", "A quick reminder about your booking agreement", "Hi {client_first_name},\n\nJust a quick reminder to complete your booking form and accept the agreement using your wedding booking link:\n{portal_url}\n\nGive me a shout if you need anything.\n\nMark"),
         "quote_followup_1": ("Quote follow-up - next day", "Just checking you received your wedding quote", "Hi {client_first_name},\n\nI just wanted to check that the wedding quote I sent yesterday reached you safely. Emails occasionally find their way into spam or junk folders, so when you have a moment would you mind checking there if you cannot see it?\n\nHere is your wedding booking link again:\n{portal_url}\n\nThere is absolutely no pressure. If you have any questions or would like to talk through the packages, just reply to this email and I will be happy to help.\n\nThanks,\nMark\nWeddings By Mark"),
         "quote_followup_final": ("Quote follow-up - final check", "A final quick check about your wedding quote", "Hi {client_first_name},\n\nI just wanted to make one final quick check that you received your Weddings By Mark quote and were able to open it.\n\nYou can view it here whenever you are ready:\n{portal_url}\n\nIf your plans have changed, that is completely fine. If you would like any help choosing a package or have a question, simply reply and I will be happy to help.\n\nThanks,\nMark\nWeddings By Mark"),
@@ -230,6 +231,7 @@ A £150 deposit secures your date."""),
     for brand in (Brand.WBM, Brand.IVORY):
         for key, (name, subject, body) in template_rows.items():
             if brand == Brand.IVORY and key in ("final_questionnaire", "enquiry_received", "quote_accepted",
+                                                "booking_form_reminder",
                                                 "new_enquiry_admin", "quote_followup_1",
                                                 "quote_accepted_admin", "booking_form_submitted_admin",
                                                 "final_timings_submitted_admin", "contract_signed_admin",
@@ -245,7 +247,7 @@ A £150 deposit secures your date."""),
             if not existing_template and (fresh_install or key in (
                 "contract_completed", "check_in_30", "quote_accepted_admin",
                 "booking_form_submitted_admin", "final_timings_submitted_admin",
-                "contract_signed_admin",
+                "contract_signed_admin", "booking_form_reminder",
             )):
                 db.add(EmailTemplate(brand=brand, template_key=key, display_name=name, subject=subject, body=body))
             elif existing_template and brand == Brand.WBM and key == "check_in_30":

@@ -1,9 +1,41 @@
-# Mark's Business Studio — Version 8.43.1
+# Mark's Business Studio — Version 8.45
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.43.1, including browser-history
+build includes every cumulative feature through V8.45, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.45 everyday workflows
+
+Open enquiries can now be closed with a useful private outcome—such as no
+response, booked elsewhere or plans changed—without treating them as cancelled
+weddings. The enquiry is archived, its link and automation are safely stopped,
+and it can be reopened with its earlier status and tasks restored. No email is
+sent and no financial record is changed.
+
+Live booked weddings have a dedicated **Move wedding date** action. It checks
+the proposed date for other records and private date blocks, retains the booking,
+invoice numbers, payments, files and signed agreement snapshot, and moves the
+live invoice dates, private call task and Google Calendar event. The reason and
+old date stay in Activity, and moving the date sends no client email.
+
+The Journey now offers clear, deliberate **review and send** reminders when the
+Wedding Booking Form or agreement is still outstanding. These are never sent
+automatically. A cached, header-only mailbox check also detects a genuine client
+reply after a quote and pauses only the next-day quote check; the independent
+final nine-day check remains exactly under Mark's control.
+
+## Version 8.44 stable workspace foundation
+
+The individual booking window now has one final navigation controller and the
+same six predictable sections everywhere: **Overview, Journey, Emails, Payments,
+Files and Activity**. Older internal names and bookmarked routes are translated
+safely, while each visible tab is sent directly to the correct existing feature.
+
+On mobile, the previous long accordion is replaced with a compact two-row tab
+grid and one clear content area. This release changes presentation and routing
+only; reminder timing, emails, invoices, payments, client data and database rules
+are unchanged.
 
 ## Version 8.43.1 email workspace hotfix
 

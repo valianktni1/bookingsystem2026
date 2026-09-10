@@ -1,5 +1,26 @@
-BookingSystem2026 - Email Workspace Rendering Hotfix
-Build: 2026.09.09-email-tab-render-hotfix-v8.43.1
+BookingSystem2026 - Everyday Workflow Improvements
+Build: 2026.09.09-everyday-workflows-v8.45
+
+V8.45 everyday workflow improvements:
+- adds a clean Close enquiry action with useful outcome reasons and safe reopen
+- adds a protected Move wedding date action that retains invoice numbers,
+  payments, documents and signed agreement snapshots
+- checks the new date for bookings, enquiries and private date blocks before saving
+- moves Google Calendar, future payment dates and private call tasks with the wedding
+- adds deliberate review-and-send reminders for the Wedding Booking Form and agreement
+- detects a genuine mailbox reply after a quote and pauses only the next-day check;
+  the independent final nine-day check remains under Mark's control
+- sends no client email from close, reopen or reschedule actions
+
+V8.44 stable workspace foundation:
+- establishes one final controller for every booking workspace tab
+- uses the same six sections on desktop and mobile: Overview, Journey, Emails,
+  Payments, Files and Activity
+- routes each visible tab directly to its intended feature renderer
+- safely translates all older tab names and bookmarked URLs
+- replaces the tall mobile accordion with a compact two-row navigation grid
+- adds executable JavaScript runtime tests that select every section
+- changes no email timing, invoice rule, payment rule, client data or database schema
 
 V8.43.1 email workspace hotfix:
 - fixes the Emails tab showing Notes & Activity even though Emails was highlighted
