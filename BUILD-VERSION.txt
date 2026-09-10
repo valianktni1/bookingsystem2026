@@ -1,5 +1,13 @@
-BookingSystem2026 - Sent Quote Editing Hotfix
-Build: 2026.09.10-edit-sent-quote-v8.45.1
+BookingSystem2026 - Journey Quote Routing Hotfix
+Build: 2026.09.10-journey-quote-routing-v8.45.2
+
+V8.45.2 Journey quote routing:
+- repairs the final combined Journey renderer so Step 1 displays the real Quote
+  controls instead of Notes & Activity
+- repairs Step 2 so it displays the real Booking Form and agreement controls
+- makes the V8.45.1 Edit quote button visible for a sent, unaccepted quote
+- uses fresh browser cache markers for every corrected script
+- sends no email and changes no booking, quote, invoice or payment data
 
 V8.45.1 sent quote editing:
 - restores a clear Edit quote button after the quote email has been sent and

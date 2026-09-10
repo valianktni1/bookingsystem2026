@@ -93,6 +93,20 @@
     else history.pushState(routeState, "", target);
   }
 
+  async function renderJourneyV844(record, body) {
+    // Build the established combined Journey shell, including Final Timings
+    // and the telephone-call pack, then render Quote and Forms explicitly.
+    // Older composite layers consult the latest global tab normaliser at run
+    // time; after V8.44 that could silently map both embedded panels to Notes.
+    await compositeRenderTabV844(record, "Journey", body);
+    const quoteHost = body.querySelector?.("[data-v811-quote]");
+    const formsHost = body.querySelector?.("[data-v811-forms]");
+    if (quoteHost) await renderQuotePortal(record, quoteHost);
+    if (formsHost && window.WBMWorkspaceV895?.renderFormsAndAgreement) {
+      window.WBMWorkspaceV895.renderFormsAndAgreement(record, formsHost);
+    }
+  }
+
   renderTab = async function (record, tab, target = null) {
     const body = target || $("#drawer-body");
     const selected = canonicalSectionV844(tab);
@@ -102,7 +116,7 @@
     body.setAttribute("aria-busy", selected === "Journey" ? "true" : "false");
     try {
       if (selected === "Overview") renderOverview(record, body);
-      else if (selected === "Journey") await compositeRenderTabV844(record, "Journey", body);
+      else if (selected === "Journey") await renderJourneyV844(record, body);
       else if (selected === "Emails") renderBookingEmails(record, body);
       else if (selected === "Payments") renderFinance(record, body);
       else if (selected === "Files") renderRecordDocuments(record, body);

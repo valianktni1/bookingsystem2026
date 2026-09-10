@@ -1,9 +1,16 @@
-# Mark's Business Studio — Version 8.45.1
+# Mark's Business Studio — Version 8.45.2
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.45.1, including browser-history
+build includes every cumulative feature through V8.45.2, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.45.2 Journey quote-routing hotfix
+
+The combined Journey screen now calls its real Quote and Booking Form renderers
+directly. This fixes the later navigation layer that was incorrectly showing
+Notes & Activity inside both panels and hiding the V8.45.1 **Edit quote** button.
+Fresh cache markers ensure browsers load the corrected scripts immediately.
 
 ## Version 8.45.1 sent-quote editing
 

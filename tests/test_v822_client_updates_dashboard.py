@@ -209,7 +209,7 @@ def test_v822_dashboard_assets_and_exact_actions_are_wired():
     css = (root / "app/static/v822.css").read_text()
     assert "/static/v822.css?v=client-updates-dashboard-v8-22" in index
     assert "/static/v811.js?v=email-tab-render-hotfix-v8-43-1" in index
-    assert "/static/v895.js?v=visible-record-actions-v8-28-3" in index
+    assert "/static/v895.js?v=journey-quote-routing-v8-45-2" in index
     assert "/static/v896.js?v=mail-scan-cache-v8-42" in index
     assert "New client updates" in dashboard_js
     assert "unread_only=true" in dashboard_js

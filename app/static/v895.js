@@ -315,4 +315,11 @@
       } catch (error) { toast(error.message, "error"); }
     };
   }
+
+  // V8.44's combined Journey screen needs a stable reference to this exact
+  // forms renderer. Using the mutable global tab normaliser here can route the
+  // embedded Forms and Quote panels back to Notes after later scripts load.
+  window.WBMWorkspaceV895 = Object.freeze({
+    renderFormsAndAgreement: renderFormsAndAgreementV895,
+  });
 })();

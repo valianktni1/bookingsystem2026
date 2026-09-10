@@ -1,0 +1,23 @@
+BookingSystem2026 V8.45.2 - TrueNAS deployment
+
+Push the complete V8.45.2 repository to GitHub with GitHub Desktop, update the
+TrueNAS repository copy in your usual way, then paste these commands into Shell:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v8452-$(date +%Y%m%d-%H%M%S).dump"
+
+sudo sh -c "docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > '$BOOKING_BACKUP'"
+
+sudo ls -lh "$BOOKING_BACKUP"
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+
+curl -fsS http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.09.10-journey-quote-routing-v8.45.2
