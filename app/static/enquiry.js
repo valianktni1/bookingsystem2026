@@ -3,20 +3,69 @@ const fieldHost = document.querySelector("#enquiry-fields");
 const errorBox = document.querySelector("#form-error");
 const submitButton = document.querySelector("#submit-button");
 let formConfig = null;
+let growthAttribution = null;
+let startReported = false;
+const allowedParentOrigins = new Set([
+  "https://perfectweddingsbymark.uk",
+  "https://www.perfectweddingsbymark.uk",
+]);
+let parentOrigin = (() => {
+  try {
+    const origin = new URL(document.referrer).origin;
+    return allowedParentOrigins.has(origin) ? origin : null;
+  } catch (_) { return null; }
+})();
+const growthSources = new Set(["Google", "Facebook", "Instagram", "Bing", "Other website", "Direct / unknown"]);
+
+function safeAttribution(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const keys = Object.keys(value);
+  if (keys.some(key => !["visit_id", "source", "campaign", "landing_path"].includes(key))) return null;
+  const visitId = String(value.visit_id || "");
+  const campaign = String(value.campaign || "");
+  const landingPath = String(value.landing_path || "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(visitId)) return null;
+  if (!growthSources.has(value.source)) return null;
+  if (!/^(?:|[0-9a-f]{12})$/.test(campaign)) return null;
+  if (!/^\/[a-zA-Z0-9/_-]{0,199}$/.test(landingPath)) return null;
+  if (landingPath.toLowerCase().split("/").some(part => ["wp-admin", "wp-json", "bookings", "p", "login", "client", "admin"].includes(part) || part.startsWith("private"))) return null;
+  return {visit_id: visitId, source: value.source, campaign, landing_path: landingPath};
+}
+
+window.addEventListener("message", event => {
+  if (event.source !== window.parent || !allowedParentOrigins.has(event.origin)) return;
+  parentOrigin = event.origin;
+  if (event.data?.type === "wbm-growth-attribution-clear") {
+    growthAttribution = null;
+    return;
+  }
+  if (event.data?.type === "wbm-growth-attribution") {
+    growthAttribution = safeAttribution(event.data.attribution);
+  }
+});
+
+function tellParent(message) {
+  if (parentOrigin) window.parent.postMessage(message, parentOrigin);
+}
 
 function tellParentHeight() {
   const height = Math.ceil(document.documentElement.scrollHeight);
-  window.parent.postMessage({type: "wbm-enquiry-height", height}, "*");
+  tellParent({type: "wbm-enquiry-height", height});
 }
 
 function tellParentSubmitted() {
   // Existing website embeds understand the height message. Newer embeds also
   // bring the confirmation itself into view on the surrounding website page.
-  window.parent.postMessage({type: "wbm-enquiry-height", height: 520}, "*");
-  window.parent.postMessage({type: "wbm-enquiry-submitted", height: 520}, "*");
+  tellParent({type: "wbm-enquiry-height", height: 520});
+  tellParent({type: "wbm-enquiry-submitted", height: 520});
 }
 new ResizeObserver(tellParentHeight).observe(document.documentElement);
 window.addEventListener("load", tellParentHeight);
+form.addEventListener("focusin", () => {
+  if (startReported) return;
+  startReported = true;
+  tellParent({type: "wbm-enquiry-started"});
+});
 
 function money(value) {
   return new Intl.NumberFormat("en-GB", {style: "currency", currency: "GBP", maximumFractionDigits: 0}).format(Number(value || 0));
@@ -156,6 +205,7 @@ form.addEventListener("submit", async event => {
     delete values[field.key];
   });
   values.custom_answers = customAnswers;
+  if (growthAttribution) values.website_attribution = growthAttribution;
   if (!String(values.location || "").trim()) {
     errorBox.textContent = "Please choose your wedding venue or enter it manually.";
     submitButton.disabled = false; submitButton.textContent = originalLabel; return;

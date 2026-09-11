@@ -1,9 +1,18 @@
-# Mark's Business Studio — Version 8.46
+# Mark's Business Studio — Version 8.47
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.46, including browser-history
+build includes every cumulative feature through V8.47, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.47 website revenue attribution
+
+The public enquiry iframe can now receive a consented random website-visit reference
+from perfectweddingsbymark.uk. Booking stores it privately with the enquiry and returns
+it through the existing authenticated Growth sync. No form answers, email address or
+selected wedding date are added to the analytics event. Booking remains the only place
+that owns quotes, invoices, contracts, emails and client records. Every V8.46 feature
+below remains unchanged.
 
 ## Version 8.46 after-wedding workflow
 

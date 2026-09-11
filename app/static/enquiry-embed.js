@@ -6,11 +6,16 @@
   const allowedOrigin = new URL(frame.src, location.href).origin;
   window.addEventListener("message", event => {
     if (event.origin !== allowedOrigin || event.source !== frame.contentWindow) return;
-    if (!["wbm-enquiry-height", "wbm-enquiry-submitted"].includes(event.data?.type)) return;
+    if (!["wbm-enquiry-height", "wbm-enquiry-started", "wbm-enquiry-submitted"].includes(event.data?.type)) return;
+    if (event.data.type === "wbm-enquiry-started") {
+      window.wbmWebsiteEvent?.("enquiry_start");
+      return;
+    }
     const height = Math.max(500, Math.min(5000, Number(event.data.height) || 0));
     frame.style.height = `${height}px`;
     if (event.data.type === "wbm-enquiry-submitted") {
       frame.dataset.enquirySubmitted = "true";
+      window.wbmWebsiteEvent?.("enquiry_success");
       requestAnimationFrame(() => frame.scrollIntoView({behavior: "smooth", block: "center"}));
     }
   });

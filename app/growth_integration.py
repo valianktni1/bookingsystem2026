@@ -206,6 +206,9 @@ def build_booking_payload(booking: Booking, communication: dict | None = None) -
         "received_at": booking.created_at.isoformat(),
         "updated_at": (booking.updated_at or booking.created_at).isoformat(),
     }
+    website_attribution = (booking.workflow_state or {}).get("growth_attribution")
+    if isinstance(website_attribution, dict):
+        payload["website_attribution"] = website_attribution
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     payload_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     payload["event_id"] = f"booking-snapshot:{booking.id}:{payload_hash[:32]}"
@@ -221,7 +224,7 @@ def _request_json(path: str, *, method: str = "GET", body: dict | None = None) -
         "Accept": "application/json",
         "Content-Type": "application/json",
         "X-Integration-Key": settings.growth_integration_key or "",
-        "User-Agent": "WBM-Booking-System/8.39",
+        "User-Agent": "WBM-Booking-System/8.47",
     })
     try:
         with urlopen(request, timeout=20) as response:

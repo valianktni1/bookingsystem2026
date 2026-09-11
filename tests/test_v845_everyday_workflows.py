@@ -267,7 +267,7 @@ def test_v845_interface_and_template_contracts():
     bootstrap = (ROOT / "app/bootstrap.py").read_text(encoding="utf-8")
     release = (ROOT / "RELEASE-NOTES-V8.45.md").read_text(encoding="utf-8")
 
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.46" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.47" in index
     assert index.index("v844.js") < index.index("v845.js")
     assert "/static/v845.css?v=everyday-workflows-v8-45" in index
     assert "Close unsuccessful enquiry" in script

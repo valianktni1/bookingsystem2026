@@ -267,6 +267,16 @@ class QuoteAcceptIn(BaseModel):
     confirmed: bool
 
 
+class WebsiteAttributionIn(BaseModel):
+    """Consent-safe visit details passed by the Weddings By Mark website."""
+
+    model_config = ConfigDict(extra="forbid")
+    visit_id: str = Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+    source: Literal["Google", "Facebook", "Instagram", "Bing", "Other website", "Direct / unknown"]
+    campaign: str = Field(default="", pattern=r"^(?:|[0-9a-f]{12})$")
+    landing_path: str = Field(min_length=1, max_length=200, pattern=r"^/[a-zA-Z0-9/_-]{0,199}$")
+
+
 class EnquiryIn(BaseModel):
     primary_first_name: str = Field(min_length=1, max_length=100)
     partner_first_name: str = Field(min_length=1, max_length=100)
@@ -287,6 +297,7 @@ class EnquiryIn(BaseModel):
     privacy_agreed: bool
     website: str | None = Field(default=None, max_length=500)
     custom_answers: dict[str, str | bool | list[str] | None] = Field(default_factory=dict)
+    website_attribution: WebsiteAttributionIn | None = None
 
 
 class EnquiryFormFieldIn(BaseModel):

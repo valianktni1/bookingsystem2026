@@ -115,7 +115,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.46-after-wedding", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.47-website-revenue-attribution", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1139,7 +1139,10 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
     if not payload.privacy_agreed:
         raise HTTPException(422, "Please agree to the privacy notice before submitting")
     template = website_enquiry_template(db)
-    core_answers = payload.model_dump(exclude={"website", "privacy_agreed", "custom_answers"}, mode="json")
+    core_answers = payload.model_dump(
+        exclude={"website", "privacy_agreed", "custom_answers", "website_attribution"},
+        mode="json",
+    )
     custom_answers, answer_snapshot = validate_enquiry_answers(
         template.config or {},
         {**core_answers, "privacy_agreed": payload.privacy_agreed},
@@ -1180,6 +1183,13 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                  "form_template_updated_at": template.updated_at.isoformat()}
     title = f"{payload.primary_first_name.strip()} & {payload.partner_first_name.strip()}"
     test_mode = testing_mode(db)
+    workflow_state = {
+        "source": "website_enquiry",
+        "received_at": datetime.now(timezone.utc).isoformat(),
+        **({"growth_attribution": payload.website_attribution.model_dump(mode="json")}
+           if payload.website_attribution else {}),
+        **({"test_email": test_mode["email"]} if test_mode["enabled"] else {}),
+    }
     booking = Booking(brand=Brand.WBM, kind=RecordKind.WEDDING, status=RecordStatus.ENQUIRY,
                       title=title, client_id=client.id, event_date=payload.event_date,
                       venue_or_project=payload.location.strip(), venue_address=payload.venue_address,
@@ -1187,8 +1197,7 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                       venue_lng=payload.venue_lng, package_name=payload.package_interest,
                       notes=payload.message.strip() if payload.message else None,
                       form_data={"website_enquiry": form_data}, is_test=test_mode["enabled"],
-                      workflow_state={"source": "website_enquiry", "received_at": datetime.now(timezone.utc).isoformat(),
-                                      **({"test_email": test_mode["email"]} if test_mode["enabled"] else {})})
+                      workflow_state=workflow_state)
     db.add(booking)
     db.flush()
     create_default_tasks(db, booking.id, booking.kind, booking.event_date)

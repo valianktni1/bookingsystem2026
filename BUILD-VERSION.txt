@@ -1,5 +1,12 @@
-BookingSystem2026 - After-wedding Workflow
-Build: 2026.09.10-after-wedding-v8.46
+BookingSystem2026 - Website Revenue Attribution
+Build: 2026.09.10-website-revenue-attribution-v8.47
+
+V8.47 website revenue attribution:
+- securely carries a consenting anonymous website visit into a native Booking enquiry
+- sends that verified visit reference through the existing Booking-to-Growth sync
+- reports real linked enquiries and confirmed booked value without email matching
+- sends only visit/source/campaign/first-page attribution; never form answers or dates
+- preserves every V8.46 after-wedding, weekday, quote and workflow change
 
 V8.46 after-wedding workflow:
 - adds one clear After the Wedding panel to each eligible WBM wedding
