@@ -224,7 +224,7 @@ def _request_json(path: str, *, method: str = "GET", body: dict | None = None) -
         "Accept": "application/json",
         "Content-Type": "application/json",
         "X-Integration-Key": settings.growth_integration_key or "",
-        "User-Agent": "WBM-Booking-System/8.47",
+        "User-Agent": "WBM-Booking-System/8.47.1",
     })
     try:
         with urlopen(request, timeout=20) as response:
@@ -364,7 +364,52 @@ def growth_availability(db: Session, start: date, end: date) -> dict:
             'packages': [{'id': p.id, 'name': p.name, 'price': str(p.price)} for p in packages]}
 
 
+def growth_year_totals(db: Session, year: int) -> dict:
+    """Return honest booked-work totals for one wedding year.
+
+    The Business Plan must never turn a failed connection into zero bookings.
+    Only real Weddings By Mark work that Booking considers won is included.
+    """
+    if not 2000 <= year <= 2100:
+        raise HTTPException(422, "Choose a year between 2000 and 2100")
+    start, end = date(year, 1, 1), date(year, 12, 31)
+    candidates = list(db.scalars(select(Booking).where(
+        Booking.brand == Brand.WBM,
+        Booking.kind == RecordKind.WEDDING,
+        Booking.is_test.is_(False),
+        Booking.archived_at.is_(None),
+        Booking.event_date >= start,
+        Booking.event_date <= end,
+    )).all())
+    won_statuses = {RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED}
+    bookings = [row for row in candidates if row.status != RecordStatus.CANCELLED
+                and (row.status in won_statuses or row.deposit_paid_date is not None)]
+    months = []
+    for month in range(1, 13):
+        rows = [row for row in bookings if row.event_date and row.event_date.month == month]
+        months.append({
+            "month": month,
+            "bookings": len(rows),
+            "booked_value": str(sum((Decimal(row.quoted_total or 0) for row in rows), Decimal("0.00"))),
+        })
+    return {
+        "year": year,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "bookings": len(bookings),
+        "booked_value": str(sum((Decimal(row.quoted_total or 0) for row in bookings), Decimal("0.00"))),
+        "months": months,
+        "scope": "All real Booking weddings",
+    }
+
+
 def register_growth_integration_routes(app: FastAPI) -> None:
+    @app.get("/api/integrations/growth/planning")
+    def yearly_planning_totals(year: int = Query(...),
+                               x_integration_key: str | None = Header(default=None),
+                               db: Session = Depends(get_db)):
+        _require_key(x_integration_key)
+        return growth_year_totals(db, year)
+
     @app.get("/api/integrations/growth/availability")
     def availability_range(start: date = Query(...), end: date = Query(...),
                            x_integration_key: str | None = Header(default=None),

@@ -153,7 +153,7 @@
 
   async function copyEmbed() {
     const origin = location.origin;
-    const code = `<iframe id="wbm-enquiry-form" src="${origin}/enquiry" style="width:100%;max-width:1040px;height:1600px;border:0" loading="lazy" title="Weddings By Mark enquiry form"></iframe>\n<script data-iframe-id="wbm-enquiry-form" src="${origin}/static/enquiry-embed.js?v=website-revenue-attribution-v8-47"></script>`;
+    const code = `<iframe id="wbm-enquiry-form" src="${origin}/enquiry" style="width:100%;max-width:1040px;height:1600px;border:0" loading="lazy" title="Weddings By Mark enquiry form"></iframe>\n<script data-iframe-id="wbm-enquiry-form" src="${origin}/static/enquiry-embed.js?v=growth-planning-bridge-v8-47-1"></script>`;
     await navigator.clipboard.writeText(code);
     toast("Website embed code copied");
   }

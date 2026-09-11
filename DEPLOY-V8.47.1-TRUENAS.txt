@@ -1,0 +1,27 @@
+BookingSystem2026 V8.47.1 - TrueNAS deployment
+
+This Dockge stack builds directly from the GitHub main branch. It is not a local
+Git checkout, so do not run git pull or try to execute this file on TrueNAS.
+
+First replace the GitHub Desktop repository contents with this release, commit,
+and push main. Then paste the following commands into the TrueNAS shell:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v8471-$(date +%Y%m%d-%H%M%S).dump"
+
+sudo sh -c "docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > '$BOOKING_BACKUP'"
+
+sudo test -s "$BOOKING_BACKUP"
+sudo docker exec -i bookingsystem2026-db pg_restore --list < "$BOOKING_BACKUP" > /dev/null
+sudo ls -lh "$BOOKING_BACKUP"
+
+sudo docker compose build --no-cache --pull app
+sudo docker compose up -d app
+sudo docker compose ps
+curl -fsS http://127.0.0.1:30049/api/health
+
+Expected build:
+2026.09.11-growth-planning-bridge-v8.47.1
+
+Deployment does not rotate a password or send an email.

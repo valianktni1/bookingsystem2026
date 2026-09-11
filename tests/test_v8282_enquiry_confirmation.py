@@ -36,7 +36,7 @@ def test_submission_notifies_the_parent_and_focuses_confirmation():
 def test_generated_embed_uses_cache_busted_confirmation_helper():
     app_js = read_static("app.js")
     builder_js = read_static("v897.js")
-    expected = "/static/enquiry-embed.js?v=website-revenue-attribution-v8-47"
+    expected = "/static/enquiry-embed.js?v=growth-planning-bridge-v8-47-1"
 
     assert expected in app_js
     assert expected in builder_js

@@ -1,9 +1,16 @@
-# Mark's Business Studio — Version 8.47
+# Mark's Business Studio — Version 8.47.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.47, including browser-history
+build includes every cumulative feature through V8.47.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.47.1 Growth planning bridge
+
+Growth can now securely request genuine Booking totals for a selected wedding
+year. The figures include only won Weddings By Mark work and exclude tests,
+cancellations, archived records, open enquiries and Ivory Digital jobs. This
+restores the Business Plan without guessing zero totals or changing any booking.
 
 ## Version 8.47 website revenue attribution
 

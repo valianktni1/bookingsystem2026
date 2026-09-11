@@ -1,5 +1,12 @@
-BookingSystem2026 - Website Revenue Attribution
-Build: 2026.09.10-website-revenue-attribution-v8.47
+BookingSystem2026 - Growth Planning Bridge
+Build: 2026.09.11-growth-planning-bridge-v8.47.1
+
+V8.47.1 Growth planning bridge:
+- restores the authenticated yearly booking-count and booked-value totals required
+  by the Growth Business Plan
+- counts only genuine won Weddings By Mark work and excludes tests, cancellations,
+  archived records, open enquiries and Ivory Digital jobs
+- preserves every V8.47 website attribution and V8.46 workflow change
 
 V8.47 website revenue attribution:
 - securely carries a consenting anonymous website visit into a native Booking enquiry
