@@ -1,9 +1,20 @@
-# Mark's Business Studio — Version 8.48
+# Mark's Business Studio — Version 8.48.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.48, including browser-history
+build includes every cumulative feature through V8.48.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.48.1 friendly invoice filename hotfix
+
+Invoices and receipts opened or downloaded from the secure preview now retain a
+recognisable filename containing the couple, wedding date and WBM invoice number.
+For example: `Marnie-and-Robert-30-October-2026-WBM02519-Invoice.pdf`.
+
+The secure in-app preview remains unchanged. The hotfix prevents Samsung and
+other mobile PDF viewers from substituting a temporary UUID when **Open PDF** is
+used. It changes no PDF content, invoice numbers, payments, emails, Accounts
+records, reminders or Google Calendar events.
 
 ## Version 8.48 exceptional payment arrangements
 

@@ -1,5 +1,5 @@
-BookingSystem2026 - Exceptional Payment Arrangements
-Build: 2026.09.13-payment-arrangement-v8.48
+BookingSystem2026 - Friendly Invoice Filenames
+Build: 2026.09.14-friendly-invoice-filenames-v8.48.1
 
 V8.48 exceptional payment arrangements:
 - adds a clear Payments control to secure an accepted wedding when Mark has

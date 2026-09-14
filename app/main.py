@@ -4,6 +4,7 @@ import mimetypes
 import re
 import secrets
 import shutil
+import unicodedata
 import uuid
 from collections import Counter
 from contextlib import suppress
@@ -120,7 +121,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.48-payment-arrangements", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.48.1-friendly-invoice-filenames", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -2246,6 +2247,25 @@ def full_invoice(db: Session, invoice_id: str, *, for_update: bool = False) -> I
     return invoice
 
 
+def _pdf_filename_part(value: str | None, fallback: str) -> str:
+    """Return a readable, header-safe filename part without browser UUIDs."""
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = text.encode("ascii", "ignore").decode("ascii").replace("&", " and ")
+    text = re.sub(r"[^A-Za-z0-9]+", "-", text).strip("-")
+    return text or fallback
+
+
+def invoice_download_filename(invoice: Invoice, *, receipt: bool = False) -> str:
+    """Name invoice downloads using the couple/project, date and invoice number."""
+    booking = invoice.booking
+    title = _pdf_filename_part(booking.title if booking else None, "Client")
+    event_date = booking.event_date if booking else None
+    date_part = event_date.strftime("%d-%B-%Y") if event_date else invoice.issue_date.strftime("%d-%B-%Y")
+    number = _pdf_filename_part(invoice.number, "Invoice")
+    document_type = "Receipt" if receipt else "Invoice"
+    return f"{title}-{date_part}-{number}-{document_type}.pdf"
+
+
 def invoice_manual_amendments(invoice: Invoice) -> list[dict]:
     return [
         dict(item) for item in (invoice.line_items or [])
@@ -2652,7 +2672,7 @@ def download_invoice_pdf(invoice_id: str, inline: bool = Query(False),
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile), media_type="application/pdf",
                     headers={"Content-Disposition":
-                             f'{"inline" if inline else "attachment"}; filename="{invoice.number}.pdf"'})
+                             f'{"inline" if inline else "attachment"}; filename="{invoice_download_filename(invoice)}"'})
 
 
 @app.get("/api/invoices/{invoice_id}/receipt.pdf")
@@ -2664,7 +2684,7 @@ def download_receipt_pdf(invoice_id: str, inline: bool = Query(False),
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile, receipt=True), media_type="application/pdf",
                     headers={"Content-Disposition":
-                             f'{"inline" if inline else "attachment"}; filename="{invoice.number}-receipt.pdf"'})
+                             f'{"inline" if inline else "attachment"}; filename="{invoice_download_filename(invoice, receipt=True)}"'})
 
 
 @app.get("/api/documents")
@@ -3646,7 +3666,7 @@ def public_invoice_pdf(token: str, invoice_id: str, inline: bool = Query(False),
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile), media_type="application/pdf",
                     headers={"Content-Disposition":
-                             f'{"inline" if inline else "attachment"}; filename="{invoice.number}.pdf"'})
+                             f'{"inline" if inline else "attachment"}; filename="{invoice_download_filename(invoice)}"'})
 
 
 @app.get("/api/client/{token}/invoices/{invoice_id}/receipt.pdf")
@@ -3658,7 +3678,7 @@ def public_receipt_pdf(token: str, invoice_id: str, inline: bool = Query(False),
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
     return Response(invoice_pdf(invoice, profile, receipt=True), media_type="application/pdf",
                     headers={"Content-Disposition":
-                             f'{"inline" if inline else "attachment"}; filename="{invoice.number}-receipt.pdf"'})
+                             f'{"inline" if inline else "attachment"}; filename="{invoice_download_filename(invoice, receipt=True)}"'})
 
 
 @app.get("/api/client/{token}/documents/{document_id}")

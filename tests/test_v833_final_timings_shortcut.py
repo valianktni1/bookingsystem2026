@@ -29,10 +29,10 @@ def test_v833_build_and_cache_markers_are_consistent():
     main = (ROOT / "app/main.py").read_text()
     build = (ROOT / "BUILD-VERSION.txt").read_text()
 
-    expected = "2026.09.13-payment-arrangement-v8.48"
+    expected = "2026.09.14-friendly-invoice-filenames-v8.48.1"
     assert expected in backup
     assert expected in build
-    assert 'version="2.8.48-payment-arrangements"' in main
+    assert 'version="2.8.48.1-friendly-invoice-filenames"' in main
     assert "/static/v820.js?v=final-timings-pdf-download-v8-33-1" in index
     assert "/static/v832.js?v=email-shortcut-v8-42" in index
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.48" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.48.1" in index

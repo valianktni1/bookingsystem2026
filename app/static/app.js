@@ -152,6 +152,13 @@ async function authenticatedPdf(url){
   if(!(response.headers.get("content-type")||"").includes("application/pdf"))throw new Error("The server did not return a PDF. Refresh and sign in again.");
   return URL.createObjectURL(await response.blob());
 }
+function pdfDownloadFilename(response,fallback){
+  const disposition=response.headers.get("content-disposition")||"";
+  const utf8=disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if(utf8){try{return decodeURIComponent(utf8[1].trim().replace(/^\"|\"$/g,""))}catch(_){}}
+  const plain=disposition.match(/filename=\"([^\"]+)\"/i)||disposition.match(/filename=([^;]+)/i);
+  return (plain?.[1]||fallback).trim().replace(/^\"|\"$/g,"");
+}
 async function showPdfPreview(title,previewUrl,downloadUrl=previewUrl){
   const modal=$("#modal"),content=$("#modal-content");
   modal.classList.add("pdf-preview-modal");
@@ -163,7 +170,7 @@ async function showPdfPreview(title,previewUrl,downloadUrl=previewUrl){
     if(!target.isConnected){URL.revokeObjectURL(blobUrl);return;}
     const filename=title.replace(/[^a-zA-Z0-9._-]/g,"-")+".pdf";
     content.querySelector(".modal-head p").textContent="Your document is ready.";
-    target.innerHTML=`<div class="pdf-preview-fallback"><span>On mobile, tap Open PDF if the preview is blank.</span><a class="primary" href="${blobUrl}" target="_blank" rel="noopener">Open PDF</a><a class="secondary" href="${blobUrl}" download="${attr(filename)}">Download PDF</a></div><iframe title="${attr(title)}" src="${blobUrl}"></iframe>`;
+    target.innerHTML=`<div class="pdf-preview-fallback"><span>On mobile, tap Open PDF if the preview is blank.</span><a class="primary" href="${attr(previewUrl)}" target="_blank" rel="noopener">Open PDF</a><a class="secondary" href="${attr(downloadUrl)}" download="${attr(filename)}">Download PDF</a></div><iframe title="${attr(title)}" src="${blobUrl}"></iframe>`;
     // Keep the blob alive until this page closes so mobile viewers can finish reading it.
   }catch(error){if(target.isConnected)target.textContent=error.message;toast(error.message,"error");}
 }
@@ -171,8 +178,9 @@ document.addEventListener("click",async event=>{
   const link=event.target.closest("a[href]");if(!link)return;
   const url=new URL(link.href,location.href);
   if(url.origin!==location.origin||!/^\/api\/invoices\/[^/]+\/(pdf|receipt\.pdf)$/.test(url.pathname))return;
+  if(url.searchParams.get("inline")==="true")return;
   event.preventDefault();
-  try{const blobUrl=await authenticatedPdf(url.href);const anchor=document.createElement("a");anchor.href=blobUrl;anchor.download=url.pathname.includes("receipt")?"receipt.pdf":"invoice.pdf";document.body.append(anchor);anchor.click();anchor.remove();}catch(error){toast(error.message,"error");}
+  try{const response=await fetch(url.href,{credentials:"same-origin",cache:"no-store"});if(response.status===401){showLogin("Your session expired. Sign in again, then reopen the invoice.");throw new Error("Please sign in again to download the invoice")}if(!response.ok)throw new Error("Unable to download the document. Please try again.");if(!(response.headers.get("content-type")||"").includes("application/pdf"))throw new Error("The server did not return a PDF. Refresh and sign in again.");const blobUrl=URL.createObjectURL(await response.blob());const anchor=document.createElement("a");anchor.href=blobUrl;anchor.download=pdfDownloadFilename(response,url.pathname.includes("receipt")?"receipt.pdf":"invoice.pdf");document.body.append(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(blobUrl),60000);}catch(error){toast(error.message,"error");}
 },true);
 async function emailInvoice(invoiceId){
   try{
