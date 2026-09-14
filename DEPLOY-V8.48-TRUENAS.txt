@@ -1,0 +1,23 @@
+BookingSystem2026 V8.48 — TrueNAS deployment
+
+Run each command in the TrueNAS shell after this repository has been committed
+and pulled into /mnt/apps/dockge/data/bookingsystem2026.
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+
+BOOKING_BACKUP="/mnt/apps/dockge/data/bookingsystem2026/bookingapp-before-v848-$(date +%Y%m%d-%H%M%S).dump"
+
+sudo sh -c "docker exec bookingsystem2026-db pg_dump -U bookingapp -d bookingapp -Fc > '$BOOKING_BACKUP'"
+
+sudo ls -lh "$BOOKING_BACKUP"
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml build --no-cache app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml up -d app
+
+sudo docker compose -f /mnt/apps/dockge/data/bookingsystem2026/compose.yaml ps
+
+curl -fsS https://booking.weddingsbymark.uk/api/health && echo
+
+Expected build:
+2026.09.13-payment-arrangement-v8.48

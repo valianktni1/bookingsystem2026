@@ -1,9 +1,24 @@
-# Mark's Business Studio — Version 8.47.1
+# Mark's Business Studio — Version 8.48
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.47.1, including browser-history
+build includes every cumulative feature through V8.48, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.48 exceptional payment arrangements
+
+V8.48 adds a deliberate, administrator-only way to secure one genuine wedding
+when Mark has agreed in writing that payment can be made later. It creates no
+payment record. Instead it records the agreed date and private reason, updates
+the live invoice dates, confirms the booking, protects the public availability
+checker and safely creates the normal Google Calendar wedding event.
+
+Payment reminders are paused by default for the arrangement while the ordinary
+120-day and 30-day wedding check-ins continue. A real payment completes the
+exception automatically. Deleting that payment reactivates the protection, and
+removing the arrangement deliberately restores the prior provisional state and
+invoice dates without overwriting any later manual changes. All actions are
+audited and the feature requires typed confirmation.
 
 ## Version 8.47.1 Growth planning bridge
 

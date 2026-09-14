@@ -52,6 +52,10 @@ from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, 
                      PackageOption, Payment,
                      Quote, RecordKind, RecordStatus, ReminderLog, SystemSetting, Task)
 from .owner_notifications import OWNER_NOTIFICATION_KEYS, send_owner_notification_safely
+from .payment_arrangements import (
+    active_payment_arrangement, arrangement_json, complete_arrangement_after_payment,
+    reactivate_arrangement_after_payment_deletion,
+)
 from .pdf import contract_acceptance_pdf, final_timings_pdf, invoice_pdf
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
@@ -70,6 +74,7 @@ from .v84_routes import (automations_allowed, final_details_unlocked,
                          quote_followup_paused, register_v84_routes)
 from .v845_routes import apply_quote_reply_safety, register_v845_routes
 from .v846_routes import after_wedding_readiness, register_v846_routes
+from .v848_routes import register_v848_routes
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -115,7 +120,7 @@ async def lifespan(_: FastAPI):
         await growth_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.47.1-growth-planning-bridge", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.48-payment-arrangements", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -765,6 +770,8 @@ def journey_stages(db: Session, bookings: list[Booking]) -> dict[str, dict]:
         has_payment = bool(booking.deposit_paid_date) or any(
             Decimal(invoice.paid or 0) > 0 for invoice in booking.invoices
         )
+        secured_by_arrangement = active_payment_arrangement(booking)
+        date_secured = has_payment or secured_by_arrangement
         booking_form_complete = booking.id in booking_form_ids
         contract = contracts.get(booking.id)
         agreement_complete = bool(contract and (
@@ -773,17 +780,23 @@ def journey_stages(db: Session, bookings: list[Booking]) -> dict[str, dict]:
         final_call = next((task for task in booking.tasks
                            if task.workflow_key == "wbm_final_details_call"), None)
 
-        if has_payment and booking_form_complete and agreement_complete:
+        if date_secured and booking_form_complete and agreement_complete:
             if final_call and final_call.completed:
                 result[booking.id] = {
                     "key": "ready", "label": "Ready for wedding", "tone": "success",
-                    "help": "Payment, forms, agreement and the final-details call are complete.",
+                    "help": "Date security, forms, agreement and the final-details call are complete.",
                 }
             else:
                 result[booking.id] = {
                     "key": "details_complete", "label": "Booking details complete", "tone": "success",
-                    "help": "Payment, Wedding Booking Form and agreement are complete; final preparations are still ahead.",
+                    "help": "The date, Wedding Booking Form and agreement are complete; final preparations are still ahead.",
                 }
+        elif secured_by_arrangement:
+            result[booking.id] = {
+                "key": "secured_by_arrangement",
+                "label": "Secured · payment arranged", "tone": "success",
+                "help": "The date is secured by a recorded written arrangement; no payment has been recorded yet.",
+            }
         elif has_payment:
             result[booking.id] = {
                 "key": "secured", "label": "Secured", "tone": "success",
@@ -833,6 +846,7 @@ def booking_json(item: Booking, full: bool = False, activity: list[AuditLog] | N
             "legacy_source": item.legacy_source, "legacy_id": item.legacy_id,
             "legacy_import_batch": item.legacy_import_batch,
             "automation_suppressed": item.automation_suppressed,
+            "payment_arrangement": arrangement_json(item),
             "is_test": item.is_test,
             "archived_at": item.archived_at.isoformat() if item.archived_at else None,
             "created_at": item.created_at.isoformat(), "updated_at": item.updated_at.isoformat(),
@@ -933,7 +947,21 @@ def website_date_is_booked(db: Session, wedding_date: date) -> bool:
         ]),
         or_(Booking.legacy_source.is_not(None), genuine_payment),
     ).limit(1))
-    return booking_id is not None
+    if booking_id is not None:
+        return True
+    arranged = db.scalars(select(Booking).where(
+        Booking.brand == Brand.WBM,
+        Booking.kind == RecordKind.WEDDING,
+        Booking.event_date == wedding_date,
+        Booking.is_test.is_(False),
+        Booking.legacy_source.is_(None),
+        Booking.status.in_([
+            RecordStatus.CONFIRMED,
+            RecordStatus.IN_PROGRESS,
+            RecordStatus.COMPLETED,
+        ]),
+    )).all()
+    return any(active_payment_arrangement(booking) for booking in arranged)
 
 
 SAME_DATE_ENQUIRY_STATUSES = (RecordStatus.ENQUIRY, RecordStatus.QUOTED)
@@ -2171,7 +2199,8 @@ def list_invoices(brand: Brand | None = None, archived: bool = False,
 
 
 @app.post("/api/bookings/{booking_id}/invoices", status_code=201)
-def create_invoice(booking_id: str, payload: InvoiceIn, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+def create_invoice(booking_id: str, payload: InvoiceIn, admin: Admin = Depends(current_admin),
+                   db: Session = Depends(get_db)):
     booking = db.get(Booking, booking_id)
     if not booking:
         raise HTTPException(404, "Record not found")
@@ -2187,13 +2216,18 @@ def create_invoice(booking_id: str, payload: InvoiceIn, _: Admin = Depends(curre
         booking.deposit_amount = max(booking.deposit_amount or Decimal("0"), payload.paid)
         booking.deposit_paid_date = booking.deposit_paid_date or payload.issue_date
         auto_confirmed = confirm_when_paid(booking)
+        arrangement_completed = complete_arrangement_after_payment(
+            booking, booking.deposit_paid_date or payload.issue_date, admin.email
+        )
         db.add(Payment(invoice_id=invoice.id, amount=payload.paid,
                        paid_date=booking.deposit_paid_date or payload.issue_date,
                        payment_type="bank_transfer", reference=number, notes="Opening payment"))
     else:
         auto_confirmed = False
+        arrangement_completed = False
     audit(db, "create_invoice", "booking", booking.id,
-          {"number": number, "auto_confirmed": auto_confirmed})
+          {"number": number, "auto_confirmed": auto_confirmed,
+           "payment_arrangement_completed": arrangement_completed})
     db.commit()
     return invoice_json(full_invoice(db, invoice.id))
 
@@ -2384,7 +2418,8 @@ def change_invoice_due_date(invoice_id: str, payload: InvoiceDueDatePatch,
 
 
 @app.post("/api/invoices/{invoice_id}/payments", status_code=201)
-def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+def create_payment(invoice_id: str, payload: PaymentIn, admin: Admin = Depends(current_admin),
+                   db: Session = Depends(get_db)):
     # Lock the invoice row so a payment and an invoice amendment cannot race
     # each other in two browser tabs and leave an incorrect balance/status.
     invoice = full_invoice(db, invoice_id, for_update=True)
@@ -2397,6 +2432,7 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
     invoice.paid += payload.amount
     invoice.status = invoice_status(invoice.total, invoice.paid)
     auto_confirmed = False
+    arrangement_completed = False
     if invoice.booking:
         if not invoice.booking.deposit_paid_date:
             invoice.booking.deposit_paid_date = payload.paid_date
@@ -2405,8 +2441,19 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
         # Any first genuine payment secures an enquiry, even when it is
         # only part of the requested booking fee (for example £50 of £100).
         auto_confirmed = confirm_when_paid(invoice.booking)
+        arrangement_completed = complete_arrangement_after_payment(
+            invoice.booking, payload.paid_date, admin.email
+        )
     audit(db, "record_payment", "booking", invoice.booking_id,
-          {"invoice": invoice.number, "amount": money(payload.amount), "auto_confirmed": auto_confirmed})
+          {"invoice": invoice.number, "amount": money(payload.amount),
+           "auto_confirmed": auto_confirmed,
+           "payment_arrangement_completed": arrangement_completed})
+    if arrangement_completed:
+        audit(db, "complete_payment_arrangement", "booking", invoice.booking_id, {
+            "invoice": invoice.number,
+            "first_payment_date": payload.paid_date.isoformat(),
+            "payment_record_created": True,
+        })
     db.commit()
 
     # Refresh relationship collections so the response immediately contains
@@ -2486,7 +2533,8 @@ def create_payment(invoice_id: str, payload: PaymentIn, _: Admin = Depends(curre
 
 
 @app.delete("/api/payments/{payment_id}", status_code=204)
-def delete_payment(payment_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+def delete_payment(payment_id: str, admin: Admin = Depends(current_admin),
+                   db: Session = Depends(get_db)):
     payment = db.get(Payment, payment_id)
     if not payment:
         raise HTTPException(404, "Payment not found")
@@ -2504,9 +2552,15 @@ def delete_payment(payment_id: str, _: Admin = Depends(current_admin), db: Sessi
         Invoice, Invoice.id == Payment.invoice_id
     ).where(Invoice.booking_id == invoice.booking_id).order_by(Payment.paid_date).limit(1))
     state_reversed = False
+    arrangement_reactivated = False
     if booking:
         booking.deposit_paid_date = remaining_payment_date
+        if remaining_payment_date is None:
+            arrangement_reactivated = reactivate_arrangement_after_payment_deletion(
+                booking, admin.email
+            )
         if (remaining_payment_date is None
+                and not arrangement_reactivated
                 and not booking.legacy_source
                 and booking.kind == RecordKind.WEDDING
                 and booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)):
@@ -2519,6 +2573,7 @@ def delete_payment(payment_id: str, _: Admin = Depends(current_admin), db: Sessi
         "invoice": invoice.number,
         "state_reversed_to": booking.status.value if state_reversed and booking else None,
         "remaining_payment_date": remaining_payment_date.isoformat() if remaining_payment_date else None,
+        "payment_arrangement_reactivated": arrangement_reactivated,
     })
     db.commit()
     if booking:
@@ -4396,7 +4451,7 @@ def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str
             elif 9 <= days_since_quote <= 16 and not quote_followup_paused(booking, "quote_followup_final"):
                 reminders.append(("quote_followup_final", quote_sent_at.date() + timedelta(days=9)))
 
-    if accepted_quote:
+    if accepted_quote and not active_payment_arrangement(booking):
         accepted_invoice = next(
             (invoice for invoice in booking.invoices if invoice.id == accepted_quote.invoice_id),
             None,
@@ -4419,7 +4474,11 @@ def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str
         invoice.status not in ("void", "cancelled") and invoice.paid < invoice.total
         for invoice in booking.invoices
     )
-    if booking.balance_due_date and has_balance:
+    arrangement = arrangement_json(booking)
+    payment_reminders_paused = bool(
+        arrangement and arrangement["active"] and arrangement["pause_payment_reminders"]
+    )
+    if booking.balance_due_date and has_balance and not payment_reminders_paused:
         days_to_balance = (booking.balance_due_date - today).days
         if 2 <= days_to_balance <= 7:
             reminders.append(("balance_due_7", booking.balance_due_date - timedelta(days=7)))
@@ -4596,6 +4655,7 @@ register_v845_routes(
     sync_final_call_task=sync_final_details_call_task,
 )
 register_v846_routes(app)
+register_v848_routes(app)
 register_date_block_routes(app)
 register_google_calendar_routes(app)
 register_mail_routes(app)

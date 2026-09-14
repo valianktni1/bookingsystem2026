@@ -24,6 +24,7 @@ from .config import get_settings
 from .database import get_db
 from .models import (Admin, AuditLog, Booking, Brand, DateBlock, Invoice, Payment, Quote,
                      RecordKind, RecordStatus, SystemSetting)
+from .payment_arrangements import active_payment_arrangement
 from .security import current_admin
 
 settings = get_settings()
@@ -143,13 +144,14 @@ def _should_have_event(db: Session, booking: Booking) -> bool:
     if not _native_wedding(booking) or booking.status == RecordStatus.CANCELLED:
         return False
     # Selecting a package creates a provisional invoice; it does not secure
-    # the date. A native wedding reaches Google only after a genuine payment
-    # exists. Imported Studio Ninja records are intentionally outside this sync.
+    # the date. Ordinarily a native wedding reaches Google only after a genuine
+    # payment exists. The sole exception is an explicit, audited pay-later
+    # arrangement made by Mark for that individual couple.
     has_payment = db.scalar(select(Payment.id).join(
         Invoice, Invoice.id == Payment.invoice_id
     ).where(Invoice.booking_id == booking.id).limit(1)) is not None
     return bool(
-        has_payment
+        (has_payment or active_payment_arrangement(booking))
         and booking.status in (
             RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED
         )

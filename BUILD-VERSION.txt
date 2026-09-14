@@ -1,5 +1,19 @@
-BookingSystem2026 - Growth Planning Bridge
-Build: 2026.09.11-growth-planning-bridge-v8.47.1
+BookingSystem2026 - Exceptional Payment Arrangements
+Build: 2026.09.13-payment-arrangement-v8.48
+
+V8.48 exceptional payment arrangements:
+- adds a clear Payments control to secure an accepted wedding when Mark has
+  genuinely agreed in writing that the couple can pay later
+- never creates a false payment or deposit-paid date
+- protects the website date checker and safely adds the wedding to Google Calendar
+- updates the live invoice to show the agreed date and that no payment was received
+- pauses that couple's payment reminders by default while wedding check-ins continue
+- requires a private reason and exact typed confirmation, with a permanent audit trail
+- completes the exception automatically when real payment arrives and safely
+  reactivates it if that only payment is deleted as a correction
+- allows deliberate reversal back to the previous provisional state and invoice dates
+- preserves the V8.47.1 Growth planning bridge and V8.47 revenue attribution
+- uses the existing workflow JSON, so no database migration is required
 
 V8.47.1 Growth planning bridge:
 - restores the authenticated yearly booking-count and booked-value totals required

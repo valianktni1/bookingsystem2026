@@ -111,7 +111,7 @@ def test_complete_backup_is_private_readable_and_complete():
         assert "program/requirements.txt" in names
 
         manifest = json.loads(archive.read("manifest.json"))
-        assert manifest["application_build"] == "2026.09.11-growth-planning-bridge-v8.47.1"
+        assert manifest["application_build"] == "2026.09.13-payment-arrangement-v8.48"
         assert manifest["table_counts"]["bookings"] == 1
         assert manifest["table_counts"]["invoices"] == 1
         assert manifest["table_counts"]["payments"] == 1
