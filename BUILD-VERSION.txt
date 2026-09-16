@@ -1,5 +1,18 @@
-BookingSystem2026 - Friendly Invoice Filenames
-Build: 2026.09.14-friendly-invoice-filenames-v8.48.1
+BookingSystem2026 - SMS Centre
+Build: 2026.09.15-sms-centre-v8.49
+
+V8.49 SMS centre:
+- adds a clear Texts tab and direct Text shortcut to every client workspace
+- integrates The SMS Works without storing the API token in the database or UI
+- retains outbound wording, provider references, failures and delivery evidence
+- attaches replies to the correct booking using protected message metadata
+- creates a visible private task when a couple replies or delivery fails
+- redirects TEST-booking texts only to Mark's nominated SMS test number
+- includes seven optional automatic text types with independent per-couple pauses
+- ships every automatic SMS template inactive and the global SMS switches off
+- leaves the existing email reminder engine, invoices, payments, Google Calendar,
+  Accounts and Growth integrations unchanged
+- adds only the new sms_templates and sms_messages database tables safely
 
 V8.48 exceptional payment arrangements:
 - adds a clear Payments control to secure an accepted wedding when Mark has

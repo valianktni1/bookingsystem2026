@@ -1,6 +1,6 @@
 /* V8.44 - one calm, consistent booking workspace on desktop and mobile. */
 .v844-workspace-shell{display:block;margin-top:13px}
-.record-workspace-tabs.v844-tabs{position:sticky;z-index:12;top:0;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin:0;border:1px solid #d7e1e2;border-radius:14px 14px 0 0;background:#fff;box-shadow:0 8px 22px #102b3412;overflow:hidden}
+.record-workspace-tabs.v844-tabs{position:sticky;z-index:12;top:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin:0;border:1px solid #d7e1e2;border-radius:14px 14px 0 0;background:#fff;box-shadow:0 8px 22px #102b3412;overflow:hidden}
 .record-workspace-tabs.v844-tabs button{min-width:0;min-height:72px;display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 10px;border:0;border-right:1px solid #e7eded;border-bottom:4px solid transparent;background:#fff;color:#617479;text-align:left;transition:background .15s ease,color .15s ease,border-color .15s ease}
 .record-workspace-tabs.v844-tabs button:last-child{border-right:0}
 .record-workspace-tabs.v844-tabs button:hover{background:#f5faf9;color:#164d52}
@@ -18,10 +18,10 @@
 
 @media(max-width:760px){
   .v844-workspace-shell{margin-top:10px}
-  .record-workspace-tabs.v844-tabs{position:sticky;top:0;grid-template-columns:repeat(3,minmax(0,1fr));border-radius:14px 14px 0 0}
+  .record-workspace-tabs.v844-tabs{position:sticky;top:0;grid-template-columns:repeat(4,minmax(0,1fr));border-radius:14px 14px 0 0}
   .record-workspace-tabs.v844-tabs button{min-height:68px;justify-content:flex-start;gap:8px;padding:9px 10px;border-right:1px solid #e3ebeb;border-bottom:1px solid #e3ebeb}
-  .record-workspace-tabs.v844-tabs button:nth-child(3n){border-right:0}
-  .record-workspace-tabs.v844-tabs button:nth-child(n+4){border-bottom:4px solid transparent}
+  .record-workspace-tabs.v844-tabs button:nth-child(4n){border-right:0}
+  .record-workspace-tabs.v844-tabs button:nth-child(n+5){border-bottom:4px solid transparent}
   .record-workspace-tabs.v844-tabs button.active{border-bottom-color:#15776f}
   .record-workspace-tabs.v844-tabs button>i{width:31px;height:31px;border-radius:9px;font-size:15px}
   .record-workspace-tabs.v844-tabs strong{font-size:13px}.record-workspace-tabs.v844-tabs small{display:none}

@@ -10,7 +10,7 @@ from .enquiry_forms import default_enquiry_form
 from .booking_forms import default_booking_form
 from .models import (AddOnOption, Admin, Booking, Brand, BusinessProfile, Client, ContractTemplate,
                      EmailTemplate, FormTemplate, Invoice, InvoiceCounter, PackageOption, Quote, RecordKind, RecordStatus,
-                     SystemSetting, Task)
+                     SmsTemplate, SystemSetting, Task)
 from .security import hash_password
 from .services import create_default_tasks, sync_final_details_call_task
 
@@ -303,6 +303,73 @@ A £150 deposit secures your date."""),
     for obsolete in db.scalars(select(EmailTemplate).where(
             EmailTemplate.template_key == "final_questionnaire")).all():
         obsolete.is_active = False
+
+    # SMS is a separate opt-in channel. The ordinary manual template is ready
+    # to use once the provider is configured; every automatic type starts off
+    # inactive so an upgrade can never text a real couple unexpectedly.
+    sms_template_rows = {
+        "manual_message": (
+            "General text message",
+            "Hi {client_first_name}, just a quick message from Mark at Weddings By Mark. ",
+            False,
+            True,
+        ),
+        "quote_followup_1": (
+            "Quote check - next day",
+            "Hi {client_first_name}, just checking my wedding quote reached you safely. If not, check junk or contact me and I can resend it. Mark, Weddings By Mark",
+            True,
+            False,
+        ),
+        "quote_followup_final": (
+            "Quote final check - nine days",
+            "Hi {client_first_name}, one final check that you received your wedding quote. If you have questions, please contact me. Mark, Weddings By Mark",
+            True,
+            False,
+        ),
+        "deposit_due_1": (
+            "Booking fee due",
+            "Hi {client_first_name}, a friendly reminder that your wedding booking fee is due. Your payment reference is {payment_reference}. Thanks, Mark",
+            True,
+            False,
+        ),
+        "check_in_120": (
+            "120-day wedding check-in",
+            "Hi {client_first_name}, your wedding is getting closer, so I wanted to check everything is going well. Contact me if anything has changed. Mark",
+            True,
+            False,
+        ),
+        "check_in_30": (
+            "30-day final timings check-in",
+            "Hi {client_first_name}, your wedding is one month away. Please check your email for the Final Wedding Timings form. Thanks, Mark",
+            True,
+            False,
+        ),
+        "balance_due_7": (
+            "Balance reminder - seven days",
+            "Hi {client_first_name}, a friendly reminder that your wedding balance is due on {balance_due_date}. Reference: {payment_reference}. Thanks, Mark",
+            True,
+            False,
+        ),
+        "balance_due_1": (
+            "Balance reminder - day before",
+            "Hi {client_first_name}, a quick reminder that your wedding balance is due tomorrow. Reference: {payment_reference}. Thanks, Mark",
+            True,
+            False,
+        ),
+    }
+    for key, (name, body, automatic, active) in sms_template_rows.items():
+        if not db.scalar(select(SmsTemplate.id).where(
+            SmsTemplate.brand == Brand.WBM,
+            SmsTemplate.template_key == key,
+        ).limit(1)):
+            db.add(SmsTemplate(
+                brand=Brand.WBM,
+                template_key=key,
+                display_name=name,
+                body=body,
+                is_automatic=automatic,
+                is_active=active,
+            ))
 
     # Give every active upcoming wedding one private phone-call reminder.
     # This creates no portal form and sends no client email, including for

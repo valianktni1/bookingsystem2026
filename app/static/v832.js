@@ -16,6 +16,7 @@
 
     header.insertAdjacentHTML("afterend", `<nav class="v832-quick-actions" aria-label="Most-used booking actions">
       ${quickAction("✉", "Emails", "email")}
+      ${record.client.phone ? quickAction("▣", "Text", "text") : quickAction("▣", "Text", "text", "disabled aria-disabled=\"true\"")}
       ${record.client.phone ? quickAction("☎", "Call", "call") : quickAction("☎", "Call", "call", "disabled aria-disabled=\"true\"")}
       ${quickAction("£", "Invoice", "invoice")}
       ${record.kind === "wedding" ? quickAction("◷", "Final timings", "timings") : quickAction("?", "Questionnaire", "forms")}
@@ -26,6 +27,7 @@
     $$('[data-v832-action]', drawer).forEach(button => button.onclick = () => {
       const action = button.dataset.v832Action;
       if (action === "email") selectRecordTab(record, "Emails", true);
+      else if (action === "text" && record.client.phone) selectRecordTab(record, "Texts", true);
       else if (action === "call" && record.client.phone) location.href = `tel:${record.client.phone}`;
       else if (action === "invoice") selectRecordTab(record, "Payments", true);
       else if (action === "timings") window.openFinalTimingsRecord?.(record);

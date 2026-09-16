@@ -1,9 +1,27 @@
-# Mark's Business Studio — Version 8.48.1
+# Mark's Business Studio — Version 8.49
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.48.1, including browser-history
+build includes every cumulative feature through V8.49, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.49 SMS centre
+
+Each booking now has a clear **Texts** tab and a direct **Text** shortcut on
+desktop and mobile. It sends through The SMS Works, retains the exact wording,
+provider message reference and delivery state, and can attach incoming replies
+to the correct booking when an SMS Works virtual reply number is configured.
+
+SMS is deliberately disabled by default. The API token remains in the private
+TrueNAS environment and is never stored in the database, returned to the
+browser or included in the complete in-app backup. TEST bookings can only text
+the separate `SMS_TEST_NUMBER`; they cannot text the saved client number.
+
+Seven optional automatic SMS templates mirror the useful points in the email
+journey. Every template starts inactive, the global automatic-SMS switch starts
+off, and every couple has a separate pause switch for every text. Existing email
+reminders are independent and unchanged. Studio Ninja imports remain automatic-
+SMS protected but can be texted manually after Mark reviews the exact message.
 
 ## Version 8.48.1 friendly invoice filename hotfix
 

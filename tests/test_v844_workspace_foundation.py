@@ -23,7 +23,7 @@ def test_v844_assets_load_last_and_define_one_workspace_contract():
     assert 'else if (selected === "Files") renderRecordDocuments(record, body);' in script
     assert "renderJourneyV844" in script
     assert "renderFormsAndAgreement: renderFormsAndAgreementV895" in legacy_workspace
-    assert "grid-template-columns:repeat(3,minmax(0,1fr))" in css
+    assert "grid-template-columns:repeat(4,minmax(0,1fr))" in css
 
 
 def test_v844_runtime_routes_each_visible_tab_to_the_correct_renderer():
@@ -59,7 +59,7 @@ function button(tab) {
     setAttribute(name, value) { this.attributes[name] = String(value); },
   };
 }
-const buttons = ["Overview", "Journey", "Emails", "Payments", "Files", "Activity"].map(button);
+const buttons = ["Overview", "Journey", "Emails", "Texts", "Payments", "Files", "Activity"].map(button);
 const location = {
   href: "https://booking.example/bookings/booking-1/overview?brand=wbm",
   pathname: "/bookings/booking-1/overview",
@@ -105,13 +105,16 @@ context.window = context;
 context.WBMWorkspaceV895 = {
   renderFormsAndAgreement: () => calls.push("forms"),
 };
+context.WBMSmsV849 = {
+  render: async () => calls.push("texts"),
+};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), context, {filename: process.argv[1]});
 
 (async () => {
   assert.strictEqual(context.WBMWorkspaceV844.version, "8.44");
   assert.deepStrictEqual(Array.from(context.WBMWorkspaceV844.sections),
-    ["Overview", "Journey", "Emails", "Payments", "Files", "Activity"]);
+    ["Overview", "Journey", "Emails", "Texts", "Payments", "Files", "Activity"]);
   assert.strictEqual(context.WBMWorkspaceV844.canonicalSection("Forms"), "Journey");
   assert.strictEqual(context.WBMWorkspaceV844.canonicalSection("Notes"), "Activity");
 
@@ -129,6 +132,10 @@ vm.runInContext(fs.readFileSync(process.argv[1], "utf8"), context, {filename: pr
   await context.selectRecordTab(record, "Forms");
   assert.deepStrictEqual(calls.splice(0), ["composite:Journey", "quote", "forms"]);
   assert.strictEqual(location.pathname, "/bookings/booking-1/journey");
+
+  await context.selectRecordTab(record, "Texts");
+  assert.deepStrictEqual(calls.splice(0), ["texts"]);
+  assert.strictEqual(location.pathname, "/bookings/booking-1/texts");
 
   await context.selectRecordTab(record, "Payments");
   assert.deepStrictEqual(calls.splice(0), ["payments"]);

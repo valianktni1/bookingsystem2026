@@ -51,7 +51,7 @@ from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, 
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
                      DateBlock, EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, LoginAttempt,
                      PackageOption, Payment,
-                     Quote, RecordKind, RecordStatus, ReminderLog, SystemSetting, Task)
+                     Quote, RecordKind, RecordStatus, ReminderLog, SmsMessage, SystemSetting, Task)
 from .owner_notifications import OWNER_NOTIFICATION_KEYS, send_owner_notification_safely
 from .payment_arrangements import (
     active_payment_arrangement, arrangement_json, complete_arrangement_after_payment,
@@ -76,6 +76,7 @@ from .v84_routes import (automations_allowed, final_details_unlocked,
 from .v845_routes import apply_quote_reply_safety, register_v845_routes
 from .v846_routes import after_wedding_readiness, register_v846_routes
 from .v848_routes import register_v848_routes
+from .sms_routes import register_sms_routes, sms_automation_loop, sms_status_json
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -102,15 +103,23 @@ async def lifespan(_: FastAPI):
             email.error = "The application restarted before delivery could be confirmed"
         if interrupted:
             db.commit()
+        interrupted_sms = db.scalars(select(SmsMessage).where(SmsMessage.status == "sending")).all()
+        for message in interrupted_sms:
+            message.status = "failed"
+            message.error = "The application restarted before SMS delivery could be confirmed"
+        if interrupted_sms:
+            db.commit()
     reminder_task = asyncio.create_task(reminder_loop())
     calendar_retry_task = asyncio.create_task(calendar_retry_loop())
     accounts_task = asyncio.create_task(accounts_sync_loop())
     growth_task = asyncio.create_task(growth_sync_loop())
+    sms_task = asyncio.create_task(sms_automation_loop())
     yield
     reminder_task.cancel()
     calendar_retry_task.cancel()
     accounts_task.cancel()
     growth_task.cancel()
+    sms_task.cancel()
     with suppress(asyncio.CancelledError):
         await reminder_task
     with suppress(asyncio.CancelledError):
@@ -119,9 +128,11 @@ async def lifespan(_: FastAPI):
         await accounts_task
     with suppress(asyncio.CancelledError):
         await growth_task
+    with suppress(asyncio.CancelledError):
+        await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.48.1-friendly-invoice-filenames", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.49-sms-centre", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -887,6 +898,7 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 
 @app.get("/api/health")
 def health():
+    sms_status = sms_status_json()
     return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
@@ -897,6 +909,10 @@ def health():
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
             "growth_integration_enabled": settings.growth_integration_enabled,
             "growth_auto_sync": settings.growth_integration_auto_sync,
+            "sms_enabled": sms_status["enabled"],
+            "sms_configured": sms_status["configured"],
+            "sms_automatic_enabled": sms_status["automatic_enabled"],
+            "sms_reply_capable": sms_status["reply_capable"],
             "google_calendar_configured": google_calendar_configured(),
             "build": BACKUP_BUILD}
 
@@ -4683,6 +4699,7 @@ register_legacy_import_routes(app)
 register_legacy_archive_import_routes(app)
 register_accounts_integration_routes(app)
 register_growth_integration_routes(app)
+register_sms_routes(app)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

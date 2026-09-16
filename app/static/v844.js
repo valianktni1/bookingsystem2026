@@ -14,6 +14,7 @@
     Overview: "overview",
     Journey: "journey",
     Emails: "emails",
+    Texts: "texts",
     Payments: "payments",
     Files: "files",
     Activity: "activity",
@@ -31,6 +32,9 @@
       Email: "Emails",
       Mail: "Emails",
       Emails: "Emails",
+      SMS: "Texts",
+      Text: "Texts",
+      Texts: "Texts",
       Finance: "Payments",
       Payments: "Payments",
       Documents: "Files",
@@ -57,6 +61,7 @@
       {tab: "Overview", icon: "⌂", label: "Overview", meta: `${openTasks} to do`},
       {tab: "Journey", icon: "✓", label: "Journey", meta: `${journeyComplete}/3 complete`},
       {tab: "Emails", icon: "✉", label: "Emails", meta: `${(portal?.emails || []).length} recorded`},
+      {tab: "Texts", icon: "▣", label: "Texts", meta: "Send & replies"},
       {tab: "Payments", icon: "£", label: "Payments", meta: outstanding > 0 ? `${money(outstanding)} due` : "Clear"},
       {tab: "Files", icon: "▤", label: "Files", meta: `${(record?.documents || []).length} retained`},
       {tab: "Activity", icon: "◷", label: "Activity", meta: `${(record?.activity || []).length} events`},
@@ -118,6 +123,7 @@
       if (selected === "Overview") renderOverview(record, body);
       else if (selected === "Journey") await renderJourneyV844(record, body);
       else if (selected === "Emails") renderBookingEmails(record, body);
+      else if (selected === "Texts") await window.WBMSmsV849?.render(record, body);
       else if (selected === "Payments") renderFinance(record, body);
       else if (selected === "Files") renderRecordDocuments(record, body);
       else if (selected === "Activity") await compositeRenderTabV844(record, "Activity", body);

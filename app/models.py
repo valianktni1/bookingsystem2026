@@ -330,6 +330,53 @@ class EmailTemplate(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
 
 
+class SmsTemplate(Base):
+    """Editable SMS wording; automatic types are individually opt-in."""
+
+    __tablename__ = "sms_templates"
+    __table_args__ = (UniqueConstraint("brand", "template_key", name="uq_sms_template_brand_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    brand: Mapped[Brand] = mapped_column(Enum(Brand), index=True)
+    template_key: Mapped[str] = mapped_column(String(80), index=True)
+    display_name: Mapped[str] = mapped_column(String(140))
+    body: Mapped[str] = mapped_column(Text)
+    is_automatic: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class SmsMessage(Base):
+    """Durable outbound, delivery and inbound SMS history.
+
+    ``booking_id`` intentionally remains a plain nullable identifier so that
+    an unmatched reply is retained and deleting a test booking cannot erase
+    the communication audit.
+    """
+
+    __tablename__ = "sms_messages"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    booking_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    brand: Mapped[Brand] = mapped_column(Enum(Brand), index=True)
+    direction: Mapped[str] = mapped_column(String(20), index=True)
+    template_key: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    recipient: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    sender: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    body: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    provider_message_id: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True, index=True)
+    dedupe_key: Mapped[str | None] = mapped_column(String(220), nullable=True, unique=True, index=True)
+    parts: Mapped[int | None] = mapped_column(nullable=True)
+    automated: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    provider_data: Mapped[dict] = mapped_column(JSON, default=dict)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class ContractTemplate(Base):
     __tablename__ = "contract_templates"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)

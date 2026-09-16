@@ -43,6 +43,17 @@ class Settings(BaseSettings):
     reminder_scan_hours: int = 6
     reminders_enabled: bool = False
     email_retry_minutes: int = Field(default=60, ge=5, le=1440)
+    sms_enabled: bool = False
+    sms_automatic_enabled: bool = False
+    sms_api_url: str = "https://api.thesmsworks.co.uk/v1"
+    sms_api_token: str | None = None
+    sms_sender_id: str = "WedsByMark"
+    sms_reply_number: str | None = None
+    sms_webhook_username: str | None = None
+    sms_webhook_password: str | None = None
+    sms_test_number: str | None = None
+    sms_timeout_seconds: int = Field(default=20, ge=5, le=60)
+    sms_scan_hours: int = Field(default=6, ge=1, le=24)
     login_max_failures: int = Field(default=5, ge=3, le=20)
     login_failure_window_minutes: int = Field(default=15, ge=5, le=120)
     login_lock_minutes: int = Field(default=15, ge=5, le=1440)
@@ -83,6 +94,27 @@ class Settings(BaseSettings):
                     raise ValueError("GROWTH_API_URL must be a complete http:// or https:// address")
                 if not self.growth_integration_key or len(self.growth_integration_key) < 32:
                     raise ValueError("GROWTH_INTEGRATION_KEY must contain at least 32 characters")
+            if self.sms_automatic_enabled and not self.sms_enabled:
+                raise ValueError("SMS_AUTOMATIC_ENABLED requires SMS_ENABLED=true")
+            if self.sms_enabled:
+                if not self.sms_api_url.startswith("https://"):
+                    raise ValueError("SMS_API_URL must use https://")
+                if not self.sms_api_token or len(self.sms_api_token) < 20:
+                    raise ValueError("SMS_API_TOKEN must contain the JSON Web Token from The SMS Works")
+                sender = (self.sms_reply_number or self.sms_sender_id or "").strip()
+                if sender.isdigit():
+                    if not 3 <= len(sender) <= 15:
+                        raise ValueError("SMS reply number must contain 3 to 15 digits")
+                elif not (4 <= len(sender) <= 11 and sender.isalnum()):
+                    raise ValueError("SMS_SENDER_ID must be 4 to 11 letters/numbers with no spaces")
+                if bool(self.sms_webhook_username) != bool(self.sms_webhook_password):
+                    raise ValueError("SMS webhook username and password must be set together")
+                if self.sms_webhook_password and len(self.sms_webhook_password) < 16:
+                    raise ValueError("SMS_WEBHOOK_PASSWORD must contain at least 16 characters")
+                if self.sms_reply_number and not (
+                    self.sms_webhook_username and self.sms_webhook_password
+                ):
+                    raise ValueError("SMS reply webhooks require a username and password")
             if bool(self.google_calendar_client_id) != bool(self.google_calendar_client_secret):
                 raise ValueError("GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET must be set together")
         return self

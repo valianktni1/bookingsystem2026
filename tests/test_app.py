@@ -222,10 +222,14 @@ def test_phase_two_b_flow(monkeypatch):
                                  "imap_configured": False,
                                      "accounts_integration_enabled": False,
                                      "accounts_auto_sync": False,
-                                     "growth_integration_enabled": False,
-                                     "growth_auto_sync": False,
-                                     "google_calendar_configured": False,
-                                           "build": "2026.09.14-friendly-invoice-filenames-v8.48.1"}
+                                         "growth_integration_enabled": False,
+                                         "growth_auto_sync": False,
+                                         "sms_enabled": False,
+                                         "sms_configured": False,
+                                         "sms_automatic_enabled": False,
+                                         "sms_reply_capable": False,
+                                         "google_calendar_configured": False,
+                                           "build": "2026.09.15-sms-centre-v8.49"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
