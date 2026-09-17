@@ -44,10 +44,6 @@
     return url ? `<a href="${attr(url)}" target="_blank" rel="noopener">Open ${esc(label)} ↗</a>` : "";
   }
 
-  function readinessRowsV846(readiness) {
-    return (readiness.checks || []).map(check => `<span class="${check.complete ? "complete" : "waiting"}"><i>${check.complete ? "✓" : "○"}</i>${esc(check.label)}</span>`).join("");
-  }
-
   function setModalButtonV846(label) {
     const button = $("#dynamic-form footer .primary");
     if (button) button.textContent = label;
@@ -133,18 +129,6 @@
     }
   }
 
-  async function completeWeddingV846(record) {
-    if (!confirm(`Mark ${record.title} as completed?\n\nAll delivery work and the account are clear. The booking, invoice numbers, payments, agreement, emails and files remain permanently retained. Nothing is emailed.`)) return;
-    try {
-      await api(`/api/bookings/${record.id}/complete`, {method: "POST"});
-      await refresh();
-      toast("Wedding marked complete · no email sent");
-      await openDrawer(record.id, "Overview");
-    } catch (error) {
-      toast(error.message, "error");
-    }
-  }
-
   async function renderAfterWeddingV846(record, body, supplied = null) {
     if (!body || !afterWeddingAppliesV846(record)) return;
     let data = supplied;
@@ -158,29 +142,23 @@
     if (!body.isConnected || !data.eligible) return;
     body.querySelector(".v846-after-wedding")?.remove();
     const stateData = data.state;
-    const ready = data.readiness.ready_to_complete;
     const panel = document.createElement("section");
-    panel.className = `v846-after-wedding ${data.completed ? "completed" : ready ? "ready" : ""}`;
-    panel.innerHTML = `<header><div><small>FINAL STEP · AFTER THE WEDDING</small><h3>${data.completed ? "Wedding work completed" : "Finish and deliver this wedding"}</h3><p>Keep delivery, album and review progress together before closing the job.</p></div><b>${data.readiness.completed_count}/${data.readiness.check_count} ready</b></header>
+    panel.className = `v846-after-wedding ${data.completed ? "completed" : ""}`;
+    panel.innerHTML = `<header><div><small>OPTIONAL RECORD · AFTER THE WEDDING</small><h3>${data.completed ? "Wedding completed" : "Delivery and album tracking"}</h3><p>Keep these useful delivery notes together when needed. They never block Mark wedding complete.</p></div><b>${data.readiness.completed_count}/${data.readiness.check_count} noted</b></header>
       <div class="v846-delivery-grid">
         <article class="${stateData.photos.status === "delivered" ? "complete" : "waiting"}"><i>${stateData.photos.status === "delivered" ? "✓" : "1"}</i><span><small>PHOTOGRAPHS</small><strong>${esc(deliveryLabelV846(stateData.photos, "photos"))}</strong>${deliveryLinkV846(stateData.photos.gallery_url, "gallery")}</span></article>
         <article class="${["delivered", "not_required"].includes(stateData.video.status) ? "complete" : "waiting"}"><i>${["delivered", "not_required"].includes(stateData.video.status) ? "✓" : "2"}</i><span><small>VIDEO / FILMS</small><strong>${esc(deliveryLabelV846(stateData.video, "video"))}</strong>${deliveryLinkV846(stateData.video.video_url, "video")}</span></article>
         <article class="${["delivered", "not_required"].includes(stateData.album.status) ? "complete" : "waiting"}"><i>${["delivered", "not_required"].includes(stateData.album.status) ? "✓" : "3"}</i><span><small>WEDDING ALBUM</small><strong>${esc(deliveryLabelV846(stateData.album, "album"))}</strong>${stateData.album.notes ? `<em>${esc(stateData.album.notes)}</em>` : ""}</span></article>
         <article class="${stateData.review_request.status === "sent" ? "complete" : "optional"}"><i>${stateData.review_request.status === "sent" ? "✓" : "☆"}</i><span><small>REVIEW REQUEST · OPTIONAL</small><strong>${stateData.review_request.status === "sent" ? `Sent ${fmtDateTime(stateData.review_request.sent_at)}` : "Not sent"}</strong><em>This never blocks completion.</em></span></article>
       </div>
-      <div class="v846-readiness">${readinessRowsV846(data.readiness)}</div>
       ${data.manual_only ? `<div class="v846-manual-note"><strong>Studio Ninja protection remains on</strong><span>Delivery tracking is available here. Any review email must still be sent deliberately through Email client with the usual manual confirmation.</span></div>` : ""}
-      <footer><button type="button" class="secondary" data-v846-edit>Update delivery &amp; album</button>${!data.manual_only ? `<button type="button" class="secondary" data-v846-review ${stateData.photos.status !== "delivered" ? "disabled" : ""}>${stateData.review_request.status === "sent" ? "Review & send again" : "Review & send review request"}</button>` : ""}${data.completed ? `<span class="v846-complete-label">✓ Completed and safely retained</span>` : `<button type="button" class="primary" data-v846-complete ${ready ? "" : "disabled"}>${ready ? "Mark wedding complete" : `${data.readiness.blockers.length} thing${data.readiness.blockers.length === 1 ? "" : "s"} still to finish`}</button>`}</footer>`;
+      <footer><button type="button" class="secondary" data-v846-edit>Update delivery &amp; album</button>${!data.manual_only ? `<button type="button" class="secondary" data-v846-review ${stateData.photos.status !== "delivered" ? "disabled" : ""}>${stateData.review_request.status === "sent" ? "Review & send again" : "Review & send review request"}</button>` : ""}${data.completed ? `<span class="v846-complete-label">✓ Completed and safely retained</span>` : `<span class="v846-complete-label">Completion is controlled by the single Mark wedding complete button above.</span>`}</footer>`;
     const anchor = body.querySelector(".v823-final-call-pack") || body.querySelector(".v820-final");
     if (anchor) anchor.insertAdjacentElement("afterend", panel);
     else body.append(panel);
-    const oldCompletion = $(".record-primary-actions .v830-complete-wedding", $("#drawer"));
-    if (oldCompletion && !data.completed) oldCompletion.hidden = true;
     $("[data-v846-edit]", panel).onclick = () => saveAfterWeddingV846(record, data, body);
     const reviewButton = $("[data-v846-review]", panel);
     if (reviewButton && !reviewButton.disabled) reviewButton.onclick = () => sendReviewRequestV846(record, body);
-    const completeButton = $("[data-v846-complete]", panel);
-    if (completeButton && !completeButton.disabled) completeButton.onclick = () => completeWeddingV846(record);
   }
 
   async function renderAfterWeddingOverviewV846(record, body) {
@@ -189,8 +167,8 @@
       const data = await api(`/api/bookings/${record.id}/after-wedding`);
       if (!body.isConnected || !data.eligible || body.querySelector(".v846-overview-card")) return;
       const card = document.createElement("section");
-      card.className = `v846-overview-card ${data.completed ? "completed" : data.readiness.ready_to_complete ? "ready" : ""}`;
-      card.innerHTML = `<i>${data.completed ? "✓" : "↗"}</i><div><small>AFTER-WEDDING WORKFLOW</small><strong>${data.completed ? "Wedding completed and retained" : `${data.readiness.completed_count}/${data.readiness.check_count} completion checks clear`}</strong><span>${data.completed ? "Delivery history, invoices, emails and signed records remain safely available." : data.readiness.blockers.join(" · ") || "Everything is ready for completion."}</span></div><button type="button" class="${data.readiness.ready_to_complete ? "primary" : "secondary"}">Open after-wedding workflow</button>`;
+      card.className = `v846-overview-card ${data.completed ? "completed" : ""}`;
+      card.innerHTML = `<i>${data.completed ? "✓" : "↗"}</i><div><small>AFTER-WEDDING RECORD</small><strong>${data.completed ? "Wedding completed and retained" : "Optional delivery and album tracking"}</strong><span>${data.completed ? "Delivery history, invoices, emails and signed records remain safely available." : "Update it whenever useful. It does not block completing the wedding."}</span></div><button type="button" class="secondary">Open delivery tracking</button>`;
       body.prepend(card);
       card.querySelector("button").onclick = async () => {
         await selectRecordTab(record, "Journey", true);

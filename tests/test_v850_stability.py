@@ -75,7 +75,7 @@ def test_v850_build_identity_and_visible_safety_window():
     sms_js = (ROOT / "app" / "static" / "v849.js").read_text()
     backup = (ROOT / "app" / "backup.py").read_text()
     assert "BOOKINGSYSTEM2026 · COMPLETE V8.50" in index
-    assert 'BACKUP_BUILD = "2026.09.17-inbox-flow-v8.50.1"' in backup
+    assert 'BACKUP_BUILD = "2026.09.17-workflow-cleanup-v8.50.2"' in backup
     assert "09:00-19:00 Europe/London" in sms_js
     assert "manual sends remain available" in sms_js
 

@@ -232,7 +232,7 @@ def test_phase_two_b_flow(monkeypatch):
                                              "automatic_message_window": "09:00-19:00 Europe/London",
                                              "sms_reply_capable": False,
                                          "google_calendar_configured": False,
-                                           "build": "2026.09.17-inbox-flow-v8.50.1"}
+                                           "build": "2026.09.17-workflow-cleanup-v8.50.2"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -276,8 +276,8 @@ def test_phase_two_b_flow(monkeypatch):
         }
         final_call = next(task for task in wedding_data["tasks"]
                           if task["workflow_key"] == "wbm_final_details_call")
-        assert final_call["title"] == "Finalise wedding details by phone"
-        assert final_call["due_at"].startswith("2026-09-04T10:00:00")
+        assert final_call["title"] == "Final wedding details call - Monday before"
+        assert final_call["due_at"].startswith("2026-09-28T10:00:00")
 
         templates = client.get("/api/communications/templates")
         assert templates.status_code == 200

@@ -103,6 +103,21 @@ def test_enquiry_cannot_be_mislabelled_as_completed_wedding():
         assert "not a booked wedding" in response.json()["detail"]
 
 
+def test_confirmed_future_wedding_can_be_completed_by_marks_deliberate_choice():
+    reset_database()
+    with TestClient(app) as client:
+        login(client)
+        booking = client.post("/api/bookings", json=wedding_payload(
+            status="confirmed", event_date=date.today() + timedelta(days=30),
+        )).json()
+        response = client.post(f"/api/bookings/{booking['id']}/complete")
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "completed"
+        assert "Wedding date has not passed" in (
+            response.json()["workflow_state"]["completion"]["open_items_at_completion"]
+        )
+
+
 def test_studio_style_assets_and_requested_wedding_tabs_are_loaded():
     root = Path(__file__).resolve().parents[1]
     index = (root / "app/static/index.html").read_text(encoding="utf-8")

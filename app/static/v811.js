@@ -26,12 +26,11 @@
     forms_waiting: ["Booking forms outstanding", "Secured couples still completing their details", "✓"],
     agreements_waiting: ["Agreements outstanding", "Waiting for a signature or countersignature", "✎"],
     payments_due: ["Payments due soon", "Due within the next 60 days", "£"],
-    final_calls: ["Final-detail calls", "Private telephone reminders due soon", "☎"],
   };
   const queueOrder = Object.keys(queueCopy);
   const actionQueueOrder = [
     "communication_failures", "client_updates", "overdue_payments",
-    "new_enquiries", "final_calls",
+    "new_enquiries",
   ];
   const waitingQueueOrder = [
     "quotes_waiting", "accepted_payment", "forms_waiting",

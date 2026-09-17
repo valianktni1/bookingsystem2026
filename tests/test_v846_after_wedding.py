@@ -92,7 +92,7 @@ def delivered_payload(*, album_status="delivered"):
     }
 
 
-def test_delivery_album_and_balance_gate_completion_without_changing_financial_history():
+def test_completion_is_one_deliberate_action_and_keeps_optional_tracking():
     reset_database()
     with TestClient(app) as client:
         login(client)
@@ -112,20 +112,29 @@ def test_delivery_album_and_balance_gate_completion_without_changing_financial_h
         assert initial.json()["state"]["video"]["status"] == "pending"
         assert initial.json()["state"]["album"]["status"] == "awaiting_selection"
         assert initial.json()["readiness"]["ready_to_complete"] is False
-        blocked = client.post(f"/api/bookings/{booking['id']}/complete")
-        assert blocked.status_code == 409
-        assert "Photographs delivered" in blocked.json()["detail"]
-
         with SessionLocal() as db:
             emails_before = db.scalar(select(func.count()).select_from(EmailLog))
+        completed = client.post(f"/api/bookings/{booking['id']}/complete")
+        assert completed.status_code == 200, completed.text
+        assert completed.json()["status"] == "completed"
+        open_items = completed.json()["workflow_state"]["completion"]["open_items_at_completion"]
+        assert "Photographs delivered" in open_items
+        assert "Video delivered or not required" in open_items
+        assert "Album delivered or not required" in open_items
+        retained_invoice = next(
+            row for row in completed.json()["invoices"] if row["id"] == original_invoice["id"]
+        )
+        assert retained_invoice["number"] == original_invoice["number"]
+        assert retained_invoice["paid"] == original_invoice["paid"]
+
         ordered = client.put(
             f"/api/bookings/{booking['id']}/after-wedding",
             json=delivered_payload(album_status="ordered"),
         )
         assert ordered.status_code == 200, ordered.text
-        assert ordered.json()["readiness"]["ready_to_complete"] is False
+        assert ordered.json()["readiness"]["ready_to_complete"] is True
+        assert "Album delivered or not required" in ordered.json()["readiness"]["blockers"]
         assert ordered.json()["state"]["album"]["status_label"] == "Ordered from supplier"
-        assert client.post(f"/api/bookings/{booking['id']}/complete").status_code == 409
 
         ready = client.put(
             f"/api/bookings/{booking['id']}/after-wedding",
@@ -135,14 +144,6 @@ def test_delivery_album_and_balance_gate_completion_without_changing_financial_h
         assert ready.json()["readiness"]["ready_to_complete"] is True
         assert ready.json()["readiness"]["completed_count"] == 4
 
-        completed = client.post(f"/api/bookings/{booking['id']}/complete")
-        assert completed.status_code == 200, completed.text
-        assert completed.json()["status"] == "completed"
-        retained_invoice = next(
-            row for row in completed.json()["invoices"] if row["id"] == original_invoice["id"]
-        )
-        assert retained_invoice["number"] == original_invoice["number"]
-        assert retained_invoice["paid"] == original_invoice["paid"]
         with SessionLocal() as db:
             assert db.scalar(select(func.count()).select_from(EmailLog)) == emails_before
             assert db.scalar(select(AuditLog).where(
@@ -210,7 +211,7 @@ def test_review_request_is_reviewed_manual_and_recorded_only_after_success(monke
             )) is not None
 
 
-def test_outstanding_balance_blocks_completion_until_the_payment_is_recorded():
+def test_outstanding_balance_is_retained_and_audited_but_does_not_block_completion():
     reset_database()
     with TestClient(app) as client:
         login(client)
@@ -231,9 +232,13 @@ def test_outstanding_balance_blocks_completion_until_the_payment_is_recorded():
         waiting = client.get(f"/api/bookings/{booking['id']}/after-wedding").json()
         assert waiting["readiness"]["outstanding_balance"] == 919
         assert waiting["readiness"]["ready_to_complete"] is False
-        blocked = client.post(f"/api/bookings/{booking['id']}/complete")
-        assert blocked.status_code == 409
-        assert "Account balance clear" in blocked.json()["detail"]
+        completed = client.post(f"/api/bookings/{booking['id']}/complete")
+        assert completed.status_code == 200, completed.text
+        assert completed.json()["status"] == "completed"
+        completion = completed.json()["workflow_state"]["completion"]
+        assert "Account balance clear" in completion["open_items_at_completion"]
+        retained_invoice = next(row for row in completed.json()["invoices"] if row["id"] == invoice_id)
+        assert retained_invoice["balance"] == 919
 
         payment = client.post(f"/api/invoices/{invoice_id}/payments", json={
             "amount": 919,
@@ -279,12 +284,14 @@ def test_v846_assets_and_manual_controls_are_loaded_last():
     script = (ROOT / "app/static/v846.js").read_text(encoding="utf-8")
     css = (ROOT / "app/static/v846.css").read_text(encoding="utf-8")
     assert "/static/v846.css?v=after-wedding-v8-46" in index
-    assert "/static/v846.js?v=after-wedding-v8-46" in index
+    assert "/static/v846.js?v=workflow-cleanup-v8-50-2" in index
     assert index.rfind("/static/v846.js") > index.rfind("/static/v845.js")
     assert "Update delivery &amp; album" in script
     assert "Review & send review request" in script
     assert "This is never an automatic email" in script
-    assert "Mark wedding complete" in script
+    assert "They never block Mark wedding complete" in script
+    assert "Completion is controlled by the single Mark wedding complete button above." in script
+    assert "data-v846-complete" not in script
     assert "grid-template-columns:repeat(2,minmax(0,1fr))" in css
 
 

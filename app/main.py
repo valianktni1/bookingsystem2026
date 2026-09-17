@@ -134,7 +134,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.50.1", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.50.2", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1671,11 +1671,10 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             timestamp = timestamp.replace(tzinfo=timezone.utc)
         return timestamp >= recent_progress_cutoff
 
-    # Payment planning is useful further ahead than the short operational task
-    # window. Keep final-detail calls at 14 days while showing Mark every open
-    # payment due during the next 60 days.
+    # Payment planning remains useful further ahead. Final-call reminders are
+    # deliberately omitted from Home because Upcoming Weddings already gives
+    # Mark the practical wedding list he uses.
     payments_due_through = today + timedelta(days=60)
-    final_calls_due_through = today + timedelta(days=14)
 
     def item(booking: Booking, detail: str, section: str, action: str,
              *, due: date | None = None, amount: Decimal | float | None = None,
@@ -1809,14 +1808,6 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                     booking, detail, "Payments", "record_payment", due=due, amount=balance,
                 ))
 
-        for task in booking.tasks:
-            if (workflow_active and task.workflow_key == "wbm_final_details_call" and not task.completed
-                    and task.due_at and task.due_at.date() <= final_calls_due_through):
-                queues["final_calls"].append(item(
-                    booking, "Private 30-day final-details telephone call",
-                    "Journey", "open_final_call_pack", due=task.due_at.date(),
-                ))
-
     bookings_by_id = {booking.id: booking for booking in bookings}
     failed_email_rows = db.scalars(select(EmailLog).where(
         EmailLog.booking_id.in_(booking_ids), EmailLog.status == "failed"
@@ -1871,7 +1862,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
     queues["communication_failures"].sort(
         key=lambda row: row["occurred_at"] or row["due_date"] or "", reverse=True
     )
-    for key in ("overdue_payments", "payments_due", "final_calls"):
+    for key in ("overdue_payments", "payments_due"):
         queues[key].sort(key=lambda row: row["due_date"] or "9999-12-31")
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -2023,13 +2014,9 @@ def complete_wedding(booking_id: str, admin: Admin = Depends(current_admin),
     if item.status == RecordStatus.COMPLETED:
         return get_booking(item.id, admin, db)
 
+    # Delivery, album and account information remains useful private tracking,
+    # but Mark's deliberate completion decision must not be blocked by it.
     after_wedding = after_wedding_readiness(db, item)
-    if not after_wedding["ready_to_complete"]:
-        raise HTTPException(
-            409,
-            "Finish the after-wedding checklist first: "
-            + "; ".join(after_wedding["blockers"]),
-        )
 
     completed_at = datetime.now(timezone.utc)
     previous_status = item.status.value
@@ -2038,6 +2025,7 @@ def complete_wedding(booking_id: str, admin: Admin = Depends(current_admin),
         "completed_at": completed_at.isoformat(),
         "completed_by": admin.email,
         "previous_status": previous_status,
+        "open_items_at_completion": after_wedding["blockers"],
         "reopened_at": None,
         "reopened_by": None,
     }
@@ -2047,6 +2035,7 @@ def complete_wedding(booking_id: str, admin: Admin = Depends(current_admin),
         "previous_status": previous_status,
         "completed_by": admin.email,
         "client_email_sent": False,
+        "open_items_at_completion": after_wedding["blockers"],
     })
     db.commit()
     sync_booking_calendar_safely(db, item)

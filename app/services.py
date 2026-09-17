@@ -60,7 +60,12 @@ def audit(db: Session, action: str, entity_type: str, entity_id: str | None = No
 def final_details_call_due(event_date: date | None) -> datetime | None:
     if not event_date:
         return None
-    return datetime.combine(event_date - timedelta(days=30), time(hour=10), tzinfo=timezone.utc)
+    # Mark makes the final-details call on the Monday immediately before the
+    # wedding. A Monday wedding uses the previous Monday, matching the wording
+    # already sent in the 30-day Final Wedding Timings email.
+    days_back = event_date.weekday() or 7
+    call_date = event_date - timedelta(days=days_back)
+    return datetime.combine(call_date, time(hour=10), tzinfo=timezone.utc)
 
 
 def create_default_tasks(db: Session, booking_id: str, kind: RecordKind,
@@ -72,7 +77,7 @@ def create_default_tasks(db: Session, booking_id: str, kind: RecordKind,
             ("Send package quote", "wbm_quote", None),
             ("Booking form completed", "wbm_booking_form", None),
             ("Wedding contract signed", "wbm_contract", None),
-            ("Finalise wedding details by phone", "wbm_final_details_call",
+            ("Final wedding details call - Monday before", "wbm_final_details_call",
              final_details_call_due(event_date)),
         ]
     else:
@@ -92,10 +97,10 @@ def sync_final_details_call_task(db: Session, booking: Booking) -> Task | None:
         Task.workflow_key == "wbm_final_details_call",
     ).limit(1))
     if not task:
-        task = Task(booking_id=booking.id, title="Finalise wedding details by phone",
+        task = Task(booking_id=booking.id, title="Final wedding details call - Monday before",
                     workflow_key="wbm_final_details_call")
         db.add(task)
-    task.title = "Finalise wedding details by phone"
+    task.title = "Final wedding details call - Monday before"
     task.due_at = final_details_call_due(booking.event_date)
     return task
 

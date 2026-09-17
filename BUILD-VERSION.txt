@@ -1,5 +1,15 @@
-BookingSystem2026 - Inbox flow correction
-Build: 2026.09.17-inbox-flow-v8.50.1
+BookingSystem2026 - Workflow cleanup
+Build: 2026.09.17-workflow-cleanup-v8.50.2
+
+V8.50.2 Workflow cleanup:
+- removes the inaccurate Final-detail calls list from the Home dashboard
+- dates the private final-details telephone task for the Monday before each wedding
+- makes Mark wedding complete one deliberate confirmation with no delivery,
+  album or payment checklist barriers
+- completed weddings leave Upcoming Weddings but remain safely retained under
+  All bookings with invoices, payments, forms, emails, files and Reopen intact
+- records any unfinished after-wedding items privately for reference without
+  changing financial history or sending client communication
 
 V8.50.1 Inbox flow:
 - keeps the live Inbox independent from the main client and invoice search

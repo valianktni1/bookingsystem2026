@@ -1,9 +1,22 @@
-# Mark's Business Studio — Version 8.50.1
+# Mark's Business Studio — Version 8.50.2
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.50.1, including browser-history
+build includes every cumulative feature through V8.50.2, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.50.2 workflow cleanup
+
+The inaccurate **Final-detail calls** block has been removed from Home. Upcoming
+Weddings remains Mark's practical list, while each booking keeps its private final
+telephone-call task dated for the Monday immediately before the wedding.
+
+**Mark wedding complete** is now one deliberate confirmation. Delivery notes,
+album progress and an outstanding balance remain visible but never prevent Mark
+from completing the wedding. Completion moves it out of Upcoming Weddings and
+keeps the complete record under All bookings. Nothing is deleted, no invoice or
+payment history is changed, no client email is sent, and the wedding can still be
+reopened.
 
 ## Version 8.50.1 Inbox flow correction
 

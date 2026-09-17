@@ -37,7 +37,7 @@ def test_v811_direct_workspace_and_booking_urls_return_the_admin_app():
         booking = client.get("/bookings/example-booking/journey")
         assert dashboard.status_code == 200
         assert booking.status_code == 200
-        assert "/static/v811.js?v=email-tab-render-hotfix-v8-43-1" in dashboard.text
+        assert "/static/v811.js?v=workflow-cleanup-v8-50-2" in dashboard.text
         assert "/static/v811.css?v=client-receipt-open-v8-28-4-2" in dashboard.text
         assert "BOOKINGSYSTEM2026 · COMPLETE V8.50" in dashboard.text
         assert "/static/v812.js?v=google-calendar-v8-12" in dashboard.text

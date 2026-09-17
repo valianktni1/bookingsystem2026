@@ -28,6 +28,6 @@ def test_normal_and_couple_inbox_routes_have_distinct_clear_behaviour():
 def test_v8501_build_identity_and_fresh_inbox_assets():
     index = (ROOT / "app" / "static" / "index.html").read_text()
     backup = (ROOT / "app" / "backup.py").read_text()
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.50.1" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.50.2" in index
     assert "inbox-flow-v8-50-1" in index
-    assert 'BACKUP_BUILD = "2026.09.17-inbox-flow-v8.50.1"' in backup
+    assert 'BACKUP_BUILD = "2026.09.17-workflow-cleanup-v8.50.2"' in backup

@@ -54,7 +54,7 @@ def add_wedding(db, *, imported=False):
     db.add(booking)
     db.flush()
     db.add(Task(
-        booking_id=booking.id, title="Finalise wedding details by phone",
+        booking_id=booking.id, title="Final wedding details call - Monday before",
         workflow_key="wbm_final_details_call",
         due_at=datetime.now(timezone.utc) + timedelta(days=10),
     ))
@@ -141,7 +141,7 @@ def test_complete_final_call_pack_saves_notes_pdf_and_completes_existing_task():
         assert inline.headers["content-security-policy"] == "frame-ancestors 'self'"
 
         queue = client.get("/api/workflow-queues").json()["queues"]["final_calls"]
-        assert all(item["booking_id"] != booking_id for item in queue)
+        assert queue == []
         with SessionLocal() as db:
             booking = db.get(Booking, booking_id)
             task = db.scalar(select(Task).where(
@@ -167,10 +167,13 @@ def test_complete_final_call_pack_saves_notes_pdf_and_completes_existing_task():
         assert reopened.status_code == 200
         assert reopened.json()["completed"] is False
         queue = client.get("/api/workflow-queues").json()["queues"]["final_calls"]
-        row = next(item for item in queue if item["booking_id"] == booking_id)
-        assert row["section"] == "Journey"
-        assert row["action"] == "open_final_call_pack"
+        assert queue == []
         with SessionLocal() as db:
+            task = db.scalar(select(Task).where(
+                Task.booking_id == booking_id,
+                Task.workflow_key == "wbm_final_details_call",
+            ))
+            assert task.completed is False
             assert db.scalar(select(func.count()).select_from(Document).where(
                 Document.booking_id == booking_id,
                 Document.category == "final_call_pack",
@@ -227,7 +230,7 @@ def test_v823_assets_and_private_wording_are_wired():
     assert "Complete final telephone-call pack" in javascript
     assert "It does not email the couple" in javascript
     assert "Studio Ninja protection remains on" in javascript
-    assert "open_final_call_pack" in dashboard
+    assert "Final-detail calls" not in dashboard
 
 
 def teardown_module():

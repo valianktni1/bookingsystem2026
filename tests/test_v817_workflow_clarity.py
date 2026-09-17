@@ -52,7 +52,7 @@ def add_invoice(client, booking_id, due_days):
     assert response.status_code == 201, response.text
 
 
-def test_upcoming_payments_cover_60_days_without_expanding_final_call_window():
+def test_upcoming_payments_cover_60_days_without_a_home_final_call_queue():
     reset_database()
     with TestClient(app) as client:
         login(client)
@@ -63,12 +63,9 @@ def test_upcoming_payments_cover_60_days_without_expanding_final_call_window():
 
         queues = client.get("/api/workflow-queues").json()["queues"]
         payment_ids = {row["booking_id"] for row in queues["payments_due"]}
-        final_call_ids = {row["booking_id"] for row in queues["final_calls"]}
         assert inside["id"] in payment_ids
         assert outside["id"] not in payment_ids
-        # This booking's private call is due in 20 days, so the original
-        # 14-day operational window remains unchanged.
-        assert inside["id"] not in final_call_ids
+        assert queues["final_calls"] == []
 
 
 def test_template_manager_reports_real_workflow_usage_and_retry_control():
@@ -85,6 +82,7 @@ def test_template_manager_reports_real_workflow_usage_and_retry_control():
 
         dashboard_js = client.get("/static/v811.js").text
         assert "Due within the next 60 days" in dashboard_js
+        assert "Final-detail calls" not in dashboard_js
         assert "Hostinger temporarily refused this message" in dashboard_js
         assert "data-retry-contract-email" in dashboard_js
 

@@ -18,6 +18,14 @@ from app.database import SessionLocal, engine
 import app.main as main_module
 from app.main import app
 from app.models import Booking, EmailLog, Invoice, ReminderLog
+from app.services import final_details_call_due
+
+
+def test_final_details_call_is_the_monday_immediately_before_the_wedding():
+    saturday_call = final_details_call_due(date(2026, 10, 10))
+    monday_call = final_details_call_due(date(2026, 10, 12))
+    assert saturday_call.isoformat().startswith("2026-10-05T10:00:00")
+    assert monday_call.isoformat().startswith("2026-10-05T10:00:00")
 
 
 def test_exact_simple_wedding_email_schedule(monkeypatch):
@@ -47,9 +55,10 @@ def test_exact_simple_wedding_email_schedule(monkeypatch):
         booking_id = created.json()["id"]
         phone_call = next(task for task in created.json()["tasks"]
                           if task["workflow_key"] == "wbm_final_details_call")
-        assert phone_call["title"] == "Finalise wedding details by phone"
+        assert phone_call["title"] == "Final wedding details call - Monday before"
+        days_back = wedding_day.weekday() or 7
         assert phone_call["due_at"].startswith(
-            (wedding_day - timedelta(days=30)).isoformat()
+            (wedding_day - timedelta(days=days_back)).isoformat()
         )
 
         # A successful initial quote email is the anchor for both quote follow-ups.
