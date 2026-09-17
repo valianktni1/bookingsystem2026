@@ -1,9 +1,28 @@
-# Mark's Business Studio — Version 8.49
+# Mark's Business Studio — Version 8.50
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.49, including browser-history
+build includes every cumulative feature through V8.50, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.50 stability and UK-time safety
+
+The approved organised awards panel—including County Brides Winner 2026 and
+Nominated 2027—is used centrally by Weddings By Mark emails, mailbox replies,
+previews and PDFs. Its email-safe PNG remains sharp while avoiding a 1.7 MB
+attachment on every message.
+
+Automatic client emails and optional automatic SMS are now permitted only from
+09:00 until 19:00 Europe/London. British Summer Time is handled automatically;
+manual emails and texts remain available whenever Mark deliberately chooses to
+send one. Automatic SMS and all seven automatic SMS templates remain disabled
+by default.
+
+Quote follow-up dates are calculated from the UK date of the original email,
+rather than the UTC date stored in the database. The production configuration
+also rejects the old example administrator password, and the fresh-install
+recovery catalogue now contains the current Platinum (£1,350) and Ultimate
+(£1,799) prices. Existing live package records are never overwritten.
 
 ## Version 8.49 SMS centre
 

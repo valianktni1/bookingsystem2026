@@ -217,7 +217,9 @@ def test_phase_two_b_flow(monkeypatch):
     with TestClient(app) as client:
         health = client.get("/api/health")
         assert health.status_code == 200
-        assert health.json() == {"status": "ok", "phase": "2B", "smtp_configured": False,
+        health_data = health.json()
+        assert isinstance(health_data.pop("automatic_message_window_open"), bool)
+        assert health_data == {"status": "ok", "phase": "2B", "smtp_configured": False,
                                  "reminders_enabled": False, "maps_configured": False,
                                  "imap_configured": False,
                                      "accounts_integration_enabled": False,
@@ -225,11 +227,12 @@ def test_phase_two_b_flow(monkeypatch):
                                          "growth_integration_enabled": False,
                                          "growth_auto_sync": False,
                                          "sms_enabled": False,
-                                         "sms_configured": False,
-                                         "sms_automatic_enabled": False,
-                                         "sms_reply_capable": False,
+                                             "sms_configured": False,
+                                             "sms_automatic_enabled": False,
+                                             "automatic_message_window": "09:00-19:00 Europe/London",
+                                             "sms_reply_capable": False,
                                          "google_calendar_configured": False,
-                                           "build": "2026.09.15-sms-centre-v8.49"}
+                                           "build": "2026.09.16-stability-v8.50"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -487,7 +490,7 @@ def test_phase_two_b_flow(monkeypatch):
         assert {row["number"] for row in invoices} == {"ID02001", "WBM02001"}
 
         catalog = client.get("/api/catalog?brand=wbm").json()
-        assert [row["price"] for row in catalog["packages"]] == [475, 699, 899, 1299, 1699]
+        assert [row["price"] for row in catalog["packages"]] == [475, 699, 899, 1350, 1799]
         temporary_package = client.post("/api/catalog/packages?brand=wbm", json={
             "code": "duplicate_test", "name": "Duplicate test package",
             "description": "Safe temporary package", "price": 1,

@@ -234,7 +234,7 @@ def test_v848_interface_exposes_clear_mobile_safe_controls():
     script = (root / "app/static/v848.js").read_text(encoding="utf-8")
     stylesheet = (root / "app/static/v848.css").read_text(encoding="utf-8")
     release = (root / "RELEASE-NOTES-V8.48.md").read_text(encoding="utf-8")
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.49" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.50" in index
     assert "/static/v848.js?v=payment-arrangement-v8-48" in index
     assert "/static/v848.css?v=payment-arrangement-v8-48" in index
     assert "Secure date without payment" in script

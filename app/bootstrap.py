@@ -142,7 +142,7 @@ A £100 deposit secures your date."""),
 • Images available within 5 working days; video within 7–10 working days
 
 A £100 deposit secures your date."""),
-        ("platinum", "Platinum Package 4 2026/27/28", 1299, 150, """Full Day Photography + Highlight Video + Ceremony & Speeches Video + Drone
+        ("platinum", "Platinum Package 4 2026/27/28", 1350, 150, """Full Day Photography + Highlight Video + Ceremony & Speeches Video + Drone
 
 • Up to 8 hours coverage (extra hours can be added)
 • 1 photographer/highlight-video operator and 1 videographer for the full ceremony and speeches
@@ -158,7 +158,7 @@ A £100 deposit secures your date."""),
 • Images available within 5 working days; video within 7–10 working days
 
 A £150 deposit secures your date."""),
-        ("ultimate", "Ultimate Package 2026/27/28", 1699, 150, """Full Day Photography + Highlight Video + Ceremony & Speeches Video + Drone
+        ("ultimate", "Ultimate Package 2026/27/28", 1799, 150, """Full Day Photography + Highlight Video + Ceremony & Speeches Video + Drone
 
 • Up to 8 hours coverage
 • 1 photographer/highlight-video operator and 1 videographer for the full ceremony and speeches

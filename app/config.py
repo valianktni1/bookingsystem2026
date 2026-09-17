@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     reminder_scan_hours: int = 6
     reminders_enabled: bool = False
     email_retry_minutes: int = Field(default=60, ge=5, le=1440)
+    automatic_message_start_hour: int = Field(default=9, ge=0, le=23)
+    automatic_message_end_hour: int = Field(default=19, ge=1, le=24)
     sms_enabled: bool = False
     sms_automatic_enabled: bool = False
     sms_api_url: str = "https://api.thesmsworks.co.uk/v1"
@@ -77,10 +79,19 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def reject_placeholder_production_secrets(self):
+        if self.automatic_message_end_hour <= self.automatic_message_start_hour:
+            raise ValueError("AUTOMATIC_MESSAGE_END_HOUR must be later than AUTOMATIC_MESSAGE_START_HOUR")
         if self.app_env.lower() == "production":
             if len(self.session_secret) < 32 or "replace" in self.session_secret.lower():
                 raise ValueError("SESSION_SECRET must be replaced with at least 32 random characters")
-            if len(self.admin_password) < 12 or "replace" in self.admin_password.lower():
+            weak_admin_passwords = {
+                "changemenow!123", "change-me-now", "password123!",
+                "replace-with-a-long-unique-password",
+            }
+            if (len(self.admin_password) < 12
+                    or "replace" in self.admin_password.lower()
+                    or "changeme" in self.admin_password.lower()
+                    or self.admin_password.lower() in weak_admin_passwords):
                 raise ValueError("ADMIN_PASSWORD must be replaced with a strong unique password")
             if "replace" in self.database_url.lower():
                 raise ValueError("DATABASE_URL must contain the real database password")

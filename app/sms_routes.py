@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from .business_time import (automatic_delivery_allowed, automatic_delivery_window_label,
+                            business_date, business_today)
 from .config import get_settings
 from .database import SessionLocal, get_db
 from .models import (Admin, Booking, Brand, BusinessProfile, Client, EmailLog, Invoice,
@@ -67,6 +69,14 @@ def sms_status_json(db: Session | None = None) -> dict[str, Any]:
         "configured": bool(settings.sms_api_token),
         "ready": sms_ready(),
         "automatic_enabled": settings.sms_automatic_enabled,
+        "automatic_window_open": automatic_delivery_allowed(
+            settings.automatic_message_start_hour,
+            settings.automatic_message_end_hour,
+        ),
+        "automatic_window": automatic_delivery_window_label(
+            settings.automatic_message_start_hour,
+            settings.automatic_message_end_hour,
+        ),
         "sender": sender,
         "sender_error": sender_error,
         "sender_mode": "reply_number" if reply_capable else "brand_name",
@@ -121,11 +131,12 @@ def _due_sms_automations(db: Session, booking: Booking,
             EmailLog.status == "sent",
         ).order_by(EmailLog.sent_at.desc()).limit(1))
         if quote_sent_at:
-            days_since = (today - quote_sent_at.date()).days
+            quote_sent_date = business_date(quote_sent_at)
+            days_since = (today - quote_sent_date).days
             if 1 <= days_since < 9 and not sms_automation_paused(booking, "quote_followup_1"):
-                due.append(("quote_followup_1", quote_sent_at.date() + timedelta(days=1)))
+                due.append(("quote_followup_1", quote_sent_date + timedelta(days=1)))
             elif 9 <= days_since <= 16 and not sms_automation_paused(booking, "quote_followup_final"):
-                due.append(("quote_followup_final", quote_sent_at.date() + timedelta(days=9)))
+                due.append(("quote_followup_final", quote_sent_date + timedelta(days=9)))
     if accepted and not active_payment_arrangement(booking):
         invoice = next((item for item in booking.invoices if item.id == accepted.invoice_id), None)
         if (invoice and invoice.status not in ("void", "cancelled")
@@ -159,7 +170,7 @@ def _due_sms_automations(db: Session, booking: Booking,
 def run_due_sms_automations(db: Session, *, today: date | None = None) -> dict[str, int | bool]:
     if not settings.sms_automatic_enabled or not sms_ready():
         return {"enabled": False, "sent": 0, "skipped": 0, "failed": 0}
-    check_date = today or date.today()
+    check_date = today or business_today()
     sent = skipped = failed = 0
     bookings = db.scalars(select(Booking).options(
         selectinload(Booking.client), selectinload(Booking.invoices), selectinload(Booking.quotes)
@@ -209,9 +220,13 @@ async def sms_automation_loop() -> None:
 
     while True:
         await asyncio.sleep(settings.sms_scan_hours * 3600)
-        if settings.sms_automatic_enabled and sms_ready():
+        within_window = automatic_delivery_allowed(
+            settings.automatic_message_start_hour,
+            settings.automatic_message_end_hour,
+        )
+        if settings.sms_automatic_enabled and sms_ready() and within_window:
             with SessionLocal() as db:
-                await asyncio.to_thread(run_due_sms_automations, db)
+                await asyncio.to_thread(run_due_sms_automations, db, today=business_today())
 
 
 def _verify_webhook(request: Request) -> None:

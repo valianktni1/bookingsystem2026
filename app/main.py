@@ -26,6 +26,8 @@ from .bootstrap import bootstrap
 from .backup import BACKUP_BUILD, BackupBusyError, create_complete_backup
 from .backup_jobs import (get_complete_backup_file, get_complete_backup_job,
                           prepare_complete_backup_job, start_complete_backup_job)
+from .business_time import (automatic_delivery_allowed, business_date,
+                            business_today)
 from .booking_forms import public_booking_form, validate_booking_answers, validate_booking_form
 from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
 from .config import get_settings
@@ -132,7 +134,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.49-sms-centre", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.50-stability", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -912,6 +914,8 @@ def health():
             "sms_enabled": sms_status["enabled"],
             "sms_configured": sms_status["configured"],
             "sms_automatic_enabled": sms_status["automatic_enabled"],
+            "automatic_message_window": sms_status["automatic_window"],
+            "automatic_message_window_open": sms_status["automatic_window_open"],
             "sms_reply_capable": sms_status["reply_capable"],
             "google_calendar_configured": google_calendar_configured(),
             "build": BACKUP_BUILD}
@@ -4481,11 +4485,12 @@ def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str
             EmailLog.status == "sent",
         ).order_by(EmailLog.sent_at.desc()).limit(1))
         if quote_sent_at:
-            days_since_quote = (today - quote_sent_at.date()).days
+            quote_sent_date = business_date(quote_sent_at)
+            days_since_quote = (today - quote_sent_date).days
             if 1 <= days_since_quote < 9 and not quote_followup_paused(booking, "quote_followup_1"):
-                reminders.append(("quote_followup_1", quote_sent_at.date() + timedelta(days=1)))
+                reminders.append(("quote_followup_1", quote_sent_date + timedelta(days=1)))
             elif 9 <= days_since_quote <= 16 and not quote_followup_paused(booking, "quote_followup_final"):
-                reminders.append(("quote_followup_final", quote_sent_at.date() + timedelta(days=9)))
+                reminders.append(("quote_followup_final", quote_sent_date + timedelta(days=9)))
 
     if accepted_quote and not active_payment_arrangement(booking):
         accepted_invoice = next(
@@ -4527,8 +4532,8 @@ def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str
     return reminders
 
 
-def run_due_reminders(db: Session) -> dict:
-    today = date.today()
+def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
+    today = today or date.today()
     now = datetime.now(timezone.utc)
     sent, skipped, failed = 0, 0, 0
     bookings = db.scalars(select(Booking).options(
@@ -4670,9 +4675,13 @@ def retry_failed_communication(
 async def reminder_loop():
     while True:
         await asyncio.sleep(max(1, settings.reminder_scan_hours) * 3600)
-        if settings.reminders_enabled and smtp_ready():
+        within_window = automatic_delivery_allowed(
+            settings.automatic_message_start_hour,
+            settings.automatic_message_end_hour,
+        )
+        if settings.reminders_enabled and smtp_ready() and within_window:
             with SessionLocal() as db:
-                await asyncio.to_thread(run_due_reminders, db)
+                await asyncio.to_thread(run_due_reminders, db, today=business_today())
 
 
 async def calendar_retry_loop():

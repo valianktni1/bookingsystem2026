@@ -1,5 +1,20 @@
-BookingSystem2026 - SMS Centre
-Build: 2026.09.15-sms-centre-v8.49
+BookingSystem2026 - Stability and UK-time safety
+Build: 2026.09.16-stability-v8.50
+
+V8.50 stability:
+- replaces the shared Weddings By Mark awards panel in every branded email,
+  email preview and PDF with the approved tidy 2026 winner / 2027 nominee panel
+- optimises that panel from 1.7 MB to about 146 KB without changing its wording,
+  so client emails remain quick to load
+- limits background client emails and optional automatic SMS to 09:00-19:00
+  Europe/London, including correct British Summer Time handling
+- leaves deliberate manual email and SMS sending available at all times
+- keeps automatic SMS globally off and every automatic SMS template inactive
+- calculates quote follow-up dates from the correct UK date of the quote email
+- rejects the old example administrator password in production
+- updates fresh-install recovery defaults to Platinum £1,350 and Ultimate £1,799
+- changes no live package, booking, invoice, payment, document or client record
+- introduces no database migration and sends nothing during deployment
 
 V8.49 SMS centre:
 - adds a clear Texts tab and direct Text shortcut to every client workspace
