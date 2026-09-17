@@ -1,5 +1,16 @@
-BookingSystem2026 - Workflow cleanup
-Build: 2026.09.17-workflow-cleanup-v8.50.2
+BookingSystem2026 - Custom Workflow Studio
+Build: 2026.09.17-custom-workflow-studio-v8.51
+
+V8.51 Custom Workflow Studio:
+- adds a clear workflow editor to Email & SMS templates for Weddings By Mark
+- gives each workflow its own timing and Automatic, Review first, Task only or Off mode
+- previews the actual couple-specific branded email before a review item is approved
+- creates private Things to do entries for Review first and Task only modes
+- previews the next scheduled workflow actions for current bookings
+- preserves all V8.50.2 live modes and timings by default, so deployment changes nothing
+- retains individual quote pauses, reply safety, payment arrangements and Studio Ninja protection
+- stores configuration in the existing system settings table with no database migration
+- sends no email and creates no tasks merely by deploying or opening the studio
 
 V8.50.2 Workflow cleanup:
 - removes the inaccurate Final-detail calls list from the Home dashboard

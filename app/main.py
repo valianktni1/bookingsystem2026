@@ -67,7 +67,7 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       ClientEmailComposeIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn, QuoteSendIn,
                       FinalCallPackIn, SendEmailIn, TaskIn, TaskPatch,
-                      TemplateTestIn, TestingModeIn)
+                      TemplateTestIn, TestingModeIn, WorkflowStudioIn)
 from .security import create_token, current_admin, verify_password
 from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
                        next_invoice_number, payment_reference, sync_final_details_call_task,
@@ -79,6 +79,9 @@ from .v845_routes import apply_quote_reply_safety, register_v845_routes
 from .v846_routes import after_wedding_readiness, register_v846_routes
 from .v848_routes import register_v848_routes
 from .sms_routes import register_sms_routes, sms_automation_loop, sms_status_json
+from .workflow_studio import (WORKFLOW_DEFINITIONS, definition_for,
+                              save_workflow_settings, workflow_catalog,
+                              workflow_rule, workflow_settings)
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -134,7 +137,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.50.2", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.51", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -2980,12 +2983,26 @@ WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
 }
 
 
-def email_template_usage(template: EmailTemplate) -> dict:
+def email_template_usage(db: Session, template: EmailTemplate) -> dict:
     if template.brand == Brand.WBM:
-        kind, label = WBM_TEMPLATE_USAGE.get(
-            template.template_key,
-            ("manual", "Custom manual option available from Email client"),
-        )
+        definition = definition_for(template.template_key)
+        if definition:
+            rule = workflow_rule(db, template.template_key)
+            mode = rule["mode"]
+            kind = {"automatic": "automatic", "review": "action",
+                    "task": "action", "off": "manual"}[mode]
+            timing = f"{rule['days']} day{'s' if rule['days'] != 1 else ''} {definition['direction']} {definition['anchor_label']}"
+            label = {
+                "automatic": f"Workflow Studio: sends automatically {timing}",
+                "review": f"Workflow Studio: waits for your approval {timing}",
+                "task": f"Workflow Studio: creates a private task {timing} and sends nothing",
+                "off": "Workflow Studio: off; this template remains available for deliberate manual use",
+            }[mode]
+        else:
+            kind, label = WBM_TEMPLATE_USAGE.get(
+                template.template_key,
+                ("manual", "Custom manual option available from Email client"),
+            )
     else:
         kind, label = ("manual", "Available when you deliberately email this client")
     if not template.is_active:
@@ -3012,7 +3029,7 @@ def list_templates(brand: Brand | None = None, _: Admin = Depends(current_admin)
             }, "reminders_enabled": settings.reminders_enabled,
             "templates": [{"id": x.id, "brand": x.brand.value, "template_key": x.template_key,
                            "display_name": x.display_name, "subject": x.subject, "body": x.body,
-                           "is_active": x.is_active, **email_template_usage(x)} for x in rows],
+                           "is_active": x.is_active, **email_template_usage(db, x)} for x in rows],
             "contracts": [{"id": x.id, "brand": x.brand.value, "title": x.title, "version": x.version,
                            "body": x.body, "is_active": x.is_active} for x in contracts]}
 
@@ -4442,29 +4459,27 @@ def _attempt_reminder(db: Session, booking: Booking, reminder: ReminderLog) -> b
         return False
 
 
-def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str, date]]:
-    """Return the one currently relevant stage of each reminder journey."""
+def _workflow_candidates(db: Session, booking: Booking) -> list[tuple[str, date]]:
+    """Calculate the currently relevant scheduled point for each journey."""
     is_studio_ninja = booking.legacy_source == "studio_ninja"
     if is_studio_ninja:
-        # This remains the sole automatic Studio Ninja communication. The
-        # catch-up window ends on the wedding day and never enables anything else.
         if not (
             booking.brand == Brand.WBM
             and booking.kind == RecordKind.WEDDING
             and booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS)
             and booking.event_date
             and booking.event_date > date(2026, 10, 20)
-            and 23 <= (booking.event_date - today).days <= 30
         ):
             return []
-        return [("check_in_30", booking.event_date - timedelta(days=30))]
+        rule = workflow_rule(db, "check_in_30")
+        return [("check_in_30", booking.event_date - timedelta(days=rule["days"]))]
     if not automations_allowed(booking):
         return []
 
-    reminders: list[tuple[str, date]] = []
+    candidates: list[tuple[str, date]] = []
     is_wbm_wedding = booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
     if not is_wbm_wedding:
-        return reminders
+        return candidates
     accepted_quote = next((quote for quote in booking.quotes if quote.status == "accepted"), None)
 
     if not accepted_quote and booking.status in (RecordStatus.ENQUIRY, RecordStatus.QUOTED):
@@ -4475,30 +4490,46 @@ def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str
         ).order_by(EmailLog.sent_at.desc()).limit(1))
         if quote_sent_at:
             quote_sent_date = business_date(quote_sent_at)
-            days_since_quote = (today - quote_sent_date).days
-            if 1 <= days_since_quote < 9 and not quote_followup_paused(booking, "quote_followup_1"):
-                reminders.append(("quote_followup_1", quote_sent_date + timedelta(days=1)))
-            elif 9 <= days_since_quote <= 16 and not quote_followup_paused(booking, "quote_followup_final"):
-                reminders.append(("quote_followup_final", quote_sent_date + timedelta(days=9)))
+            for key in ("quote_followup_1", "quote_followup_final"):
+                if not quote_followup_paused(booking, key):
+                    candidates.append((key, quote_sent_date + timedelta(days=workflow_rule(db, key)["days"])))
 
     if accepted_quote and not active_payment_arrangement(booking):
+        form = db.scalar(select(FormSubmission).where(
+            FormSubmission.booking_id == booking.id,
+            FormSubmission.form_type == "booking_form",
+        ).limit(1))
+        agreement = db.scalar(select(ContractAcceptance.id).where(
+            ContractAcceptance.booking_id == booking.id,
+        ).limit(1))
+        if accepted_quote.accepted_at and not form:
+            candidates.append((
+                "booking_form_reminder",
+                business_date(accepted_quote.accepted_at)
+                + timedelta(days=workflow_rule(db, "booking_form_reminder")["days"]),
+            ))
+        if form and not agreement:
+            candidates.append((
+                "contract_reminder",
+                business_date(form.submitted_at)
+                + timedelta(days=workflow_rule(db, "contract_reminder")["days"]),
+            ))
         accepted_invoice = next(
             (invoice for invoice in booking.invoices if invoice.id == accepted_quote.invoice_id),
             None,
         )
         if (accepted_invoice and accepted_invoice.status not in ("void", "cancelled")
                 and money(accepted_invoice.paid) <= 0
-                and accepted_invoice.deposit_due_date
-                and accepted_invoice.deposit_due_date <= today
-                and (today - accepted_invoice.deposit_due_date).days <= 7):
-            reminders.append(("deposit_due_1", accepted_invoice.deposit_due_date))
+                and accepted_invoice.deposit_due_date):
+            candidates.append((
+                "deposit_due_1",
+                accepted_invoice.deposit_due_date
+                + timedelta(days=workflow_rule(db, "deposit_due_1")["days"]),
+            ))
 
     if booking.event_date and booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS):
-        days_to_wedding = (booking.event_date - today).days
-        if 113 <= days_to_wedding <= 120:
-            reminders.append(("check_in_120", booking.event_date - timedelta(days=120)))
-        elif 23 <= days_to_wedding <= 30:
-            reminders.append(("check_in_30", booking.event_date - timedelta(days=30)))
+        for key in ("check_in_120", "check_in_30"):
+            candidates.append((key, booking.event_date - timedelta(days=workflow_rule(db, key)["days"])))
 
     has_balance = any(
         invoice.status not in ("void", "cancelled") and invoice.paid < invoice.total
@@ -4509,22 +4540,76 @@ def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str
         arrangement and arrangement["active"] and arrangement["pause_payment_reminders"]
     )
     if booking.balance_due_date and has_balance and not payment_reminders_paused:
-        days_to_balance = (booking.balance_due_date - today).days
-        if 2 <= days_to_balance <= 7:
-            reminders.append(("balance_due_7", booking.balance_due_date - timedelta(days=7)))
-        elif 0 <= days_to_balance <= 1:
-            reminders.append(("balance_due_1", booking.balance_due_date - timedelta(days=1)))
-        else:
-            overdue_days = -days_to_balance
-            if overdue_days >= 2 and overdue_days % 2 == 0:
-                reminders.append((f"balance_overdue_{overdue_days}", today))
-    return reminders
+        for key in ("balance_due_7", "balance_due_1"):
+            candidates.append((key, booking.balance_due_date - timedelta(days=workflow_rule(db, key)["days"])))
+        overdue_rule = workflow_rule(db, "balance_overdue_2")
+        candidates.append(("balance_overdue_2", booking.balance_due_date + timedelta(days=overdue_rule["days"])))
+    return candidates
+
+
+def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str, date]]:
+    """Return the one currently relevant stage of each configurable journey."""
+    candidates = [
+        item for item in _workflow_candidates(db, booking)
+        if workflow_rule(db, _reminder_template_key(item[0]))["mode"] != "off"
+    ]
+    due: list[tuple[str, date]] = []
+    grouped = {
+        "quote": [item for item in candidates if item[0].startswith("quote_followup_")],
+        "wedding": [item for item in candidates if item[0].startswith("check_in_")],
+        "balance": [item for item in candidates if item[0] in ("balance_due_7", "balance_due_1")],
+    }
+    grouped_keys = {key for rows in grouped.values() for key, _ in rows}
+    for group_name, rows in grouped.items():
+        if group_name == "balance" and booking.balance_due_date and today > booking.balance_due_date:
+            continue
+        eligible = [item for item in rows if item[1] <= today and (today - item[1]).days <= 7]
+        if eligible:
+            due.append(max(eligible, key=lambda item: item[1]))
+    for key, scheduled_for in candidates:
+        if key in grouped_keys:
+            continue
+        if key == "balance_overdue_2":
+            if today < scheduled_for:
+                continue
+            rule = workflow_rule(db, key)
+            elapsed = (today - scheduled_for).days
+            if elapsed % rule.get("repeat_days", 2) == 0:
+                due.append((f"balance_overdue_{(today - booking.balance_due_date).days}", today))
+        elif scheduled_for <= today and (today - scheduled_for).days <= 7:
+            due.append((key, scheduled_for))
+    return due
+
+
+def _workflow_task_key(reminder: ReminderLog) -> str:
+    return f"workflow_email:{reminder.id}"
+
+
+def _ensure_workflow_task(db: Session, booking: Booking, reminder: ReminderLog, *, review: bool) -> None:
+    key = _workflow_task_key(reminder)
+    if db.scalar(select(Task.id).where(Task.workflow_key == key).limit(1)):
+        return
+    definition = definition_for(reminder.reminder_key) or {"label": reminder.reminder_key}
+    verb = "Review email" if review else "Contact couple"
+    db.add(Task(
+        booking_id=booking.id,
+        title=f"{verb}: {definition['label']}",
+        due_at=datetime(reminder.scheduled_for.year, reminder.scheduled_for.month,
+                        reminder.scheduled_for.day, 10, tzinfo=timezone.utc),
+        workflow_key=key,
+    ))
+
+
+def _complete_workflow_task(db: Session, reminder: ReminderLog) -> None:
+    task = db.scalar(select(Task).where(Task.workflow_key == _workflow_task_key(reminder)).limit(1))
+    if task:
+        task.completed = True
 
 
 def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
     today = today or date.today()
     now = datetime.now(timezone.utc)
-    sent, skipped, failed = 0, 0, 0
+    sent, skipped, failed, awaiting_review, tasks_created = 0, 0, 0, 0, 0
     bookings = db.scalars(select(Booking).options(
         selectinload(Booking.client), selectinload(Booking.invoices), selectinload(Booking.quotes)
     ).where(
@@ -4537,12 +4622,16 @@ def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
     apply_quote_reply_safety(db, bookings, today=today, now=now)
     for booking in bookings:
         for reminder_key, scheduled_for in _due_reminders(db, booking, today):
+            rule = workflow_rule(db, _reminder_template_key(reminder_key))
+            if rule["mode"] == "off":
+                skipped += 1
+                continue
             reminder = db.scalar(select(ReminderLog).where(
                 ReminderLog.booking_id == booking.id,
                 ReminderLog.reminder_key == reminder_key,
                 ReminderLog.scheduled_for == scheduled_for,
             ))
-            if reminder and reminder.status == "sent":
+            if reminder and reminder.status in ("sent", "awaiting_review", "task_created", "skipped"):
                 skipped += 1
                 continue
             if reminder and reminder.next_attempt_at:
@@ -4561,11 +4650,200 @@ def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
                 )
                 db.add(reminder)
                 db.commit()
-            if _attempt_reminder(db, booking, reminder):
+            if rule["mode"] == "review":
+                reminder.status = "awaiting_review"
+                _ensure_workflow_task(db, booking, reminder, review=True)
+                audit(db, "queue_workflow_email_review", "booking", booking.id,
+                      {"template": _reminder_template_key(reminder_key)})
+                db.commit()
+                awaiting_review += 1
+            elif rule["mode"] == "task":
+                reminder.status = "task_created"
+                _ensure_workflow_task(db, booking, reminder, review=False)
+                audit(db, "create_workflow_contact_task", "booking", booking.id,
+                      {"template": _reminder_template_key(reminder_key)})
+                db.commit()
+                tasks_created += 1
+            elif _attempt_reminder(db, booking, reminder):
                 sent += 1
             else:
                 failed += 1
-    return {"sent": sent, "skipped": skipped, "failed": failed}
+    result = {"sent": sent, "skipped": skipped, "failed": failed}
+    # Preserve the long-standing response shape for fully automatic checks;
+    # expose the new counters only when the studio actually creates them.
+    if awaiting_review:
+        result["awaiting_review"] = awaiting_review
+    if tasks_created:
+        result["tasks_created"] = tasks_created
+    return result
+
+
+def _workflow_reminder_json(reminder: ReminderLog, booking: Booking) -> dict:
+    definition = definition_for(reminder.reminder_key) or {"label": reminder.reminder_key}
+    return {
+        "id": reminder.id,
+        "booking_id": booking.id,
+        "booking_title": booking.title,
+        "reminder_key": reminder.reminder_key,
+        "template_key": _reminder_template_key(reminder.reminder_key),
+        "label": definition["label"],
+        "scheduled_for": reminder.scheduled_for.isoformat(),
+        "status": reminder.status,
+    }
+
+
+@app.get("/api/communications/workflows")
+def get_workflow_studio(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    today = business_today()
+    bookings = db.scalars(select(Booking).options(
+        selectinload(Booking.client), selectinload(Booking.invoices), selectinload(Booking.quotes)
+    ).where(
+        Booking.archived_at.is_(None), Booking.status != RecordStatus.CANCELLED,
+        Booking.brand == Brand.WBM, Booking.kind == RecordKind.WEDDING,
+    )).all()
+    booking_by_id = {booking.id: booking for booking in bookings}
+    pending_rows = db.scalars(select(ReminderLog).where(
+        ReminderLog.status == "awaiting_review",
+        ReminderLog.booking_id.in_(booking_by_id),
+    ).order_by(ReminderLog.scheduled_for, ReminderLog.id)).all() if booking_by_id else []
+    pending = [
+        _workflow_reminder_json(row, booking_by_id[row.booking_id])
+        for row in pending_rows if row.booking_id in booking_by_id
+    ]
+    upcoming = []
+    for booking in bookings:
+        for key, scheduled_for in _workflow_candidates(db, booking):
+            template_key = _reminder_template_key(key)
+            rule = workflow_rule(db, template_key)
+            if rule["mode"] == "off" or scheduled_for < today or scheduled_for > today + timedelta(days=180):
+                continue
+            definition = definition_for(key) or {"label": key}
+            upcoming.append({
+                "booking_id": booking.id,
+                "booking_title": booking.title,
+                "template_key": template_key,
+                "label": definition["label"],
+                "scheduled_for": scheduled_for.isoformat(),
+                "mode": rule["mode"],
+            })
+    upcoming.sort(key=lambda item: (item["scheduled_for"], item["booking_title"]))
+    return {
+        "version": 1,
+        "rules": workflow_catalog(db),
+        "pending_review": pending,
+        "upcoming": upcoming[:30],
+        "reminders_enabled": settings.reminders_enabled,
+        "scan_hours": settings.reminder_scan_hours,
+        "delivery_window": (
+            f"{settings.automatic_message_start_hour:02d}:00-"
+            f"{settings.automatic_message_end_hour:02d}:00 Europe/London"
+        ),
+    }
+
+
+@app.put("/api/communications/workflows")
+def put_workflow_studio(payload: WorkflowStudioIn, admin: Admin = Depends(current_admin),
+                        db: Session = Depends(get_db)):
+    values = {key: value.model_dump(exclude_none=True) for key, value in payload.rules.items()}
+    expected = {item["key"] for item in WORKFLOW_DEFINITIONS}
+    if set(values) != expected:
+        raise HTTPException(422, "Every displayed workflow must be saved together")
+    if values["quote_followup_final"]["days"] <= values["quote_followup_1"]["days"]:
+        raise HTTPException(422, "The final quote follow-up must be later than the first check-in")
+    if values["balance_due_7"]["days"] <= values["balance_due_1"]["days"]:
+        raise HTTPException(422, "The early balance reminder must be earlier than the final reminder")
+    if values["check_in_120"]["days"] <= values["check_in_30"]["days"]:
+        raise HTTPException(422, "The early wedding check-in must be earlier than the final timings invitation")
+    try:
+        saved = save_workflow_settings(db, values)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    audit(db, "update_workflow_studio", "system_setting", "workflow_studio_wbm", {
+        "admin": admin.email,
+        "modes": {key: value["mode"] for key, value in saved["rules"].items()},
+    })
+    db.commit()
+    return {"ok": True, "rules": workflow_catalog(db)}
+
+
+def _review_reminder_booking(db: Session, reminder_id: str) -> tuple[ReminderLog, Booking]:
+    reminder = db.get(ReminderLog, reminder_id)
+    if not reminder or reminder.status != "awaiting_review":
+        raise HTTPException(404, "Workflow email awaiting review not found")
+    booking = db.scalar(select(Booking).options(
+        selectinload(Booking.client), selectinload(Booking.invoices), selectinload(Booking.quotes)
+    ).where(Booking.id == reminder.booking_id))
+    if not booking or booking.status == RecordStatus.CANCELLED or booking.archived_at:
+        raise HTTPException(409, "This booking can no longer receive the workflow email")
+    template_key = _reminder_template_key(reminder.reminder_key)
+    if booking.legacy_source == "studio_ninja" and template_key != "check_in_30":
+        raise HTTPException(409, "Studio Ninja communication protection remains active")
+    if not booking.legacy_source and not automations_allowed(booking):
+        raise HTTPException(409, "Client communication is paused for this booking")
+    if template_key.startswith("quote_followup_") and any(
+            quote.status == "accepted" for quote in booking.quotes):
+        raise HTTPException(409, "The quote has now been accepted, so this follow-up is no longer needed")
+    if template_key.startswith("balance_") and not any(
+            invoice.status not in ("void", "cancelled") and invoice.paid < invoice.total
+            for invoice in booking.invoices):
+        raise HTTPException(409, "The balance is now paid, so this reminder is no longer needed")
+    if template_key == "booking_form_reminder" and db.scalar(select(FormSubmission.id).where(
+            FormSubmission.booking_id == booking.id,
+            FormSubmission.form_type == "booking_form").limit(1)):
+        raise HTTPException(409, "The booking form has now been received")
+    if template_key == "contract_reminder" and db.scalar(select(ContractAcceptance.id).where(
+            ContractAcceptance.booking_id == booking.id).limit(1)):
+        raise HTTPException(409, "The agreement has now been signed")
+    return reminder, booking
+
+
+@app.post("/api/communications/workflows/review/{reminder_id}/send")
+def send_reviewed_workflow_email(reminder_id: str, admin: Admin = Depends(current_admin),
+                                 db: Session = Depends(get_db)):
+    reminder, booking = _review_reminder_booking(db, reminder_id)
+    if not _attempt_reminder(db, booking, reminder):
+        raise HTTPException(503, reminder.error or "The workflow email could not be sent")
+    _complete_workflow_task(db, reminder)
+    audit(db, "approve_workflow_email", "booking", booking.id,
+          {"template": _reminder_template_key(reminder.reminder_key), "admin": admin.email})
+    db.commit()
+    return {"ok": True, "status": "sent"}
+
+
+@app.get("/api/communications/workflows/review/{reminder_id}/preview")
+def preview_reviewed_workflow_email(reminder_id: str, _: Admin = Depends(current_admin),
+                                    db: Session = Depends(get_db)):
+    reminder, booking = _review_reminder_booking(db, reminder_id)
+    template_key = _reminder_template_key(reminder.reminder_key)
+    template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == booking.brand,
+        EmailTemplate.template_key == template_key,
+        EmailTemplate.is_active.is_(True),
+    ))
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    if not template or not profile:
+        raise HTTPException(409, "The email template or business profile is unavailable")
+    subject, body, email_html = preview_template_email(
+        booking, profile, template,
+        f"{settings.app_url.rstrip('/')}/client/secure-link-created-when-sent",
+    )
+    email_html = email_html.replace("cid:weddings-by-mark-logo", "/static/branding/weddings-by-mark-logo.png")
+    email_html = email_html.replace("cid:weddings-by-mark-awards", "/static/branding/weddings-by-mark-awards.png")
+    return {"id": reminder.id, "booking_title": booking.title, "subject": subject,
+            "body": body, "html": email_html}
+
+
+@app.post("/api/communications/workflows/review/{reminder_id}/skip")
+def skip_reviewed_workflow_email(reminder_id: str, admin: Admin = Depends(current_admin),
+                                 db: Session = Depends(get_db)):
+    reminder, booking = _review_reminder_booking(db, reminder_id)
+    reminder.status = "skipped"
+    reminder.error = "Skipped deliberately during review"
+    _complete_workflow_task(db, reminder)
+    audit(db, "skip_workflow_email", "booking", booking.id,
+          {"template": _reminder_template_key(reminder.reminder_key), "admin": admin.email})
+    db.commit()
+    return {"ok": True, "status": "skipped"}
 
 
 @app.post("/api/communications/reminders/run")

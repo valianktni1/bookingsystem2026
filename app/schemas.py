@@ -84,6 +84,16 @@ class TaskPatch(BaseModel):
     completed: bool | None = None
 
 
+class WorkflowRuleIn(BaseModel):
+    mode: Literal["automatic", "review", "task", "off"]
+    days: int = Field(ge=0, le=365)
+    repeat_days: int | None = Field(default=None, ge=1, le=60)
+
+
+class WorkflowStudioIn(BaseModel):
+    rules: dict[str, WorkflowRuleIn]
+
+
 class FinalCallPackIn(BaseModel):
     checklist: dict[str, bool] = Field(default_factory=dict)
     notes: str = Field(default="", max_length=10000)

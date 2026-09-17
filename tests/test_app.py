@@ -232,7 +232,7 @@ def test_phase_two_b_flow(monkeypatch):
                                              "automatic_message_window": "09:00-19:00 Europe/London",
                                              "sms_reply_capable": False,
                                          "google_calendar_configured": False,
-                                           "build": "2026.09.17-workflow-cleanup-v8.50.2"}
+                                           "build": "2026.09.17-custom-workflow-studio-v8.51"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

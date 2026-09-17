@@ -1,9 +1,23 @@
-# Mark's Business Studio — Version 8.50.2
+# Mark's Business Studio — Version 8.51
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.50.2, including browser-history
+build includes every cumulative feature through V8.51, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.51 Custom Workflow Studio
+
+Weddings By Mark now has a visual Workflow Studio above Email & SMS templates.
+Every client-email journey has its own number of days and one of four deliberate
+modes: **Automatic**, **Review first**, **Task only**, or **Off**. Review-first
+messages wait in a private approval queue with the real couple-specific branded
+email preview; Task-only workflows create a Things to do item and send nothing.
+
+The live V8.50.2 timings are the V8.51 defaults, so deployment alone changes no
+schedule and sends no email. Existing per-couple quote pauses, reply detection,
+payment-arrangement pauses, imported Studio Ninja protections and inactive-email
+template safeguards all remain in force. Settings are stored in the existing
+system settings table, requiring no database migration.
 
 ## Version 8.50.2 workflow cleanup
 
