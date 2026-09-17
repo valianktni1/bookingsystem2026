@@ -1,9 +1,20 @@
-# Mark's Business Studio — Version 8.50
+# Mark's Business Studio — Version 8.50.1
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.50, including browser-history
+build includes every cumulative feature through V8.50.1, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.50.1 Inbox flow correction
+
+The live Inbox now has its own clearly labelled search. The main client and
+invoice search can no longer carry across silently and hide otherwise visible
+emails while the mailbox unread counter continues to show them. Opening Inbox
+normally always shows the complete mailbox; opening it from a couple deliberately
+filters to that address and displays an obvious **Show all emails** action.
+
+This release changes no mailbox contents, bookings, reminders, invoices,
+payments or database records and sends no email during deployment.
 
 ## Version 8.50 stability and UK-time safety
 

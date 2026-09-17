@@ -232,7 +232,7 @@ def test_phase_two_b_flow(monkeypatch):
                                              "automatic_message_window": "09:00-19:00 Europe/London",
                                              "sms_reply_capable": False,
                                          "google_calendar_configured": False,
-                                           "build": "2026.09.16-stability-v8.50"}
+                                           "build": "2026.09.17-inbox-flow-v8.50.1"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }

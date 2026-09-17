@@ -6,6 +6,9 @@
   state.mailAccounts = [];
   state.mailErrors = {};
   state.mailUnreadOnly = false;
+  // Inbox filtering is deliberately separate from the top-level client and
+  // invoice search. A stale workspace search must never hide live mail.
+  state.mailFilter = "";
   state.mailSelected = null;
   state.mailLoading = false;
   state.mailLoaded = false;
@@ -23,6 +26,12 @@
 
   function mailKey(message) { return `${message.brand}:${message.uid}`; }
   function mailBrandLabel(brand) { return brand === "wbm" ? "Weddings By Mark" : "Ivory Digital"; }
+  function clearWorkspaceSearch() {
+    state.search = "";
+    const search = $("#search");
+    if (search) search.value = "";
+    $("#global-search-results")?.classList.add("hidden");
+  }
   function mailDate(value) {
     if (!value) return "Unknown date";
     const date = new Date(value);
@@ -72,7 +81,7 @@
   }
 
   function filteredMail() {
-    const query = String(state.search || "").trim().toLowerCase();
+    const query = String(state.mailFilter || "").trim().toLowerCase();
     return state.mailMessages.filter(message =>
       (state.brand === "all" || message.brand === state.brand) &&
       (!state.mailUnreadOnly || message.unread) &&
@@ -99,13 +108,29 @@
             <button id="mail-unread-toggle" class="secondary ${state.mailUnreadOnly ? "active" : ""}">${state.mailUnreadOnly ? "Show all" : "Unread only"}</button>
             <button id="mail-refresh" class="secondary" ${state.mailLoading ? "disabled" : ""}>${state.mailLoading ? "Refreshing…" : "↻ Refresh"}</button>
           </div></header>
+          <label class="mail-filter"><span>⌕</span><input id="mail-filter-input" type="search" value="${attr(state.mailFilter || "")}" placeholder="Search this inbox by name, email or subject" aria-label="Search this inbox">${state.mailFilter ? `<button id="mail-clear-filter" type="button">Show all emails</button>` : ""}</label>
           <div class="mail-list">${rows.map(message => `<button class="mail-row ${message.unread ? "unread" : ""} ${mailKey(message) === selectedKey ? "active" : ""}" data-mail-brand="${message.brand}" data-mail-uid="${message.uid}">
             <i class="mail-unread-dot"></i><span class="mail-row-main"><span><strong>${esc(message.from_name || message.from_email)}</strong><time>${esc(mailDate(message.date))}</time></span><b>${esc(message.subject)}</b><small>${esc(message.from_email)}</small>${message.booking ? `<em>Linked to ${esc(message.booking.title)}</em>` : `<em class="unmatched">Not matched to a booking</em>`}</span><span class="mail-brand ${message.brand}">${message.brand === "wbm" ? "WBM" : "IVORY"}</span>
-          </button>`).join("") || `<div class="empty mail-empty"><strong>${state.mailUnreadOnly ? "No unread emails" : "No emails found"}</strong>${state.search ? "Try clearing the search box." : "New messages will appear here when they reach Hostinger."}</div>`}</div>
+          </button>`).join("") || `<div class="empty mail-empty"><strong>${state.mailUnreadOnly ? "No unread emails" : "No emails found"}</strong>${state.mailFilter ? "No messages match this Inbox search. Press Show all emails to return to everything." : "New messages will appear here when they reach Hostinger."}</div>`}</div>
         </aside>
         <main id="mail-reader" class="mail-reader">${state.mailSelected ? mailReaderLoading() : `<div class="mail-reader-empty"><i>✉</i><strong>Choose an email</strong><span>Open a message to read it, see its matching booking and reply from the correct business address.</span></div>`}</main>
       </section>`;
     $$("[data-mail-uid]", content).forEach(button => button.onclick = () => openMailMessage(button.dataset.mailBrand, button.dataset.mailUid));
+    $("#mail-filter-input")?.addEventListener("input", event => {
+      const cursor = event.target.selectionStart;
+      state.mailFilter = event.target.value;
+      state.mailSelected = null;
+      renderMailWorkspace();
+      const replacement = $("#mail-filter-input");
+      replacement?.focus();
+      if (replacement && cursor !== null) replacement.setSelectionRange(cursor, cursor);
+    });
+    $("#mail-clear-filter")?.addEventListener("click", () => {
+      state.mailFilter = "";
+      state.mailSelected = null;
+      renderMailWorkspace();
+      $("#mail-filter-input")?.focus();
+    });
     $("#mail-refresh")?.addEventListener("click", () => loadMailWorkspace(true));
     $("#mail-unread-toggle")?.addEventListener("click", () => {
       state.mailUnreadOnly = !state.mailUnreadOnly;
@@ -137,11 +162,29 @@
   }
 
   window.openInboxMessageFromDashboard = async function (brand, uid) {
+    clearWorkspaceSearch();
+    state.mailFilter = "";
     state.mailUnreadOnly = false;
     state.mailSelected = null;
     state.mailLoaded = false;
     await navigate("mail");
     await openMailMessage(brand, uid);
+  };
+
+  window.openMailboxForAddress = async function (email) {
+    clearWorkspaceSearch();
+    state.mailFilter = String(email || "").trim().toLowerCase();
+    state.mailUnreadOnly = false;
+    state.mailSelected = null;
+    await navigate("mail");
+  };
+
+  window.openFullMailbox = async function () {
+    clearWorkspaceSearch();
+    state.mailFilter = "";
+    state.mailUnreadOnly = false;
+    state.mailSelected = null;
+    await navigate("mail");
   };
 
   function sentReplyCard(reply) {
@@ -215,10 +258,12 @@
       emailAction.textContent = "✉ Inbox";
       emailAction.onclick = () => {
         closeDrawer();
-        state.search = record.client.email.toLowerCase();
-        $("#search").value = record.client.email;
-        navigate("mail");
+        window.openMailboxForAddress(record.client.email);
       };
     }
   };
+
+  // A normal Inbox click always means the complete Inbox. Couple-specific
+  // filtering is entered only through the explicit booking shortcut above.
+  $$('[data-view="mail"]').forEach(button => button.onclick = window.openFullMailbox);
 })();

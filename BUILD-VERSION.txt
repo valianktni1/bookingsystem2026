@@ -1,5 +1,13 @@
-BookingSystem2026 - Stability and UK-time safety
-Build: 2026.09.16-stability-v8.50
+BookingSystem2026 - Inbox flow correction
+Build: 2026.09.17-inbox-flow-v8.50.1
+
+V8.50.1 Inbox flow:
+- keeps the live Inbox independent from the main client and invoice search
+- makes an ordinary Inbox click always show the complete mailbox
+- adds a clear Inbox-only search for name, address, subject or booking
+- shows a large Show all emails action whenever that Inbox search is active
+- keeps the intentional Open this couple in Inbox shortcut working clearly
+- changes no email, reminder, booking, payment or database record
 
 V8.50 stability:
 - replaces the shared Weddings By Mark awards panel in every branded email,

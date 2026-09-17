@@ -67,7 +67,7 @@
       <button data-mobile-jump="mail" type="button"><i>✉</i><span>Inbox</span></button>
       <button data-mobile-jump="settings" type="button"><i>⚙</i><span>Settings</span></button>
     </nav>`);
-    $$('[data-mobile-jump]', content).forEach(button => button.onclick = () => navigate(button.dataset.mobileJump));
+    $$('[data-mobile-jump]', content).forEach(button => button.onclick = () => button.dataset.mobileJump === "mail" ? window.openFullMailbox() : navigate(button.dataset.mobileJump));
   }
 
   const content = $("#content");
