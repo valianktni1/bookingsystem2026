@@ -1,5 +1,22 @@
-BookingSystem2026 - Custom Workflow Studio
-Build: 2026.09.17-custom-workflow-studio-v8.51
+BookingSystem2026 - Custom Workflow Builder
+Build: 2026.09.17-custom-workflow-builder-v8.52
+
+V8.52 Custom Workflow Builder:
+- adds an editable per-business email signature in Business Settings
+- allows safe PNG/JPEG logo and awards artwork uploads up to 3MB
+- embeds selected artwork directly in previews, test messages and live emails
+- preselects Mark's Weddings By Mark contact signature, logo and awards panel
+- adds Add workflow with nine safe booking and wedding triggers
+- creates every new workflow as an inactive draft
+- supports before/after timing and Automatic, Review first or Task only actions
+- connects an existing client template or creates a new one inside the builder
+- previews and test-emails the selected template before activation
+- defaults activation to bookings created from that point forward
+- requires a separate warned choice before including current eligible bookings
+- allows active workflows to be paused, then edited, duplicated or safely deleted
+- prevents live editing and active deletion, retaining all email history
+- preserves every V8.51 built-in workflow; one additive signature-settings
+  column is created automatically with no manual migration command
 
 V8.51 Custom Workflow Studio:
 - adds a clear workflow editor to Email & SMS templates for Weddings By Mark

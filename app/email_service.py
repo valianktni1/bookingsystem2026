@@ -24,10 +24,92 @@ BRAND_ASSETS = {
     Brand.IVORY: {
         "logo": BRANDING_DIR / "ivory-digital-logo.png",
         "logo_cid": "ivory-digital-logo",
+        "awards_cid": "ivory-digital-awards",
         "accent": "#bb8c36",
         "soft": "#fbf6eb",
     },
 }
+
+
+def default_email_signature(profile: BusinessProfile) -> dict:
+    """A complete, human default for an upgraded or newly-created profile."""
+    if profile.brand == Brand.WBM:
+        lines = [
+            "Mark Powell",
+            profile.display_name,
+            "Multi Award Winning Wedding Photographer",
+            profile.phone or "07712 117357",
+            profile.email or "mark@perfectweddingsbymark.uk",
+            profile.website or "perfectweddingsbymark.uk",
+        ]
+    else:
+        lines = [profile.display_name]
+        if profile.email:
+            lines.append(profile.email)
+        if profile.phone:
+            lines.append(profile.phone)
+        if profile.website:
+            lines.append(profile.website)
+    return {
+        "text": "\n".join(lines),
+        "show_logo": True,
+        "show_awards": profile.brand == Brand.WBM,
+        "logo_storage_name": None,
+        "awards_storage_name": None,
+    }
+
+
+def email_signature_config(profile: BusinessProfile) -> dict:
+    """Merge stored choices over safe defaults and discard unknown values."""
+    default = default_email_signature(profile)
+    saved = profile.email_signature if isinstance(profile.email_signature, dict) else {}
+    text = saved.get("text", default["text"])
+    if not isinstance(text, str):
+        text = default["text"]
+    result = {
+        "text": text[:2000],
+        "show_logo": bool(saved.get("show_logo", default["show_logo"])),
+        "show_awards": bool(saved.get("show_awards", default["show_awards"])),
+        "logo_storage_name": saved.get("logo_storage_name"),
+        "awards_storage_name": saved.get("awards_storage_name"),
+    }
+    for key in ("logo_storage_name", "awards_storage_name"):
+        if not isinstance(result[key], str):
+            result[key] = None
+    return result
+
+
+def _safe_stored_asset(storage_name: str | None) -> Path | None:
+    if not storage_name:
+        return None
+    root = get_settings().storage_root.resolve()
+    path = (root / storage_name).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        return None
+    return path
+
+
+def email_signature_asset(profile: BusinessProfile, kind: str) -> dict | None:
+    """Resolve the selected custom artwork, falling back to supplied branding."""
+    if kind not in {"logo", "awards"}:
+        return None
+    config = email_signature_config(profile)
+    if not config[f"show_{kind}"]:
+        return None
+    assets = BRAND_ASSETS[profile.brand]
+    path = _safe_stored_asset(config.get(f"{kind}_storage_name"))
+    if path is None:
+        path = assets.get(kind)
+    if not path or not path.is_file():
+        return None
+    suffix = path.suffix.lower()
+    subtype = "jpeg" if suffix in {".jpg", ".jpeg"} else "png"
+    return {
+        "path": path,
+        "cid": assets[f"{kind}_cid"],
+        "subtype": subtype,
+        "filename": path.name,
+    }
 
 
 def template_values(booking: Booking, profile: BusinessProfile, portal_url: str | None = None,
@@ -192,18 +274,29 @@ def _plain_body(body: str) -> str:
 def _email_html(body: str, booking: Booking, profile: BusinessProfile,
                 open_tracking_url: str | None = None) -> str:
     assets = BRAND_ASSETS[booking.brand]
+    signature = email_signature_config(profile)
+    logo_asset = email_signature_asset(profile, "logo")
+    awards_asset = email_signature_asset(profile, "awards")
+    logo = (
+        f'<img src="cid:{logo_asset["cid"]}" alt="{html.escape(profile.display_name)}" '
+        f'style="display:block;max-width:{"280px" if booking.brand == Brand.IVORY else "245px"};'
+        f'max-height:{"94px" if booking.brand == Brand.IVORY else "150px"};width:auto;height:auto;margin:0 auto;border:0">'
+        if logo_asset else
+        f'<strong style="font-family:Arial,sans-serif;font-size:24px;color:#2d2b28">{html.escape(profile.display_name)}</strong>'
+    )
     awards = ""
-    if booking.brand == Brand.WBM:
+    if awards_asset:
         awards = f"""
           <tr>
             <td style="padding:22px 28px 26px;border-top:1px solid #ece6da;text-align:center;background:#ffffff">
               <div style="font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.4px;color:#7c6a49;font-weight:bold;margin-bottom:12px">
-                PROUDLY AWARD-WINNING WEDDING PHOTOGRAPHY
+                PROUDLY AWARD-WINNING
               </div>
-              <img src="cid:{assets['awards_cid']}" width="340" alt="Weddings By Mark awards"
+              <img src="cid:{awards_asset['cid']}" width="340" alt="{html.escape(profile.display_name)} awards"
                    style="display:block;width:100%;max-width:340px;height:auto;margin:0 auto;border:0">
             </td>
           </tr>"""
+    signature_html = "<br>".join(html.escape(line) for line in signature["text"].splitlines())
     tracking_pixel = ""
     if open_tracking_url:
         tracking_pixel = (
@@ -221,8 +314,7 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
                  style="width:100%;max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e2d8">
             <tr>
               <td align="center" style="padding:24px 28px;background:{assets['soft']};border-bottom:3px solid {assets['accent']}">
-                <img src="cid:{assets['logo_cid']}" alt="{html.escape(profile.display_name)}"
-                     style="display:block;max-width:{'280px' if booking.brand == Brand.IVORY else '245px'};max-height:{'94px' if booking.brand == Brand.IVORY else '150px'};width:auto;height:auto;margin:0 auto;border:0">
+                {logo}
               </td>
             </tr>
             <tr>
@@ -232,9 +324,7 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
             </tr>
             <tr>
               <td style="padding:18px 28px;background:#242321;color:#ffffff;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px">
-                <strong>{html.escape(profile.display_name)}</strong><br>
-                {html.escape(profile.email or '')}{' &nbsp;·&nbsp; ' if profile.email and profile.phone else ''}{html.escape(profile.phone or '')}<br>
-                {html.escape(profile.website or '')}
+                {signature_html}
               </td>
             </tr>
             {awards}
@@ -257,17 +347,20 @@ def build_email_message(booking: Booking, profile: BusinessProfile, subject: str
     message["From"] = f"{profile.display_name} <{username}>"
     message["To"] = recipient or booking.client.email
     message["Reply-To"] = reply_to or profile.email or username
-    message.set_content(_plain_body(body))
+    plain = _plain_body(body)
+    signature_text = email_signature_config(profile)["text"].strip()
+    if signature_text:
+        plain = f"{plain.rstrip()}\n\n{signature_text}"
+    message.set_content(plain)
     message.add_alternative(
         _email_html(body, booking, profile, open_tracking_url), subtype="html"
     )
     html_part = message.get_payload()[-1]
-    assets = BRAND_ASSETS[booking.brand]
-    for path_key, cid_key in (("logo", "logo_cid"), ("awards", "awards_cid")):
-        path = assets.get(path_key)
-        if path and path.exists():
-            html_part.add_related(path.read_bytes(), maintype="image", subtype="png",
-                                  cid=f"<{assets[cid_key]}>", filename=path.name,
+    for kind in ("logo", "awards"):
+        asset = email_signature_asset(profile, kind)
+        if asset:
+            html_part.add_related(asset["path"].read_bytes(), maintype="image", subtype=asset["subtype"],
+                                  cid=f"<{asset['cid']}>", filename=asset["filename"],
                                   disposition="inline")
     return message
 

@@ -8,6 +8,8 @@ pre-V8.51 behaviour without a database migration.
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
+import secrets
 
 from sqlalchemy.orm import Session
 
@@ -17,6 +19,19 @@ from .models import SystemSetting
 SETTING_KEY = "workflow_studio_wbm"
 CACHE_KEY = "workflow_studio_wbm_resolved"
 WORKFLOW_MODES = {"automatic", "review", "task", "off"}
+
+TRIGGER_DEFINITIONS: tuple[dict, ...] = (
+    {"key": "enquiry_created", "label": "Enquiry received", "directions": ["after"]},
+    {"key": "quote_sent", "label": "Quote sent", "directions": ["after"]},
+    {"key": "quote_accepted", "label": "Quote accepted", "directions": ["after"]},
+    {"key": "booking_form_submitted", "label": "Booking form received", "directions": ["after"]},
+    {"key": "contract_signed", "label": "Agreement signed", "directions": ["after"]},
+    {"key": "deposit_paid", "label": "Booking fee received", "directions": ["after"]},
+    {"key": "deposit_due", "label": "Booking fee due date", "directions": ["before", "after"]},
+    {"key": "balance_due", "label": "Final balance due date", "directions": ["before", "after"]},
+    {"key": "wedding_date", "label": "Wedding date", "directions": ["before", "after"]},
+)
+TRIGGERS = {item["key"]: item for item in TRIGGER_DEFINITIONS}
 
 
 WORKFLOW_DEFINITIONS: tuple[dict, ...] = (
@@ -66,7 +81,7 @@ WORKFLOW_DEFINITIONS: tuple[dict, ...] = (
 
 def default_workflow_settings() -> dict:
     return {
-        "version": 1,
+        "version": 2,
         "rules": {
             item["key"]: {
                 "mode": item["default_mode"],
@@ -75,6 +90,7 @@ def default_workflow_settings() -> dict:
             }
             for item in WORKFLOW_DEFINITIONS
         },
+        "custom_workflows": [],
     }
 
 
@@ -102,6 +118,12 @@ def workflow_settings(db: Session) -> dict:
         if definition.get("repeatable") and isinstance(repeat_days, int) \
                 and not isinstance(repeat_days, bool) and 1 <= repeat_days <= 60:
             result["rules"][key]["repeat_days"] = repeat_days
+    stored_custom = stored.get("custom_workflows")
+    if isinstance(stored_custom, list):
+        result["custom_workflows"] = [
+            deepcopy(item) for item in stored_custom
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        ]
     db.info[CACHE_KEY] = deepcopy(result)
     return result
 
@@ -119,7 +141,7 @@ def workflow_catalog(db: Session) -> list[dict]:
 
 
 def save_workflow_settings(db: Session, rules: dict) -> dict:
-    clean = default_workflow_settings()
+    clean = workflow_settings(db)
     allowed = {item["key"]: item for item in WORKFLOW_DEFINITIONS}
     if set(rules) != set(allowed):
         raise ValueError("Every workflow must be supplied exactly once")
@@ -144,6 +166,132 @@ def save_workflow_settings(db: Session, rules: dict) -> dict:
         db.add(SystemSetting(key=SETTING_KEY, value=clean))
     db.info[CACHE_KEY] = deepcopy(clean)
     return clean
+
+
+def custom_workflows(db: Session, *, include_deleted: bool = False) -> list[dict]:
+    rows = workflow_settings(db).get("custom_workflows", [])
+    if include_deleted:
+        return deepcopy(rows)
+    return [deepcopy(item) for item in rows if item.get("status") != "deleted"]
+
+
+def custom_workflow(db: Session, workflow_id_or_key: str) -> dict | None:
+    workflow_id = workflow_id_or_key.removeprefix("custom:")
+    return next((item for item in custom_workflows(db, include_deleted=True)
+                 if item.get("id") == workflow_id), None)
+
+
+def _validate_custom_workflow(value: dict) -> dict:
+    name = str(value.get("name") or "").strip()
+    if not 3 <= len(name) <= 140:
+        raise ValueError("Workflow name must be between 3 and 140 characters")
+    trigger = value.get("trigger")
+    if trigger not in TRIGGERS:
+        raise ValueError("Choose a valid workflow trigger")
+    direction = value.get("direction")
+    if direction not in TRIGGERS[trigger]["directions"]:
+        raise ValueError(f"{TRIGGERS[trigger]['label']} cannot run {direction or 'that way'}")
+    days = value.get("days")
+    if not isinstance(days, int) or isinstance(days, bool) or not 0 <= days <= 365:
+        raise ValueError("Workflow timing must be between 0 and 365 days")
+    mode = value.get("mode")
+    if mode not in {"automatic", "review", "task"}:
+        raise ValueError("Choose Automatic, Review first or Task only")
+    template_key = str(value.get("template_key") or "").strip()
+    if not template_key or len(template_key) > 80:
+        raise ValueError("Choose an email template")
+    return {"name": name, "trigger": trigger, "direction": direction,
+            "days": days, "mode": mode, "template_key": template_key}
+
+
+def _store_custom_rows(db: Session, rows: list[dict]) -> dict:
+    settings = workflow_settings(db)
+    settings["version"] = 2
+    settings["custom_workflows"] = deepcopy(rows)
+    row = db.get(SystemSetting, SETTING_KEY)
+    if row:
+        row.value = settings
+    else:
+        db.add(SystemSetting(key=SETTING_KEY, value=settings))
+    db.info[CACHE_KEY] = deepcopy(settings)
+    return settings
+
+
+def create_custom_workflow(db: Session, value: dict, *, created_by: str) -> dict:
+    clean = _validate_custom_workflow(value)
+    now = datetime.now(timezone.utc).isoformat()
+    item = {"id": f"cw_{secrets.token_hex(8)}", **clean, "status": "draft",
+            "include_existing": False, "activated_at": None,
+            "created_at": now, "created_by": created_by, "updated_at": now}
+    rows = custom_workflows(db, include_deleted=True)
+    rows.append(item)
+    _store_custom_rows(db, rows)
+    return deepcopy(item)
+
+
+def update_custom_workflow(db: Session, workflow_id: str, value: dict, *, updated_by: str) -> dict:
+    clean = _validate_custom_workflow(value)
+    rows = custom_workflows(db, include_deleted=True)
+    item = next((row for row in rows if row.get("id") == workflow_id), None)
+    if not item or item.get("status") == "deleted":
+        raise KeyError(workflow_id)
+    if item.get("status") == "active":
+        raise ValueError("Pause this workflow before editing it")
+    item.update(clean)
+    item.update({"updated_at": datetime.now(timezone.utc).isoformat(),
+                 "updated_by": updated_by})
+    _store_custom_rows(db, rows)
+    return deepcopy(item)
+
+
+def activate_custom_workflow(db: Session, workflow_id: str, *, include_existing: bool,
+                             activated_by: str) -> dict:
+    rows = custom_workflows(db, include_deleted=True)
+    item = next((row for row in rows if row.get("id") == workflow_id), None)
+    if not item or item.get("status") == "deleted":
+        raise KeyError(workflow_id)
+    now = datetime.now(timezone.utc).isoformat()
+    item.update({"status": "active", "include_existing": bool(include_existing),
+                 "activated_at": now, "activated_by": activated_by,
+                 "updated_at": now})
+    _store_custom_rows(db, rows)
+    return deepcopy(item)
+
+
+def pause_custom_workflow(db: Session, workflow_id: str, *, paused_by: str) -> dict:
+    rows = custom_workflows(db, include_deleted=True)
+    item = next((row for row in rows if row.get("id") == workflow_id), None)
+    if not item or item.get("status") == "deleted":
+        raise KeyError(workflow_id)
+    item.update({"status": "paused", "paused_at": datetime.now(timezone.utc).isoformat(),
+                 "paused_by": paused_by})
+    _store_custom_rows(db, rows)
+    return deepcopy(item)
+
+
+def duplicate_custom_workflow(db: Session, workflow_id: str, *, created_by: str) -> dict:
+    item = custom_workflow(db, workflow_id)
+    if not item or item.get("status") == "deleted":
+        raise KeyError(workflow_id)
+    return create_custom_workflow(db, {**item, "name": f"Copy of {item['name']}"[:140]},
+                                  created_by=created_by)
+
+
+def delete_custom_workflow(db: Session, workflow_id: str, *, deleted_by: str) -> dict:
+    rows = custom_workflows(db, include_deleted=True)
+    item = next((row for row in rows if row.get("id") == workflow_id), None)
+    if not item or item.get("status") == "deleted":
+        raise KeyError(workflow_id)
+    if item.get("status") == "active":
+        raise ValueError("Pause this workflow before deleting it")
+    item.update({"status": "deleted", "deleted_at": datetime.now(timezone.utc).isoformat(),
+                 "deleted_by": deleted_by})
+    _store_custom_rows(db, rows)
+    return deepcopy(item)
+
+
+def custom_reminder_key(workflow_id: str) -> str:
+    return f"custom:{workflow_id}"
 
 
 def definition_for(key: str) -> dict | None:

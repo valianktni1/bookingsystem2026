@@ -107,7 +107,7 @@ def test_workflow_studio_rejects_unsafe_ordering_and_assets_are_loaded():
     index = (ROOT / "app" / "static" / "index.html").read_text()
     javascript = (ROOT / "app" / "static" / "v851.js").read_text()
     css = (ROOT / "app" / "static" / "v851.css").read_text()
-    assert "custom-workflow-studio-v8-51" in index
+    assert "custom-workflow-builder-v8-52" in index
     assert "Custom Workflow Studio" in javascript
     assert "Review first" in javascript
     assert "Task only" in javascript

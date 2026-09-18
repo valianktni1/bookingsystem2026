@@ -67,6 +67,9 @@ class BusinessProfile(Base):
     website: Mapped[str | None] = mapped_column(String(200), nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     bank_details: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Kept as a small JSON document so the signature can grow with the future
+    # SaaS business profile without repeatedly changing the live database.
+    email_signature: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class Client(Base):

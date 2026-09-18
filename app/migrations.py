@@ -20,6 +20,7 @@ def apply_safe_migrations() -> None:
         "business_profiles": {
             "phone": "VARCHAR(50) NULL",
             "website": "VARCHAR(200) NULL",
+            "email_signature": "JSON NULL",
         },
         "invoices": {
             "deposit_due_date": "DATE NULL",

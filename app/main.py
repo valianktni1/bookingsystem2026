@@ -33,7 +33,8 @@ from .accounts_integration import accounts_sync_loop, register_accounts_integrat
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .date_blocks import register_date_block_routes
-from .email_service import (preview_template_email, send_rendered_email,
+from .email_service import (email_signature_asset, email_signature_config,
+                            preview_template_email, send_rendered_email,
                             send_template_email, smtp_credentials, smtp_ready)
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
 from .google_calendar import (google_calendar_configured, register_google_calendar_routes,
@@ -67,7 +68,8 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
                       ClientEmailComposeIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn, QuoteSendIn,
                       FinalCallPackIn, SendEmailIn, TaskIn, TaskPatch,
-                      TemplateTestIn, TestingModeIn, WorkflowStudioIn)
+                      TemplateTestIn, TestingModeIn, WorkflowStudioIn,
+                      CustomWorkflowIn, CustomWorkflowActivationIn)
 from .security import create_token, current_admin, verify_password
 from .services import (audit, create_default_tasks, dashboard_counts, invoice_status,
                        next_invoice_number, payment_reference, sync_final_details_call_task,
@@ -79,9 +81,13 @@ from .v845_routes import apply_quote_reply_safety, register_v845_routes
 from .v846_routes import after_wedding_readiness, register_v846_routes
 from .v848_routes import register_v848_routes
 from .sms_routes import register_sms_routes, sms_automation_loop, sms_status_json
-from .workflow_studio import (WORKFLOW_DEFINITIONS, definition_for,
-                              save_workflow_settings, workflow_catalog,
-                              workflow_rule, workflow_settings)
+from .workflow_studio import (TRIGGER_DEFINITIONS, WORKFLOW_DEFINITIONS,
+                              activate_custom_workflow, create_custom_workflow,
+                              custom_reminder_key, custom_workflow, custom_workflows,
+                              definition_for, delete_custom_workflow,
+                              duplicate_custom_workflow, pause_custom_workflow,
+                              save_workflow_settings, update_custom_workflow,
+                              workflow_catalog, workflow_rule, workflow_settings)
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).parent / "static"
@@ -137,7 +143,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.51", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.52", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1381,7 +1387,14 @@ def businesses(_: Admin = Depends(current_admin), db: Session = Depends(get_db))
     rows = db.scalars(select(BusinessProfile).order_by(BusinessProfile.display_name)).all()
     return [{"brand": r.brand.value, "display_name": r.display_name, "legal_name": r.legal_name,
              "invoice_prefix": r.invoice_prefix, "email": r.email, "phone": r.phone,
-             "website": r.website, "address": r.address, "bank_details": r.bank_details or {}} for r in rows]
+             "website": r.website, "address": r.address, "bank_details": r.bank_details or {},
+             "email_signature": {
+                 **email_signature_config(r),
+                 "logo_url": f"/api/businesses/{r.brand.value}/email-signature/assets/logo",
+                 "awards_url": f"/api/businesses/{r.brand.value}/email-signature/assets/awards",
+                 "has_custom_logo": bool(email_signature_config(r).get("logo_storage_name")),
+                 "has_custom_awards": bool(email_signature_config(r).get("awards_storage_name")),
+             }} for r in rows]
 
 
 @app.get("/api/backups/complete")
@@ -1457,11 +1470,136 @@ def patch_business(brand: Brand, payload: BusinessPatch, _: Admin = Depends(curr
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == brand))
     if not profile:
         raise HTTPException(404, "Business profile not found")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    requested_signature = changes.pop("email_signature", None)
+    for key, value in changes.items():
         setattr(profile, key, value)
+    if requested_signature is not None:
+        if not isinstance(requested_signature, dict):
+            raise HTTPException(422, "Email signature settings must be an object")
+        current_signature = email_signature_config(profile)
+        text = requested_signature.get("text", current_signature["text"])
+        if not isinstance(text, str):
+            raise HTTPException(422, "Email signature wording must be text")
+        if len(text) > 2000:
+            raise HTTPException(422, "Email signature wording must be 2,000 characters or fewer")
+        current_signature["text"] = text.strip()
+        for key in ("show_logo", "show_awards"):
+            if key in requested_signature:
+                current_signature[key] = bool(requested_signature[key])
+        profile.email_signature = current_signature
     audit(db, "update", "business", profile.id, {"brand": brand.value, "fields": list(payload.model_fields_set)})
     db.commit()
     return businesses(_, db)
+
+
+def _signature_asset_target(profile: BusinessProfile, kind: str, suffix: str) -> tuple[str, Path]:
+    storage_name = f"business-email/{profile.brand.value}/{kind}-{uuid.uuid4().hex}{suffix}"
+    target = settings.storage_root / storage_name
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return storage_name, target
+
+
+def _delete_signature_storage(storage_name: str | None) -> None:
+    if not storage_name:
+        return
+    root = settings.storage_root.resolve()
+    target = (root / storage_name).resolve()
+    if target.is_relative_to(root) and target.is_file():
+        target.unlink(missing_ok=True)
+
+
+@app.post("/api/businesses/{brand}/email-signature/assets/{kind}")
+def upload_email_signature_asset(
+    brand: Brand,
+    kind: str,
+    file: UploadFile = File(...),
+    admin: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    if kind not in {"logo", "awards"}:
+        raise HTTPException(404, "Email signature image type not found")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == brand))
+    if not profile:
+        raise HTTPException(404, "Business profile not found")
+    data = file.file.read(3 * 1024 * 1024 + 1)
+    if len(data) > 3 * 1024 * 1024:
+        raise HTTPException(413, "Email signature images must be 3MB or smaller")
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        suffix = ".png"
+    elif data.startswith(b"\xff\xd8\xff"):
+        suffix = ".jpg"
+    else:
+        raise HTTPException(415, "Upload a PNG or JPEG image")
+    signature = email_signature_config(profile)
+    previous = signature.get(f"{kind}_storage_name")
+    storage_name, target = _signature_asset_target(profile, kind, suffix)
+    target.write_bytes(data)
+    signature[f"{kind}_storage_name"] = storage_name
+    signature[f"show_{kind}"] = True
+    profile.email_signature = signature
+    audit(db, "upload_email_signature_asset", "business", profile.id, {
+        "brand": brand.value, "kind": kind, "size_bytes": len(data),
+    })
+    db.commit()
+    _delete_signature_storage(previous)
+    return businesses(admin, db)
+
+
+@app.delete("/api/businesses/{brand}/email-signature/assets/{kind}")
+def remove_email_signature_asset(
+    brand: Brand,
+    kind: str,
+    admin: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    if kind not in {"logo", "awards"}:
+        raise HTTPException(404, "Email signature image type not found")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == brand))
+    if not profile:
+        raise HTTPException(404, "Business profile not found")
+    signature = email_signature_config(profile)
+    previous = signature.get(f"{kind}_storage_name")
+    signature[f"{kind}_storage_name"] = None
+    signature[f"show_{kind}"] = False
+    profile.email_signature = signature
+    audit(db, "remove_email_signature_asset", "business", profile.id, {
+        "brand": brand.value, "kind": kind,
+    })
+    db.commit()
+    _delete_signature_storage(previous)
+    return businesses(admin, db)
+
+
+@app.get("/api/businesses/{brand}/email-signature/assets/{kind}")
+def get_email_signature_asset(
+    brand: Brand,
+    kind: str,
+    _: Admin = Depends(current_admin),
+    db: Session = Depends(get_db),
+):
+    if kind not in {"logo", "awards"}:
+        raise HTTPException(404, "Email signature image type not found")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == brand))
+    asset = email_signature_asset(profile, kind) if profile else None
+    if not asset:
+        raise HTTPException(404, "No email signature image is selected")
+    return FileResponse(
+        asset["path"],
+        media_type=f"image/{asset['subtype']}",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+def _email_preview_asset_urls(email_html: str, profile: BusinessProfile) -> str:
+    for kind in ("logo", "awards"):
+        asset = email_signature_asset(profile, kind)
+        if asset:
+            email_html = email_html.replace(
+                f"cid:{asset['cid']}",
+                f"/api/businesses/{profile.brand.value}/email-signature/assets/{kind}",
+            )
+    return email_html
 
 
 @app.get("/api/catalog")
@@ -1849,7 +1987,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             continue
         row = item(
             booking,
-            f"{_reminder_template_key(reminder.reminder_key).replace('_', ' ').title()} · "
+            f"{_reminder_template_key(db, reminder.reminder_key).replace('_', ' ').title()} · "
             f"{reminder.error or 'Delivery failed'}",
             "Activity", "retry_communication",
             due=reminder.scheduled_for,
@@ -2999,10 +3137,20 @@ def email_template_usage(db: Session, template: EmailTemplate) -> dict:
                 "off": "Workflow Studio: off; this template remains available for deliberate manual use",
             }[mode]
         else:
-            kind, label = WBM_TEMPLATE_USAGE.get(
-                template.template_key,
-                ("manual", "Custom manual option available from Email client"),
-            )
+            custom_uses = [item for item in custom_workflows(db)
+                           if item.get("template_key") == template.template_key]
+            active_custom = next((item for item in custom_uses if item.get("status") == "active"), None)
+            if active_custom:
+                kind = "automatic" if active_custom["mode"] == "automatic" else "action"
+                label = (f"Custom workflow: {active_custom['name']} · "
+                         f"{active_custom['mode'].replace('_', ' ').title()}")
+            elif custom_uses:
+                kind, label = ("manual", "Connected to a draft or paused custom workflow")
+            else:
+                kind, label = WBM_TEMPLATE_USAGE.get(
+                    template.template_key,
+                    ("manual", "Custom manual option available from Email client"),
+                )
     else:
         kind, label = ("manual", "Available when you deliberately email this client")
     if not template.is_active:
@@ -3066,9 +3214,7 @@ def preview_template(template_id: str, _: Admin = Depends(current_admin), db: Se
     booking = template_preview_booking(db, template.brand)
     portal_url = f"{settings.app_url.rstrip('/')}/client/example-preview-link"
     subject, body, email_html = preview_template_email(booking, profile, template, portal_url)
-    email_html = email_html.replace("cid:weddings-by-mark-logo", "/static/branding/weddings-by-mark-logo.png")
-    email_html = email_html.replace("cid:weddings-by-mark-awards", "/static/branding/weddings-by-mark-awards.png")
-    email_html = email_html.replace("cid:ivory-digital-logo", "/static/branding/ivory-digital-logo.png")
+    email_html = _email_preview_asset_urls(email_html, profile)
     return {"subject": subject, "body": body, "html": email_html,
             "test_recipient": profile.email or settings.admin_email,
             "brand": template.brand.value}
@@ -4392,13 +4538,30 @@ def public_contract_pdf(token: str, inline: bool = Query(False), db: Session = D
                              f'{"inline" if inline else "attachment"}; filename="signed-agreement.pdf"'})
 
 
-def _reminder_template_key(reminder_key: str) -> str:
+def _reminder_template_key(db: Session, reminder_key: str) -> str:
+    custom = custom_workflow(db, reminder_key)
+    if custom:
+        return custom["template_key"]
     return "balance_overdue_2" if reminder_key.startswith("balance_overdue_") else reminder_key
+
+
+def _workflow_rule_for_reminder(db: Session, reminder_key: str) -> dict:
+    custom = custom_workflow(db, reminder_key)
+    if custom:
+        return {"mode": custom.get("mode", "off"), "days": custom.get("days", 0)}
+    return workflow_rule(db, _reminder_template_key(db, reminder_key))
+
+
+def _workflow_definition_for_reminder(db: Session, reminder_key: str) -> dict:
+    custom = custom_workflow(db, reminder_key)
+    if custom:
+        return {"label": custom.get("name", "Custom workflow")}
+    return definition_for(reminder_key) or {"label": reminder_key}
 
 
 def _attempt_reminder(db: Session, booking: Booking, reminder: ReminderLog) -> bool:
     """Attempt one durable reminder and retain enough state for safe retry."""
-    template_key = _reminder_template_key(reminder.reminder_key)
+    template_key = _reminder_template_key(db, reminder.reminder_key)
     now = datetime.now(timezone.utc)
     reminder.status = "sending"
     reminder.retry_count = int(reminder.retry_count or 0) + 1
@@ -4457,6 +4620,97 @@ def _attempt_reminder(db: Session, booking: Booking, reminder: ReminderLog) -> b
         })
         db.commit()
         return False
+
+
+def _custom_workflow_anchor(db: Session, booking: Booking, workflow: dict) -> date | None:
+    trigger = workflow["trigger"]
+    accepted_quote = next((quote for quote in booking.quotes if quote.status == "accepted"), None)
+    if trigger == "enquiry_created":
+        if booking.status not in (RecordStatus.ENQUIRY, RecordStatus.QUOTED):
+            return None
+        return business_date(booking.created_at)
+    if trigger == "quote_sent":
+        if accepted_quote:
+            return None
+        sent_at = db.scalar(select(EmailLog.sent_at).where(
+            EmailLog.booking_id == booking.id,
+            EmailLog.template_key == "quote",
+            EmailLog.status == "sent",
+        ).order_by(EmailLog.sent_at.desc()).limit(1))
+        return business_date(sent_at) if sent_at else None
+    if trigger == "quote_accepted":
+        return business_date(accepted_quote.accepted_at) if accepted_quote and accepted_quote.accepted_at else None
+    if trigger == "booking_form_submitted":
+        submitted_at = db.scalar(select(FormSubmission.submitted_at).where(
+            FormSubmission.booking_id == booking.id,
+            FormSubmission.form_type == "booking_form",
+        ).limit(1))
+        return business_date(submitted_at) if submitted_at else None
+    if trigger == "contract_signed":
+        accepted_at = db.scalar(select(ContractAcceptance.accepted_at).where(
+            ContractAcceptance.booking_id == booking.id,
+        ).limit(1))
+        return business_date(accepted_at) if accepted_at else None
+    if trigger == "deposit_paid":
+        if booking.deposit_paid_date:
+            return booking.deposit_paid_date
+        return db.scalar(select(Payment.paid_date).join(Invoice).where(
+            Invoice.booking_id == booking.id,
+            Payment.amount > 0,
+        ).order_by(Payment.paid_date).limit(1))
+    if trigger == "wedding_date":
+        if booking.status not in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS,
+                                  RecordStatus.COMPLETED):
+            return None
+        return booking.event_date
+    if trigger in ("deposit_due", "balance_due") and active_payment_arrangement(booking):
+        return None
+    if trigger == "deposit_due":
+        if not accepted_quote:
+            return None
+        invoice = next((row for row in booking.invoices if row.id == accepted_quote.invoice_id), None)
+        if (not invoice or invoice.status in ("void", "cancelled")
+                or money(invoice.paid) > 0):
+            return None
+        return invoice.deposit_due_date
+    if trigger == "balance_due":
+        has_balance = any(
+            invoice.status not in ("void", "cancelled") and invoice.paid < invoice.total
+            for invoice in booking.invoices
+        )
+        arrangement = arrangement_json(booking)
+        if not has_balance or (arrangement and arrangement["active"]
+                               and arrangement["pause_payment_reminders"]):
+            return None
+        return booking.balance_due_date
+    return None
+
+
+def _custom_workflow_candidates(db: Session, booking: Booking) -> list[tuple[str, date]]:
+    candidates: list[tuple[str, date]] = []
+    for workflow in custom_workflows(db):
+        if workflow.get("status") != "active":
+            continue
+        activated_at_raw = workflow.get("activated_at")
+        if not workflow.get("include_existing") and activated_at_raw:
+            try:
+                activated_at = datetime.fromisoformat(activated_at_raw.replace("Z", "+00:00"))
+                booking_created = booking.created_at
+                if booking_created.tzinfo is None:
+                    booking_created = booking_created.replace(tzinfo=timezone.utc)
+                if activated_at.tzinfo is None:
+                    activated_at = activated_at.replace(tzinfo=timezone.utc)
+                if booking_created < activated_at:
+                    continue
+            except (TypeError, ValueError):
+                continue
+        anchor = _custom_workflow_anchor(db, booking, workflow)
+        if not anchor:
+            continue
+        offset = timedelta(days=int(workflow.get("days", 0)))
+        scheduled_for = anchor - offset if workflow.get("direction") == "before" else anchor + offset
+        candidates.append((custom_reminder_key(workflow["id"]), scheduled_for))
+    return candidates
 
 
 def _workflow_candidates(db: Session, booking: Booking) -> list[tuple[str, date]]:
@@ -4544,6 +4798,7 @@ def _workflow_candidates(db: Session, booking: Booking) -> list[tuple[str, date]
             candidates.append((key, booking.balance_due_date - timedelta(days=workflow_rule(db, key)["days"])))
         overdue_rule = workflow_rule(db, "balance_overdue_2")
         candidates.append(("balance_overdue_2", booking.balance_due_date + timedelta(days=overdue_rule["days"])))
+    candidates.extend(_custom_workflow_candidates(db, booking))
     return candidates
 
 
@@ -4551,7 +4806,7 @@ def _due_reminders(db: Session, booking: Booking, today: date) -> list[tuple[str
     """Return the one currently relevant stage of each configurable journey."""
     candidates = [
         item for item in _workflow_candidates(db, booking)
-        if workflow_rule(db, _reminder_template_key(item[0]))["mode"] != "off"
+        if _workflow_rule_for_reminder(db, item[0])["mode"] != "off"
     ]
     due: list[tuple[str, date]] = []
     grouped = {
@@ -4589,7 +4844,7 @@ def _ensure_workflow_task(db: Session, booking: Booking, reminder: ReminderLog, 
     key = _workflow_task_key(reminder)
     if db.scalar(select(Task.id).where(Task.workflow_key == key).limit(1)):
         return
-    definition = definition_for(reminder.reminder_key) or {"label": reminder.reminder_key}
+    definition = _workflow_definition_for_reminder(db, reminder.reminder_key)
     verb = "Review email" if review else "Contact couple"
     db.add(Task(
         booking_id=booking.id,
@@ -4622,7 +4877,7 @@ def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
     apply_quote_reply_safety(db, bookings, today=today, now=now)
     for booking in bookings:
         for reminder_key, scheduled_for in _due_reminders(db, booking, today):
-            rule = workflow_rule(db, _reminder_template_key(reminder_key))
+            rule = _workflow_rule_for_reminder(db, reminder_key)
             if rule["mode"] == "off":
                 skipped += 1
                 continue
@@ -4654,14 +4909,14 @@ def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
                 reminder.status = "awaiting_review"
                 _ensure_workflow_task(db, booking, reminder, review=True)
                 audit(db, "queue_workflow_email_review", "booking", booking.id,
-                      {"template": _reminder_template_key(reminder_key)})
+                      {"template": _reminder_template_key(db, reminder_key)})
                 db.commit()
                 awaiting_review += 1
             elif rule["mode"] == "task":
                 reminder.status = "task_created"
                 _ensure_workflow_task(db, booking, reminder, review=False)
                 audit(db, "create_workflow_contact_task", "booking", booking.id,
-                      {"template": _reminder_template_key(reminder_key)})
+                      {"template": _reminder_template_key(db, reminder_key)})
                 db.commit()
                 tasks_created += 1
             elif _attempt_reminder(db, booking, reminder):
@@ -4678,14 +4933,14 @@ def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
     return result
 
 
-def _workflow_reminder_json(reminder: ReminderLog, booking: Booking) -> dict:
-    definition = definition_for(reminder.reminder_key) or {"label": reminder.reminder_key}
+def _workflow_reminder_json(db: Session, reminder: ReminderLog, booking: Booking) -> dict:
+    definition = _workflow_definition_for_reminder(db, reminder.reminder_key)
     return {
         "id": reminder.id,
         "booking_id": booking.id,
         "booking_title": booking.title,
         "reminder_key": reminder.reminder_key,
-        "template_key": _reminder_template_key(reminder.reminder_key),
+        "template_key": _reminder_template_key(db, reminder.reminder_key),
         "label": definition["label"],
         "scheduled_for": reminder.scheduled_for.isoformat(),
         "status": reminder.status,
@@ -4707,17 +4962,17 @@ def get_workflow_studio(_: Admin = Depends(current_admin), db: Session = Depends
         ReminderLog.booking_id.in_(booking_by_id),
     ).order_by(ReminderLog.scheduled_for, ReminderLog.id)).all() if booking_by_id else []
     pending = [
-        _workflow_reminder_json(row, booking_by_id[row.booking_id])
+        _workflow_reminder_json(db, row, booking_by_id[row.booking_id])
         for row in pending_rows if row.booking_id in booking_by_id
     ]
     upcoming = []
     for booking in bookings:
         for key, scheduled_for in _workflow_candidates(db, booking):
-            template_key = _reminder_template_key(key)
-            rule = workflow_rule(db, template_key)
+            template_key = _reminder_template_key(db, key)
+            rule = _workflow_rule_for_reminder(db, key)
             if rule["mode"] == "off" or scheduled_for < today or scheduled_for > today + timedelta(days=180):
                 continue
-            definition = definition_for(key) or {"label": key}
+            definition = _workflow_definition_for_reminder(db, key)
             upcoming.append({
                 "booking_id": booking.id,
                 "booking_title": booking.title,
@@ -4727,9 +4982,29 @@ def get_workflow_studio(_: Admin = Depends(current_admin), db: Session = Depends
                 "mode": rule["mode"],
             })
     upcoming.sort(key=lambda item: (item["scheduled_for"], item["booking_title"]))
+    templates = db.scalars(select(EmailTemplate).where(
+        EmailTemplate.brand == Brand.WBM,
+        EmailTemplate.is_active.is_(True),
+    ).order_by(EmailTemplate.display_name)).all()
+    custom_rows = custom_workflows(db)
+    template_names = {item.template_key: item.display_name for item in templates}
+    trigger_names = {item["key"]: item["label"] for item in TRIGGER_DEFINITIONS}
     return {
-        "version": 1,
+        "version": 2,
         "rules": workflow_catalog(db),
+        "custom_workflows": [{
+            **row,
+            "trigger_label": trigger_names.get(row.get("trigger"), row.get("trigger")),
+            "template_name": template_names.get(row.get("template_key"), row.get("template_key")),
+            "template_available": row.get("template_key") in template_names,
+        } for row in custom_rows],
+        "triggers": list(TRIGGER_DEFINITIONS),
+        "available_templates": [{"id": item.id, "brand": item.brand.value,
+                                 "template_key": item.template_key,
+                                 "display_name": item.display_name,
+                                 "subject": item.subject}
+                                for item in templates
+                                if item.template_key not in OWNER_NOTIFICATION_KEYS],
         "pending_review": pending,
         "upcoming": upcoming[:30],
         "reminders_enabled": settings.reminders_enabled,
@@ -4739,6 +5014,124 @@ def get_workflow_studio(_: Admin = Depends(current_admin), db: Session = Depends
             f"{settings.automatic_message_end_hour:02d}:00 Europe/London"
         ),
     }
+
+
+def _require_custom_workflow_template(db: Session, template_key: str) -> EmailTemplate:
+    template = db.scalar(select(EmailTemplate).where(
+        EmailTemplate.brand == Brand.WBM,
+        EmailTemplate.template_key == template_key,
+        EmailTemplate.is_active.is_(True),
+    ))
+    if not template or template.template_key in OWNER_NOTIFICATION_KEYS:
+        raise HTTPException(422, "Choose an active Weddings By Mark client email template")
+    return template
+
+
+@app.post("/api/communications/workflows/custom", status_code=201)
+def post_custom_workflow(payload: CustomWorkflowIn, admin: Admin = Depends(current_admin),
+                         db: Session = Depends(get_db)):
+    _require_custom_workflow_template(db, payload.template_key)
+    try:
+        item = create_custom_workflow(db, payload.model_dump(), created_by=admin.email)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    audit(db, "create_custom_workflow", "system_setting", item["id"], {
+        "name": item["name"], "trigger": item["trigger"], "status": "draft",
+        "admin": admin.email,
+    })
+    db.commit()
+    return item
+
+
+@app.put("/api/communications/workflows/custom/{workflow_id}")
+def put_custom_workflow(workflow_id: str, payload: CustomWorkflowIn,
+                        admin: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    _require_custom_workflow_template(db, payload.template_key)
+    try:
+        item = update_custom_workflow(db, workflow_id, payload.model_dump(), updated_by=admin.email)
+    except KeyError as exc:
+        raise HTTPException(404, "Custom workflow not found") from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, "update_custom_workflow", "system_setting", item["id"], {
+        "name": item["name"], "admin": admin.email,
+    })
+    db.commit()
+    return item
+
+
+@app.post("/api/communications/workflows/custom/{workflow_id}/activate")
+def activate_custom_workflow_route(workflow_id: str, payload: CustomWorkflowActivationIn,
+                                   admin: Admin = Depends(current_admin),
+                                   db: Session = Depends(get_db)):
+    existing = custom_workflow(db, workflow_id)
+    if not existing or existing.get("status") == "deleted":
+        raise HTTPException(404, "Custom workflow not found")
+    _require_custom_workflow_template(db, existing["template_key"])
+    try:
+        item = activate_custom_workflow(
+            db, workflow_id, include_existing=payload.include_existing,
+            activated_by=admin.email,
+        )
+    except KeyError as exc:
+        raise HTTPException(404, "Custom workflow not found") from exc
+    audit(db, "activate_custom_workflow", "system_setting", item["id"], {
+        "name": item["name"], "include_existing": payload.include_existing,
+        "admin": admin.email,
+    })
+    db.commit()
+    return item
+
+
+@app.post("/api/communications/workflows/custom/{workflow_id}/pause")
+def pause_custom_workflow_route(workflow_id: str, admin: Admin = Depends(current_admin),
+                                db: Session = Depends(get_db)):
+    try:
+        item = pause_custom_workflow(db, workflow_id, paused_by=admin.email)
+    except KeyError as exc:
+        raise HTTPException(404, "Custom workflow not found") from exc
+    audit(db, "pause_custom_workflow", "system_setting", item["id"], {
+        "name": item["name"], "admin": admin.email,
+    })
+    db.commit()
+    return item
+
+
+@app.post("/api/communications/workflows/custom/{workflow_id}/duplicate", status_code=201)
+def duplicate_custom_workflow_route(workflow_id: str, admin: Admin = Depends(current_admin),
+                                    db: Session = Depends(get_db)):
+    try:
+        item = duplicate_custom_workflow(db, workflow_id, created_by=admin.email)
+    except KeyError as exc:
+        raise HTTPException(404, "Custom workflow not found") from exc
+    audit(db, "duplicate_custom_workflow", "system_setting", item["id"], {
+        "name": item["name"], "source": workflow_id, "admin": admin.email,
+    })
+    db.commit()
+    return item
+
+
+@app.delete("/api/communications/workflows/custom/{workflow_id}", status_code=204)
+def delete_custom_workflow_route(workflow_id: str, admin: Admin = Depends(current_admin),
+                                 db: Session = Depends(get_db)):
+    reminder_key = custom_reminder_key(workflow_id)
+    pending = db.scalar(select(ReminderLog.id).where(
+        ReminderLog.reminder_key == reminder_key,
+        ReminderLog.status.in_(("pending", "sending", "failed", "awaiting_review")),
+    ).limit(1))
+    if pending:
+        raise HTTPException(409, "Resolve or skip this workflow's pending email before deleting it")
+    try:
+        item = delete_custom_workflow(db, workflow_id, deleted_by=admin.email)
+    except KeyError as exc:
+        raise HTTPException(404, "Custom workflow not found") from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    audit(db, "delete_custom_workflow", "system_setting", item["id"], {
+        "name": item["name"], "admin": admin.email,
+    })
+    db.commit()
+    return Response(status_code=204)
 
 
 @app.put("/api/communications/workflows")
@@ -4775,11 +5168,14 @@ def _review_reminder_booking(db: Session, reminder_id: str) -> tuple[ReminderLog
     ).where(Booking.id == reminder.booking_id))
     if not booking or booking.status == RecordStatus.CANCELLED or booking.archived_at:
         raise HTTPException(409, "This booking can no longer receive the workflow email")
-    template_key = _reminder_template_key(reminder.reminder_key)
+    template_key = _reminder_template_key(db, reminder.reminder_key)
     if booking.legacy_source == "studio_ninja" and template_key != "check_in_30":
         raise HTTPException(409, "Studio Ninja communication protection remains active")
     if not booking.legacy_source and not automations_allowed(booking):
         raise HTTPException(409, "Client communication is paused for this booking")
+    custom = custom_workflow(db, reminder.reminder_key)
+    if custom and _custom_workflow_anchor(db, booking, custom) is None:
+        raise HTTPException(409, "This custom workflow is no longer relevant for the booking")
     if template_key.startswith("quote_followup_") and any(
             quote.status == "accepted" for quote in booking.quotes):
         raise HTTPException(409, "The quote has now been accepted, so this follow-up is no longer needed")
@@ -4805,7 +5201,7 @@ def send_reviewed_workflow_email(reminder_id: str, admin: Admin = Depends(curren
         raise HTTPException(503, reminder.error or "The workflow email could not be sent")
     _complete_workflow_task(db, reminder)
     audit(db, "approve_workflow_email", "booking", booking.id,
-          {"template": _reminder_template_key(reminder.reminder_key), "admin": admin.email})
+          {"template": _reminder_template_key(db, reminder.reminder_key), "admin": admin.email})
     db.commit()
     return {"ok": True, "status": "sent"}
 
@@ -4814,7 +5210,7 @@ def send_reviewed_workflow_email(reminder_id: str, admin: Admin = Depends(curren
 def preview_reviewed_workflow_email(reminder_id: str, _: Admin = Depends(current_admin),
                                     db: Session = Depends(get_db)):
     reminder, booking = _review_reminder_booking(db, reminder_id)
-    template_key = _reminder_template_key(reminder.reminder_key)
+    template_key = _reminder_template_key(db, reminder.reminder_key)
     template = db.scalar(select(EmailTemplate).where(
         EmailTemplate.brand == booking.brand,
         EmailTemplate.template_key == template_key,
@@ -4827,8 +5223,7 @@ def preview_reviewed_workflow_email(reminder_id: str, _: Admin = Depends(current
         booking, profile, template,
         f"{settings.app_url.rstrip('/')}/client/secure-link-created-when-sent",
     )
-    email_html = email_html.replace("cid:weddings-by-mark-logo", "/static/branding/weddings-by-mark-logo.png")
-    email_html = email_html.replace("cid:weddings-by-mark-awards", "/static/branding/weddings-by-mark-awards.png")
+    email_html = _email_preview_asset_urls(email_html, profile)
     return {"id": reminder.id, "booking_title": booking.title, "subject": subject,
             "body": body, "html": email_html}
 
@@ -4841,7 +5236,7 @@ def skip_reviewed_workflow_email(reminder_id: str, admin: Admin = Depends(curren
     reminder.error = "Skipped deliberately during review"
     _complete_workflow_task(db, reminder)
     audit(db, "skip_workflow_email", "booking", booking.id,
-          {"template": _reminder_template_key(reminder.reminder_key), "admin": admin.email})
+          {"template": _reminder_template_key(db, reminder.reminder_key), "admin": admin.email})
     db.commit()
     return {"ok": True, "status": "skipped"}
 

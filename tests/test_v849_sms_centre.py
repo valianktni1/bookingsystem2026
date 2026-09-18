@@ -312,7 +312,7 @@ def test_v849_frontend_is_visible_and_mobile_ready():
     javascript = (Path(__file__).parents[1] / "app" / "static" / "v849.js").read_text()
     css = (Path(__file__).parents[1] / "app" / "static" / "v849.css").read_text()
     workspace = (Path(__file__).parents[1] / "app" / "static" / "v844.js").read_text()
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.51" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.52" in index
     assert "/static/v849.js?v=sms-centre-v8-49" in index
     assert 'Texts: "texts"' in workspace
     assert "Pause each text separately" in javascript

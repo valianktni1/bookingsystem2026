@@ -1,9 +1,22 @@
-# Mark's Business Studio — Version 8.51
+# Mark's Business Studio — Version 8.52
 
 Mark's private, self-hosted booking and business management system. The current
-build includes every cumulative feature through V8.51, including browser-history
+build includes every cumulative feature through V8.52, including browser-history
 navigation, the client Email Centre, safe one-way Google Calendar syncing and a
 privacy-safe live website availability check.
+
+## Version 8.52 Custom Workflow Builder
+
+The Workflow Studio can now create complete extra client journeys without code.
+Each new workflow starts as a safe draft, chooses a trigger, before/after timing,
+Automatic/Review first/Task only action and an existing or newly-created email
+template. Drafts can be previewed and test-emailed before activation, then paused,
+edited, duplicated or safely deleted.
+
+Activation defaults to bookings created from that point forward. Including
+current eligible bookings is a separate, strongly warned choice, preventing an
+old client list from unexpectedly receiving a newly invented workflow. Existing
+V8.51 built-in workflows, timings, approvals and protections remain unchanged.
 
 ## Version 8.51 Custom Workflow Studio
 

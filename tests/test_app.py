@@ -232,7 +232,7 @@ def test_phase_two_b_flow(monkeypatch):
                                              "automatic_message_window": "09:00-19:00 Europe/London",
                                              "sms_reply_capable": False,
                                          "google_calendar_configured": False,
-                                           "build": "2026.09.17-custom-workflow-studio-v8.51"}
+                                           "build": "2026.09.17-custom-workflow-builder-v8.52"}
         assert client.get("/api/public/config").json() == {
             "google_maps_api_key": None, "google_maps_enabled": False,
         }
@@ -326,7 +326,7 @@ def test_phase_two_b_flow(monkeypatch):
                     "{portal_url}") if item in payment_template["body"]}
         preview = client.get(f"/api/communications/templates/{quote_template['id']}/preview")
         assert preview.status_code == 200
-        assert "/static/branding/weddings-by-mark-logo.png" in preview.json()["html"]
+        assert "/api/businesses/wbm/email-signature/assets/logo" in preview.json()["html"]
         assert ">VIEW YOUR FULL QUOTE HERE</a>" in preview.json()["html"]
         assert ">https://booking.weddingsbymark.uk/client/example-preview-link</a>" not in preview.json()["html"]
         assert preview.json()["test_recipient"] == "mark@perfectweddingsbymark.uk"

@@ -94,6 +94,22 @@ class WorkflowStudioIn(BaseModel):
     rules: dict[str, WorkflowRuleIn]
 
 
+class CustomWorkflowIn(BaseModel):
+    name: str = Field(min_length=3, max_length=140)
+    trigger: Literal["enquiry_created", "quote_sent", "quote_accepted",
+                     "booking_form_submitted", "contract_signed", "deposit_paid",
+                     "deposit_due", "balance_due", "wedding_date"]
+    direction: Literal["before", "after"]
+    days: int = Field(ge=0, le=365)
+    mode: Literal["automatic", "review", "task"]
+    template_key: str = Field(min_length=1, max_length=80,
+                              pattern=r"^[a-z0-9_]{1,80}$")
+
+
+class CustomWorkflowActivationIn(BaseModel):
+    include_existing: bool = False
+
+
 class FinalCallPackIn(BaseModel):
     checklist: dict[str, bool] = Field(default_factory=dict)
     notes: str = Field(default="", max_length=10000)
@@ -150,6 +166,7 @@ class BusinessPatch(BaseModel):
     website: str | None = Field(default=None, max_length=200)
     address: str | None = None
     bank_details: dict | None = None
+    email_signature: dict | None = None
 
 
 class EmailTemplateIn(BaseModel):
