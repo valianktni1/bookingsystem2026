@@ -1,5 +1,16 @@
-BookingSystem2026 - Custom Workflow Builder
-Build: 2026.09.17-custom-workflow-builder-v8.52
+BookingSystem2026 - Personal Studio Polish
+Build: 2026.09.19-personal-studio-polish-v8.53
+
+V8.53 Personal Studio Polish:
+- gives the mobile dock the five useful everyday destinations: Home, Enquiries,
+  Weddings, Inbox and More
+- mirrors the live unread Inbox count into the mobile navigation
+- opens the complete existing sidebar from More without removing any workspace
+- searches weddings by ISO date, UK DD/MM/YYYY date and written weekday/date
+- shows wedding weekday, date and venue directly in global search results
+- improves mobile readability, touch targets, dialogs, sticky navigation and focus
+- changes no invoices, Accounts data, payments, calendar events, workflows,
+  client communication, contracts, forms, SMS settings or booking records
 
 V8.52 Custom Workflow Builder:
 - adds an editable per-business email signature in Business Settings

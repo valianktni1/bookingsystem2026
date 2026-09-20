@@ -167,7 +167,7 @@ def test_v828_dashboard_and_record_actions_are_explicit_and_mobile_friendly():
     app_js = (root / "app/static/app.js").read_text()
     dashboard_js = (root / "app/static/v811.js").read_text()
     css = (root / "app/static/v811.css").read_text()
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.52" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.53" in index
     assert "/static/app.js?v=custom-workflow-builder-v8-52" in index
     assert "/static/v811.js?v=workflow-cleanup-v8-50-2" in index
     assert "Needs your action" in dashboard_js

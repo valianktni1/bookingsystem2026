@@ -227,7 +227,7 @@ def test_v836_templates_usage_cache_busting_and_build_markers():
     ):
         assert key in bootstrap
         assert key in main or key in (root / "app/owner_notifications.py").read_text()
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.52" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.53" in index
     assert "OWNER PROGRESS ALERTS V8.36 ·" not in index
     assert "/static/v811.js?v=workflow-cleanup-v8-50-2" in index
     assert "Quote acceptances, forms, signed agreements and replies" in dashboard

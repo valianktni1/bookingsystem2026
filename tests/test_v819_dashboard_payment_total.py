@@ -17,7 +17,7 @@ def test_payment_due_card_keeps_count_and_adds_filtered_amount_total():
 
 def test_current_build_identifier_is_exposed_by_health_endpoint():
     backup_py = (ROOT / "app" / "backup.py").read_text()
-    assert 'BACKUP_BUILD = "2026.09.17-custom-workflow-builder-v8.52"' in backup_py
+    assert 'BACKUP_BUILD = "2026.09.19-personal-studio-polish-v8.53"' in backup_py
 
 
 def test_upcoming_weddings_are_before_the_work_queues():

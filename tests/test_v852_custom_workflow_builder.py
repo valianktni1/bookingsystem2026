@@ -146,10 +146,10 @@ def test_v852_builder_is_visible_and_supports_inline_template_creation():
     backup = (ROOT / "app" / "backup.py").read_text()
     javascript = (ROOT / "app" / "static" / "v851.js").read_text()
     stylesheet = (ROOT / "app" / "static" / "v851.css").read_text()
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.52" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.53" in index
     assert "custom-workflow-builder-v8-52" in index
-    assert 'version="2.8.52"' in main
-    assert 'BACKUP_BUILD = "2026.09.17-custom-workflow-builder-v8.52"' in backup
+    assert 'version="2.8.53"' in main
+    assert 'BACKUP_BUILD = "2026.09.19-personal-studio-polish-v8.53"' in backup
     assert "＋ Add workflow" in javascript
     assert "Create a new email template" in javascript
     assert "New bookings only" in javascript

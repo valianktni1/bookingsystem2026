@@ -617,7 +617,8 @@
   }
 
   function searchResultRecord(record, recent = false) {
-    return `<button class="v811-search-result" data-search-record="${attr(record.id)}" data-section="Overview"><i class="record-avatar ${record.brand}">${esc(initials(record))}</i><span><strong>${esc(record.title)}</strong><small>${esc(record.venue_or_project || record.client.email)}${record.archived ? " · Archived" : ""}</small></span><em>${recent ? "Recent" : recordStageLabel(record)}</em></button>`;
+    const details = [record.event_date ? fmtEventDate(record.event_date) : "Date not set", record.venue_or_project || record.client.email].filter(Boolean).join(" · ");
+    return `<button class="v811-search-result" data-search-record="${attr(record.id)}" data-section="Overview"><i class="record-avatar ${record.brand}">${esc(initials(record))}</i><span><strong>${esc(record.title)}</strong><small>${esc(details)}${record.archived ? " · Archived" : ""}</small></span><em>${recent ? "Recent" : recordStageLabel(record)}</em></button>`;
   }
 
   async function showGlobalSearch(query = "") {
@@ -633,10 +634,15 @@
       if (!term) {
         records = [...index.records].sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))).slice(0, 6);
       } else {
-        records = index.records.filter(record => `${record.title} ${record.client.email} ${record.client.phone || ""} ${record.venue_or_project || ""} ${record.package_name || ""}`.toLowerCase().includes(term)).slice(0, 8);
+        records = index.records.filter(record => {
+          const isoDate = record.event_date || "";
+          const ukDate = isoDate ? String(isoDate).slice(0, 10).split("-").reverse().join("/") : "";
+          const writtenDate = isoDate ? fmtEventDate(isoDate) : "";
+          return `${record.title} ${record.client.email} ${record.client.phone || ""} ${record.venue_or_project || ""} ${record.package_name || ""} ${isoDate} ${ukDate} ${writtenDate}`.toLowerCase().includes(term);
+        }).slice(0, 8);
         invoices = index.invoices.filter(invoice => `${invoice.number} ${invoice.legacy_number || ""} ${invoice.client || ""}`.toLowerCase().includes(term)).slice(0, 6);
       }
-      panel.innerHTML = `<header><strong>${term ? "Search results" : "Recently updated clients"}</strong><small>${records.length + invoices.length} found</small></header>${records.map(record => searchResultRecord(record, !term)).join("")}${invoices.map(invoice => `<button class="v811-search-result invoice" data-search-record="${attr(invoice.booking_id)}" data-section="Payments"><i>£</i><span><strong>${esc(invoice.number)} · ${esc(invoice.client || "Client")}</strong><small>${esc(statusText(invoice.status))} · ${money(invoice.balance)} remaining</small></span><em>Invoice</em></button>`).join("")}${records.length + invoices.length ? "" : `<div class="empty"><strong>No matching client or invoice</strong>Try a name, email, venue or invoice number.</div>`}`;
+      panel.innerHTML = `<header><strong>${term ? "Search results" : "Recently updated clients"}</strong><small>${records.length + invoices.length} found</small></header>${records.map(record => searchResultRecord(record, !term)).join("")}${invoices.map(invoice => `<button class="v811-search-result invoice" data-search-record="${attr(invoice.booking_id)}" data-section="Payments"><i>£</i><span><strong>${esc(invoice.number)} · ${esc(invoice.client || "Client")}</strong><small>${esc(statusText(invoice.status))} · ${money(invoice.balance)} remaining</small></span><em>Invoice</em></button>`).join("")}${records.length + invoices.length ? "" : `<div class="empty"><strong>No matching client or invoice</strong>Try a name, wedding date, email, venue or invoice number.</div>`}`;
       $$('[data-search-record]', panel).forEach(button => button.onclick = () => {
         panel.classList.add("hidden");
         openDrawer(button.dataset.searchRecord, button.dataset.section);

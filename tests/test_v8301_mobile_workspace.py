@@ -11,7 +11,7 @@ def test_mobile_workspace_assets_and_five_item_navigation_are_loaded():
 
     assert "/static/v8301.css?v=studio-mobile-workspace-v8-30-1" in index
     assert "/static/v8301.js?v=inbox-flow-v8-50-1" in index
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.52" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.53" in index
     for view in ("dashboard", "enquiries", "weddings", "calendar", "invoices"):
         assert f'data-view="{view}"' in index
     assert "v8301-mobile-shortcuts" in script
@@ -33,4 +33,4 @@ def test_mobile_workspace_preserves_safety_language_and_controls():
     assert "mobileDashboardShortcutsV8301" in script
     # Compatibility controls stay in the DOM so the established handlers do not break.
     assert 'id="mobile-add" class="hidden"' in index
-    assert 'id="mobile-more" class="hidden"' in index
+    assert 'id="mobile-more" type="button"' in index

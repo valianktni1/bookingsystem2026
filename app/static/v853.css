@@ -1,0 +1,44 @@
+/* V8.53 — personal studio polish. Presentation only; no workflow behaviour changes. */
+:root{--v853-focus:#b88932;--v853-safe-bottom:max(10px,env(safe-area-inset-bottom))}
+
+button,a,input,select,textarea{transition:border-color .16s ease,background-color .16s ease,box-shadow .16s ease,transform .16s ease}
+button:disabled{cursor:not-allowed;opacity:.58}
+button:not(:disabled):active{transform:translateY(1px)}
+:where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:3px solid color-mix(in srgb,var(--v853-focus) 42%,transparent);outline-offset:2px}
+
+.topbar{position:sticky;top:0;z-index:24;background:rgba(255,255,255,.96);backdrop-filter:blur(10px)}
+.modal{max-height:min(90dvh,860px);overflow:auto;overscroll-behavior:contain}
+.modal header,.modal .modal-header{position:sticky;top:0;z-index:2;background:inherit}
+.modal footer,.modal .modal-actions{position:sticky;bottom:0;z-index:2;background:inherit}
+.toast{max-width:min(520px,calc(100vw - 28px));line-height:1.45}
+.v811-search-result small{line-height:1.45;white-space:normal}
+.mail-row,.v830-mail-list button{min-height:58px}
+
+.mobile-mail-count{min-width:18px;height:18px;display:inline-grid;place-items:center;padding:0 5px;border-radius:999px;color:#fff;background:#b33a38;font-size:10px;font-weight:800;line-height:1}
+.mobile-mail-count.hidden{display:none}
+
+@media(max-width:760px){
+  body{font-size:15px}
+  main{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
+  .topbar{min-height:62px;padding-top:env(safe-area-inset-top)}
+  .topbar .search input{min-width:0;font-size:16px}
+  .topbar .search input::placeholder{color:#68787d;opacity:1}
+  .mobile-nav{height:calc(70px + env(safe-area-inset-bottom));padding:5px 4px var(--v853-safe-bottom);align-items:start}
+  .mobile-nav button{position:relative;min-width:0;min-height:55px;padding:5px 2px;font-size:10px!important;line-height:1.15}
+  .mobile-nav button span{font-size:20px}
+  .mobile-nav button[aria-current="page"]{color:var(--teal)}
+  .mobile-nav .mobile-mail-count{position:absolute;top:2px;left:calc(50% + 8px)}
+  .page{padding-bottom:34px}
+  .page-heading>.primary,.icon-button,.attention-button{min-width:44px;min-height:44px}
+  .panel button,.drawer button,.modal button,.record-contact-actions a{min-height:42px}
+  .modal{width:calc(100vw - 18px);max-height:calc(100dvh - 28px);border-radius:16px}
+  .modal input,.modal select,.modal textarea{font-size:16px}
+  .v811-search-results{position:fixed!important;z-index:80;top:62px!important;right:9px!important;left:9px!important;width:auto!important;max-height:calc(100dvh - 150px);overflow:auto}
+  .v811-search-result{min-height:67px;padding:11px}
+  .v811-search-result strong{font-size:13px}.v811-search-result small{font-size:10px}
+  .workflow-save-bar,.v851-save-bar{bottom:calc(70px + env(safe-area-inset-bottom))!important}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
+}
