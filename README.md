@@ -1,3 +1,8 @@
+## Current release: V8.56
+
+Start with **DEPLOY-V8.56-READ-ME.txt**. Docker builds directly from GitHub;
+TrueNAS needs only the deployment helper, not git pull or a source archive.
+
 ## Current release: V8.55
 
 Read **DEPLOY-V8.55-READ-ME.txt** for the correct TrueNAS download/update commands.

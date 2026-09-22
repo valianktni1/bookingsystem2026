@@ -19,6 +19,19 @@
     return box;
   }
 
+  function rememberPanel(record, box, title, status) {
+    if (!box || !record.id) return;
+    // Status is part of the key: newly outstanding work gets its default visibility.
+    const key = `wbm-panel:${record.id}:${title}:${status}`;
+    try {
+      const value = sessionStorage.getItem(key);
+      if (value !== null) box.open = value === 'open';
+    } catch (_) { /* Browser storage is optional. */ }
+    box.addEventListener('toggle', () => {
+      try { sessionStorage.setItem(key, box.open ? 'open' : 'closed'); } catch (_) {}
+    });
+  }
+
   function reveal(node) {
     for (let parent = node?.parentElement; parent; parent = parent.parentElement) {
       if (parent.matches('details.v855-fold')) parent.open = true;
@@ -52,6 +65,7 @@
     for (const [node, title, status, open] of entries) {
       const box = fold(node, title, status, open);
       if (!box) continue;
+      rememberPanel(record, box, title, status);
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = title;

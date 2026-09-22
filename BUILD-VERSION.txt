@@ -1,3 +1,10 @@
+BookingSystem2026 - Everyday Usability
+Build: 2026.09.22-everyday-v8.56
+
+Next-payment dates, remembered paperwork panels, Back-to-list position,
+readable payment/activity labels and direct-GitHub deployment helper.
+See DEPLOY-V8.56-READ-ME.txt. No backend behaviour changes.
+
 BookingSystem2026 - Booking Paperwork & Messages
 Build: 2026.09.22-paperwork-messages-v8.55
 

@@ -125,8 +125,8 @@ def test_studio_style_assets_and_requested_wedding_tabs_are_loaded():
     css = (root / "app/static/v830.css").read_text(encoding="utf-8")
 
     assert "/static/v830.css?v=studio-style-workspace-v8-30" in index
-    assert "/static/v830.js?v=clear-bookings-v8-54" in index
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.55" in index
+    assert "/static/v830.js?v=everyday-v8-56" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.56" in index
     assert "Upcoming weddings" in script
     assert "All bookings" in script
     assert "Past weddings awaiting completion" in script

@@ -1,0 +1,5 @@
+.v856-readable[data-v844-section="Payments"] small,.v856-readable[data-v844-section="Payments"] .muted,.v856-readable[data-v844-section="Activity"] small{font-size:13px!important;line-height:1.55}
+.v856-readable[data-v844-section="Payments"] label,.v856-readable[data-v844-section="Activity"] label{font-size:14px;line-height:1.5}
+.v856-readable .v811-timeline-event{padding:16px;gap:12px}.v856-readable .v811-timeline-event strong{font-size:15px;line-height:1.5}.v856-readable .v811-timeline-event small{white-space:normal;overflow-wrap:anywhere}
+.v856-readable[data-v844-section="Payments"] .mini,.v856-readable[data-v844-section="Activity"] .mini{font-size:13px;min-height:40px;padding:9px 12px}
+@media(max-width:760px){.v856-readable[data-v844-section="Payments"] small,.v856-readable[data-v844-section="Activity"] small{font-size:14px!important}.v856-readable .v811-timeline-event{padding:14px}.v856-readable[data-v844-section="Payments"] button,.v856-readable[data-v844-section="Activity"] button{min-height:44px}}

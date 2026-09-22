@@ -1,0 +1,36 @@
+BOOKINGSYSTEM2026 V8.56 - FIVE EVERYDAY IMPROVEMENTS
+
+1. Copy this folder's contents into your existing GitHub Desktop repo.
+   Keep .git and .env. Commit the changes and Push origin.
+2. Ensure GitHub is accessible for the build, as with your previous deployments.
+3. Paste these commands into TrueNAS:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.56.sh -o /tmp/wbm-deploy-v856.sh && sudo bash /tmp/wbm-deploy-v856.sh
+
+The helper uses /mnt/apps/dockge/data/bookingsystem2026 and verifies that
+Compose builds this app directly from GitHub. It does not need git pull or
+an archive copied onto TrueNAS. Your existing Compose and .env are retained.
+It validates a database backup, preserves the current image for rollback,
+builds without stopping the old app, restarts only the app and checks V8.56.
+It prints the exact rollback command. If download fails, it does not run.
+If the build fails, the old app stays running. If the health check fails,
+use the printed rollback command. No automatic database restore is performed.
+
+Refresh with Ctrl+F5 and check COMPLETE V8.56.
+
+CHANGES
+- Overview payment card adds the next unpaid scheduled amount and due date.
+  It uses existing schedule balances, ignores paid/closed entries and leaves
+  missing dates explicit. Imported records are excluded from the new summary.
+- Paperwork panels remember open/closed choices in this browser tab's session.
+  Different bookings are independent. A changed section status uses its normal
+  default again. Blocked browser storage does not prevent the screen working.
+- Back to bookings restores list mode, status, search, vertical scroll and
+  horizontal table position. This concerns the in-app Back button; existing
+  browser-history navigation is retained.
+- Larger payment/activity labels and touch targets on non-imported bookings.
+- Simplified GitHub-based deployment shown above.
+
+No changes to stored records, invoice rendering, payment calculations,
+automation timing, passwords, schema or protected Studio Ninja data.
+Browser preferences are local UI state, not changes to booking records.

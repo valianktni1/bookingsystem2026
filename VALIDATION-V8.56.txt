@@ -1,0 +1,15 @@
+V8.56 validation
+
+- 27 targeted Python tests covering invoices/payment amendments, PDF layout,
+  invoice email handling and retained workspace behaviour.
+- 7 Node payment-summary checks: partial schedule, future date, today, overdue,
+  paid invoices, closed invoices, missing dates and imported-record exclusion
+  (some checks cover more than one condition).
+- Local Chromium browser checks: panel memory after changing tabs; Back button
+  restores status/search/list mode and a 420px list scroll position; existing
+  paperwork shortcuts and message filters/refresh; Emails/Texts navigation;
+  mobile width; existing node handlers retained; imported helper exclusion.
+- Navigation/filter checks made no mutation requests and raised no JS errors.
+- Deployment Bash syntax and a mocked GitHub-build deployment passed. Actual
+  Docker build/live deployment is performed only when the user runs the helper.
+- No backend behaviour or invoice renderer changes; release metadata only.

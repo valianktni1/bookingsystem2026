@@ -52,6 +52,7 @@
   let dashboardMailCheckedAt = 0;
   let dashboardMailPromise = null;
   let searchTimer = null;
+  let bookingListReturn = null;
   let waitingExpanded = false;
 
   function canonicalSection(tab) {
@@ -473,6 +474,14 @@
 
   openDrawer = async function (id, tab = "Overview", options = {}) {
     const selected = canonicalSection(tab);
+    if (!applyingRoute && !state.current && ['enquiries','weddings','projects'].includes(state.view)) {
+      bookingListReturn = {
+        view: state.view, status: state.status, archived: state.archived,
+        search: state.search, weddingListMode: state.weddingListMode,
+        scrollY: window.scrollY, tableScroll: $("#content .table-wrap")?.scrollLeft || 0,
+        url: `${location.pathname}${location.search}`,
+      };
+    }
     if (!applyingRoute) {
       writeRoute(bookingUrl(id, selected), {
         state: { returnUrl: workspaceUrl(state.view), openedFromApp: true },
@@ -487,11 +496,23 @@
   };
 
   closeDrawer = function () {
-    const returnUrl = history.state?.returnUrl || workspaceUrl(parentViewForRecord(state.current));
+    const saved = bookingListReturn;
+    const returnUrl = saved?.url || history.state?.returnUrl || workspaceUrl(parentViewForRecord(state.current));
     baseCloseDrawerV811();
     if (!applyingRoute && location.pathname.startsWith("/bookings/")) {
-      writeRoute(returnUrl, { replace: true, state: { scrollY: history.state?.scrollY || 0 } });
+      if (saved) {
+        Object.assign(state, {view:saved.view, status:saved.status, archived:saved.archived, search:saved.search, weddingListMode:saved.weddingListMode});
+        if ($("#search")) $("#search").value = saved.search || '';
+        render();
+      }
+      writeRoute(returnUrl, {replace:true, state:{scrollY:saved?.scrollY || 0}});
+      requestAnimationFrame(() => {
+        window.scrollTo(0, saved?.scrollY || 0);
+        const table = $("#content .table-wrap");
+        if (table && saved) table.scrollLeft = saved.tableScroll;
+      });
     }
+    bookingListReturn = null;
   };
 
   function queueItem(row) {

@@ -118,6 +118,7 @@
     if (!body) return;
     const revision = ++renderRevisionV844;
     body.dataset.v844Section = selected;
+    body.classList.toggle("v856-readable", record.brand === "wbm" && !record.legacy_source);
     body.setAttribute("aria-busy", selected === "Journey" ? "true" : "false");
     try {
       if (selected === "Overview") renderOverview(record, body);
