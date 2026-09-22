@@ -1,0 +1,23 @@
+V8.56.1 - FINAL TIMINGS SHORTCUT RESTORED
+
+Copy this folder's contents into your GitHub Desktop repository, preserving
+.git and .env. Commit and Push origin. Then run on TrueNAS:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.56.1.sh -o /tmp/wbm-deploy-v8561.sh && sudo bash /tmp/wbm-deploy-v8561.sh
+
+The helper retains your current Compose and .env, validates the database
+backup, preserves the current image for rollback, builds directly from GitHub,
+starts only the app and checks the new version. It prints a rollback command.
+Refresh with Ctrl+F5 and confirm COMPLETE V8.56.1.
+
+Open any wedding booking. Final timings is beneath the couple's details.
+If a form is recorded, the button says Submitted and opens the complete saved
+answers and PDF download directly. Otherwise it reveals the timings panel.
+This works for protected Studio Ninja imports as well as native bookings.
+The shortcut does not send email, unlock a form or mark it as reviewed.
+
+Validation: desktop/mobile browser checks for native and imported records,
+submitted and unsubmitted forms, zero mutation requests and JavaScript errors.
+Existing final-timings tests and PDF-download checks passed. No backend
+behaviour files or invoice renderer changed from V8.56 (release metadata only).
+Live Docker deployment is performed by the helper on TrueNAS, not here.

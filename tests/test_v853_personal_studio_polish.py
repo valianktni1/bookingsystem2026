@@ -14,7 +14,7 @@ def test_v853_personal_studio_polish_is_complete():
 
     assert "/static/v853.css?v=clear-bookings-v8-54" in index
     assert "/static/v853.js?v=personal-studio-polish-v8-53" in index
-    assert "BOOKINGSYSTEM2026 · COMPLETE V8.56" in index
+    assert "BOOKINGSYSTEM2026 · COMPLETE V8.56.1" in index
     assert 'data-view="mail"' in index and 'id="mobile-mail-count"' in index
     assert 'id="mobile-more" type="button"' in index
     assert 'id="mobile-add" class="hidden"' in index
@@ -22,5 +22,5 @@ def test_v853_personal_studio_polish_is_complete():
     assert "wedding date" in search
     assert "focus-visible" in css and "prefers-reduced-motion" in css
     assert "mirrorUnreadCount" in script and 'aria-current' in script
-    assert 'version="2.8.56"' in main
-    assert 'BACKUP_BUILD = "2026.09.22-everyday-v8.56"' in backup
+    assert 'version="2.8.56.1"' in main
+    assert 'BACKUP_BUILD = "2026.09.22-timings-shortcut-v8.56.1"' in backup

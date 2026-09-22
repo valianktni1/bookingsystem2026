@@ -1,3 +1,8 @@
+## Current release: V8.56.1
+
+Restores the direct Final timings shortcut for native and protected imported bookings.
+Deploy instructions: **DEPLOY-V8.56.1-READ-ME.txt**.
+
 ## Current release: V8.56
 
 Start with **DEPLOY-V8.56-READ-ME.txt**. Docker builds directly from GitHub;

@@ -15,4 +15,4 @@ def test_complete_timings_popup_has_direct_pdf_download():
     assert ".v8331-answer-actions a" in css
     assert ".v8331-answer-actions a,.v8331-answer-actions button{width:100%" in css
     assert "/static/v820.css?v=final-timings-pdf-download-v8-33-1" in index
-    assert "/static/v820.js?v=final-timings-pdf-download-v8-33-1" in index
+    assert "/static/v820.js?v=timings-shortcut-v8-56-1" in index

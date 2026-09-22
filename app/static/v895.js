@@ -190,6 +190,7 @@
             <div class="record-title-line"><h1>${esc(r.title)}</h1><span class="status ${statusClass(r.status)}">${esc(statusText(r.status))}</span></div>
             <p>${esc(r.venue_or_project || "Venue or project not set")} · ${esc(r.kind === "wedding" ? fmtEventDate(r.event_date) : fmtDate(r.event_date))}</p>
             <nav class="record-contact-actions">
+              ${r.kind === "wedding" ? `<button id="record-final-timings-shortcut" type="button">◷ Final timings${(portal.submissions || []).some(item => item.form_type === "final_timings") ? " · Submitted" : ""}</button>` : ""}
               ${r.client.phone ? `<a href="tel:${attr(r.client.phone)}">☎ Call</a>` : ""}
               ${directions ? `<a href="${attr(directions)}" target="_blank" rel="noopener">⌖ Directions</a>` : ""}
               <button id="record-portal-shortcut" type="button">↗ Client area</button>
@@ -204,6 +205,8 @@
       drawer.classList.remove("hidden");
       $("#drawer-overlay").classList.remove("hidden");
       $("#close-drawer").onclick = closeDrawer;
+      const timingsShortcut = $("#record-final-timings-shortcut");
+      if (timingsShortcut) timingsShortcut.onclick = () => window.openFinalTimingsRecord(r);
       $("#record-email-client-top").onclick = () => openClientEmailCentre(r);
       $("#edit-record").onclick = () => openRecordModal(r);
       $("#archive-record").onclick = () => toggleArchive(r);

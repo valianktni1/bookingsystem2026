@@ -39,7 +39,7 @@
     let attempts=0;
     const reveal=()=>{
       const panel=document.querySelector("#drawer .v820-final");
-      if(panel){panel.scrollIntoView({behavior:"smooth",block:"start"});return}
+      if(panel){window.WBMLayoutV855?.reveal(panel);panel.scrollIntoView({behavior:"smooth",block:"start"});return}
       attempts+=1;
       if(attempts<20)setTimeout(reveal,75);
       else toast("Final Wedding Timings has not been submitted yet");
