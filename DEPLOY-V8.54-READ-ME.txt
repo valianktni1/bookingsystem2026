@@ -1,0 +1,42 @@
+BOOKINGSYSTEM2026 V8.54 - PERSONAL WEDDING BOOKING APP
+
+1. Unzip the complete repo.
+2. Copy the CONTENTS of its bookingsystem2026-main folder into your existing
+   GitHub Desktop bookingsystem2026 folder. Replace matching files.
+   Keep your existing .git folder and .env. Do not copy into a nested folder.
+3. In GitHub Desktop, commit the changed files and click Push origin.
+4. On TrueNAS, run:
+
+cd /mnt/apps/dockge/data/bookingsystem2026
+git pull --ff-only && sudo bash DEPLOY-V8.54.sh
+
+The script stops on errors. It backs up and validates the PostgreSQL dump,
+keeps the running image for rollback, builds while the old app stays available,
+restarts only the app, and checks the health endpoint and V8.54 source.
+The database container and mounted data folders are not recreated.
+It prints the exact rollback command for your backup folder.
+If git pull reports local changes, stop and share the message; do not reset it.
+
+After completion, press Ctrl+F5. The top bar should say COMPLETE V8.54.
+Open an existing invoice using View invoice to see the refreshed PDF layout.
+Already downloaded PDFs and attachments in old emails cannot change.
+Saved descriptions with line breaks, bullets or HTML lists now display as lines.
+Plain prose without separators is retained as written; it is not guessed into
+new package features. Historical invoices use their saved package descriptions.
+
+Changes:
+- invoice description lines are larger, darker and spaced; old fallback fixed
+- compact invoice identity block; continued-page headings and page numbers
+- dashboard action queues come first; empty queue cards removed
+- waiting/upcoming queues expand on request; upcoming wedding list stays visible
+- booking header has one next action; repeated snapshots/shortcut row removed
+- Overview keeps couple/wedding details, payment summary and private notes/tasks
+- full progress checklist expands on request
+- Booking & forms replaces the Journey label
+- Messages holds Emails and Texts, preserving existing routes and controls
+- Settings & templates expands in the sidebar
+- larger mobile labels and six booking tabs arranged in two rows
+
+No database schema, stored invoice totals, pricing, payment schedules,
+automation timing, credentials or accounts-integration behaviour is changed.
+This package is based on the personal V8.53 upload, not the tenant app.

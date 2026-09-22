@@ -170,12 +170,12 @@
         <div class="record-command-bar">
           <button id="close-drawer" class="record-back" type="button"><span>←</span> Back to bookings</button>
           <div class="record-command-actions">
-            <div class="record-primary-actions"></div>
             <button id="record-email-client-top" class="primary email-client-primary" type="button">✉ Email client</button>
-            <button id="edit-record" class="secondary" type="button">Edit details</button>
             <div class="record-more-wrap">
               <button id="record-more" class="secondary" type="button" aria-haspopup="menu" aria-expanded="false">More actions <span aria-hidden="true">⌄</span></button>
               <div id="record-actions-menu" class="record-actions-menu hidden" role="menu">
+                <button id="edit-record" type="button">Edit details</button>
+                <div class="record-primary-actions"></div>
                 <button id="record-client-area" type="button">Open quote & client area</button>
                 <button id="archive-record" type="button">${r.archived ? "Restore from archive" : "Archive record"}</button>
                 <div class="record-safety-actions"></div>
@@ -190,8 +190,6 @@
             <div class="record-title-line"><h1>${esc(r.title)}</h1><span class="status ${statusClass(r.status)}">${esc(statusText(r.status))}</span></div>
             <p>${esc(r.venue_or_project || "Venue or project not set")} · ${esc(r.kind === "wedding" ? fmtEventDate(r.event_date) : fmtDate(r.event_date))}</p>
             <nav class="record-contact-actions">
-              <button id="record-email-client" type="button">✉ Email client</button>
-              <a href="mailto:${attr(r.client.email)}">✉ Inbox</a>
               ${r.client.phone ? `<a href="tel:${attr(r.client.phone)}">☎ Call</a>` : ""}
               ${directions ? `<a href="${attr(directions)}" target="_blank" rel="noopener">⌖ Directions</a>` : ""}
               <button id="record-portal-shortcut" type="button">↗ Client area</button>
@@ -200,15 +198,13 @@
         </div>
       </header>
       <main class="record-command-main">
-        ${bookingSnapshot(r, portal)}
-        ${workflowStages(r, portal)}
         <section class="record-next-action ${next.quiet ? "quiet" : ""}"><i>→</i><div><small>YOUR NEXT STEP</small><strong>${esc(next.title)}</strong><span>${esc(next.detail)}</span></div>${next.label ? `<button id="next-record-action" class="${next.quiet ? "secondary" : "primary"}">${esc(next.label)}</button>` : ""}</section>
         ${recordSectionNavigation(selected)}
       </main>`;
       drawer.classList.remove("hidden");
       $("#drawer-overlay").classList.remove("hidden");
       $("#close-drawer").onclick = closeDrawer;
-      $("#record-email-client-top").onclick = $("#record-email-client").onclick = () => openClientEmailCentre(r);
+      $("#record-email-client-top").onclick = () => openClientEmailCentre(r);
       $("#edit-record").onclick = () => openRecordModal(r);
       $("#archive-record").onclick = () => toggleArchive(r);
       $("#record-client-area").onclick = $("#record-portal-shortcut").onclick = () => selectRecordTab(r, "Quote", true);

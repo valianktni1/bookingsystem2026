@@ -59,10 +59,9 @@
     const openTasks = (record?.tasks || []).filter(task => !task.completed).length;
     return [
       {tab: "Overview", icon: "⌂", label: "Overview", meta: `${openTasks} to do`},
-      {tab: "Journey", icon: "✓", label: "Journey", meta: `${journeyComplete}/3 complete`},
-      {tab: "Emails", icon: "✉", label: "Emails", meta: `${(portal?.emails || []).length} recorded`},
-      {tab: "Texts", icon: "▣", label: "Texts", meta: "Send & replies"},
-      {tab: "Payments", icon: "£", label: "Payments", meta: outstanding > 0 ? `${money(outstanding)} due` : "Clear"},
+      {tab: "Journey", icon: "✓", label: "Booking & forms", meta: `${journeyComplete}/3 complete`},
+      {tab: "Emails", icon: "✉", label: "Messages", meta: "Email & text"},
+      {tab: "Payments", icon: "£", label: "Payments", meta: outstanding > 0 ? `${money(outstanding)} due` : invoices.length ? "Clear" : "No invoice"},
       {tab: "Files", icon: "▤", label: "Files", meta: `${(record?.documents || []).length} retained`},
       {tab: "Activity", icon: "◷", label: "Activity", meta: `${(record?.activity || []).length} events`},
     ];
@@ -71,7 +70,7 @@
   normaliseRecordTab = canonicalSectionV844;
 
   recordSectionNavigation = function (selected) {
-    const active = canonicalSectionV844(selected);
+    const active = canonicalSectionV844(selected) === "Texts" ? "Emails" : canonicalSectionV844(selected);
     const rows = sectionRowsV844(state.current, state.currentPortal);
     return `<section class="v844-workspace-shell">
       <nav class="record-workspace-tabs v844-tabs" aria-label="Booking workspace">
@@ -122,8 +121,13 @@
     try {
       if (selected === "Overview") renderOverview(record, body);
       else if (selected === "Journey") await renderJourneyV844(record, body);
-      else if (selected === "Emails") renderBookingEmails(record, body);
-      else if (selected === "Texts") await window.WBMSmsV849?.render(record, body);
+      else if (selected === "Emails" || selected === "Texts") {
+        body.innerHTML = `<nav class="v854-message-channels" aria-label="Message type"><button type="button" data-channel="Emails" aria-pressed="${selected === "Emails"}">Emails</button><button type="button" data-channel="Texts" aria-pressed="${selected === "Texts"}">Texts</button></nav><div class="v854-message-content"></div>`;
+        body.querySelectorAll('[data-channel]').forEach(button => button.onclick = () => selectRecordTab(record, button.dataset.channel));
+        const host = body.querySelector('.v854-message-content');
+        if (selected === "Emails") renderBookingEmails(record, host);
+        else await window.WBMSmsV849?.render(record, host);
+      }
       else if (selected === "Payments") renderFinance(record, body);
       else if (selected === "Files") renderRecordDocuments(record, body);
       else if (selected === "Activity") await compositeRenderTabV844(record, "Activity", body);
@@ -143,7 +147,7 @@
     const body = $("#drawer-body", drawer);
     state.currentTab = selected;
     $$('[data-tab]', drawer).forEach(button => {
-      const active = canonicalSectionV844(button.dataset.tab) === selected;
+      const active = canonicalSectionV844(button.dataset.tab) === (selected === "Texts" ? "Emails" : selected);
       button.classList.toggle("active", active);
       button.setAttribute("aria-current", active ? "page" : "false");
       button.setAttribute("aria-expanded", String(active));

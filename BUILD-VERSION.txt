@@ -1,3 +1,16 @@
+BookingSystem2026 - Clear Bookings & Invoice Layout
+Build: 2026.09.22-clear-bookings-v8.54
+
+V8.54:
+- Readable saved invoice inclusions, including older descriptions and HTML lists.
+- Cleaner action-first dashboard and collapsible waiting queues.
+- Simplified booking Overview, expandable progress and combined Messages navigation.
+- Larger mobile labels and grouped Settings.
+- No schema or financial data changes.
+- Deploy: see DEPLOY-V8.54-READ-ME.txt.
+
+Previous release history
+------------------------
 BookingSystem2026 - Personal Studio Polish
 Build: 2026.09.19-personal-studio-polish-v8.53
 

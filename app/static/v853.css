@@ -42,3 +42,53 @@ button:not(:disabled):active{transform:translateY(1px)}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}
 }
+
+/* V8.54: shared final layout rules for the simplified personal workspace. */
+.v854-setup{margin-top:18px}.v854-setup>summary{padding:12px;color:#dcebea;font-size:14px;font-weight:700;cursor:pointer}
+.v854-setup[open]>summary{margin-bottom:6px}.v854-setup button{width:100%}
+.record-command-main .record-next-action{margin-top:0}
+.record-workspace-tabs.v844-tabs{grid-template-columns:repeat(6,minmax(0,1fr))}
+.record-workspace-tabs.v844-tabs button{min-height:64px;padding:12px 10px;gap:8px}
+.record-workspace-tabs.v844-tabs small{color:#50666b;font-size:12px;white-space:normal}
+.record-workspace-tabs.v844-tabs strong{font-size:14px;line-height:1.35}
+.v830-job-board{display:flex;flex-direction:column;gap:20px}
+.v830-job-left,.v830-job-right{width:100%;display:grid;grid-template-columns:1fr;gap:20px}
+.v830-job-right{order:-1;margin-top:0}.v830-top-cards,.v830-summary-stack{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.v830-info-card{padding:20px}.v830-info-card dt,.v830-info-card dd{font-size:14px;line-height:1.6}.v830-info-card dd{overflow-wrap:anywhere}
+.v830-info-card header strong{font-size:16px}.v830-summary-card{padding:18px}.v830-summary-card small,.v830-summary-card em{font-size:13px;color:#50666b;line-height:1.5;white-space:normal}.v830-summary-card strong{font-size:17px}
+.v854-progress>summary{padding:18px 20px;cursor:pointer;color:#17343b;list-style:revert}.v854-progress>summary strong{font-size:16px}.v854-progress>summary span{margin-left:14px;color:#50666b;font-size:13px}
+.v854-progress .v830-workflow-list{padding:0 20px 16px}.v854-progress .v830-workflow-list strong{font-size:14px}.v854-progress .v830-workflow-list small{font-size:13px;line-height:1.5}
+.v854-message-channels{display:flex;gap:8px;margin-bottom:20px}.v854-message-channels button{min-height:44px;padding:10px 24px;background:white;color:#17343b;border:1px solid #bfced0;border-radius:8px;font-size:15px}.v854-message-channels [aria-pressed=true]{background:#0f6b63;color:#fff;border-color:#0f6b63}
+.v854-waiting>summary{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:20px;cursor:pointer;background:#f1f6f5;border:1px solid #d3e0de;border-radius:12px;color:#17343b}.v854-waiting>summary::after{content:'Show details +';white-space:nowrap;font-size:13px;font-weight:700}.v854-waiting[open]>summary::after{content:'Hide details −'}.v854-waiting>summary div{flex:1}.v854-waiting>summary h2{font-size:18px;margin:4px 0}.v854-waiting>summary p{font-size:14px;color:#50666b;line-height:1.5;margin:5px 0}.v854-waiting>summary small{font-size:11px}
+.v811-queue-cards{grid-template-columns:repeat(auto-fit,minmax(205px,1fr))}.v811-queue-cards button{min-height:96px}.v811-queue-cards small,.v811-queue-item small{font-size:13px!important;line-height:1.5;color:#50666b}.v811-queue-cards em{display:none}.v811-queue-item strong{font-size:15px}.v811-worklists{gap:18px}.v828-dashboard-group{margin-bottom:24px}
+.v8301-mobile-shortcuts{display:none!important}
+.record-next-action strong{font-size:18px}.record-next-action span{font-size:14px}.record-next-action small{font-size:12px}
+@media(max-width:1000px){.record-workspace-tabs.v844-tabs button>i{display:none}}
+@media(max-width:760px){
+  .record-command-header{padding:16px!important}.record-command-identity{gap:12px}.record-title-line h1{font-size:24px!important;line-height:1.25}.record-command-identity p{font-size:14px!important;line-height:1.5}
+  .record-command-actions{gap:8px;flex-wrap:wrap}.record-command-actions button{font-size:13px!important;padding:10px 12px}.record-contact-actions a,.record-contact-actions button{font-size:13px!important}
+  .record-command-main{padding:12px!important}.record-workspace-tabs.v844-tabs{position:static;grid-template-columns:repeat(3,minmax(0,1fr))}.record-workspace-tabs.v844-tabs button{min-height:52px;justify-content:center;padding:10px 8px}.record-workspace-tabs.v844-tabs strong{font-size:13px}.record-workspace-tabs.v844-tabs small{display:none}.v844-workspace-body{padding:14px}
+  .v830-top-cards,.v830-summary-stack{grid-template-columns:1fr}.v830-job-board,.v830-job-left,.v830-job-right{gap:14px}.v830-info-card{padding:16px}.v854-progress>summary span{display:block;margin:6px 0 0}.v854-progress>summary{padding:16px}
+  .v854-waiting>summary{flex-wrap:wrap;padding:16px}.v854-waiting>summary div{flex-basis:80%}.v854-waiting>summary::after{width:100%}.v811-queue-cards{grid-template-columns:1fr 1fr;gap:10px}.v811-queue-cards button{padding:12px;min-width:0}.v811-queue-cards button>i{display:none}.v811-queue-item{padding:14px 12px}.v811-queue-item>span{min-width:0}
+  .mobile-nav button{font-size:12px!important}.v811-search-result strong{font-size:15px}.v811-search-result small{font-size:13px}
+  .record-next-action{padding:16px;width:100%}.record-next-action strong{font-size:17px}.record-next-action span{font-size:14px}
+}
+body:has(#drawer:not(.hidden)){overflow:hidden}
+#record-actions-menu{min-width:250px;max-height:70vh;overflow:auto}
+#record-actions-menu .record-primary-actions{display:flex;flex-direction:column;align-items:stretch;gap:0}
+#record-actions-menu button{width:100%;margin:0;border:0;border-radius:0;box-shadow:none;text-align:left;font-size:14px;min-height:44px;color:#17343b;background:white;transform:none;padding:12px 14px}
+#record-actions-menu button:hover{background:#eef6f4}#record-actions-menu .danger-button,#record-actions-menu .v82-delete-record{color:#9c302b}
+.record-command-identity .v828-stage-help{font-size:13px;line-height:1.5;letter-spacing:normal;text-transform:none;font-weight:400;max-width:720px}
+.v811-worklists>.empty:only-child{grid-column:1/-1;min-height:90px;padding:22px}
+#content .panel-title h2{font-size:18px}#content .panel-title p,#content .task-row small{font-size:13px;line-height:1.5}#content .task-row strong{font-size:14px}
+.sidebar nav>button{font-size:14px}
+@media(max-width:760px){
+  .record-command-header{padding:0!important}.record-command-bar{display:flex;align-items:center;padding:10px 14px;min-height:64px;position:static}.record-command-actions{flex-wrap:nowrap;gap:10px}
+  .record-command-actions>#record-email-client-top{display:block;width:auto;min-width:90px;padding:10px 14px;font-size:14px!important}.record-command-actions>#record-email-client-top::before{content:none}
+  .record-command-actions .record-more-wrap>.secondary{width:auto;min-width:100px;padding:10px 12px;font-size:14px!important;color:#17343b;border-color:#b9c9cb;background:white}.record-command-actions .record-more-wrap>.secondary::before{content:none}
+  .record-contact-actions{display:flex;flex-wrap:wrap;gap:10px}.record-command-identity .v828-stage-help{font-size:13px;letter-spacing:normal;font-weight:400}
+  #record-actions-menu{right:0;min-width:245px;max-width:calc(100vw - 28px)}
+}
+@media(max-width:760px){
+  .record-more-wrap>#record-more,.record-more-wrap>#record-more:hover,.record-more-wrap>#record-more[aria-expanded=true]{color:#17343b;background:#fff;border:1px solid #b9c9cb;width:auto;min-width:118px;padding:10px 12px;font-size:14px!important}
+}

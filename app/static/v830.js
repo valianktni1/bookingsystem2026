@@ -209,7 +209,7 @@
 
     body.innerHTML = `${legacy}${cancellationBanner}${completedBanner}<section class="v830-job-board">
       <div class="v830-job-left">
-        <article class="v830-job-panel v830-workflow-panel"><header><div><small>WORKFLOW</small><h3>Wedding progress</h3></div><span>${openTasks.length} thing${openTasks.length === 1 ? "" : "s"} to do</span></header><div class="v830-workflow-list">
+        <details class="v830-job-panel v830-workflow-panel v854-progress"><summary><strong>Booking progress</strong><span>View the full checklist</span></summary><div class="v830-workflow-list">
           ${workflowStep("Enquiry received", "Client and wedding details retained", true, "Overview")}
           ${workflowStep("Package quote", facts.portal.quote ? "Accepted by the couple" : facts.quoteSent ? "Sent and waiting" : "Prepare and send", Boolean(facts.portal.quote), "Journey", !facts.quoteSent)}
           ${workflowStep("First payment", facts.paid > 0 ? `${money(facts.paid)} recorded` : "Not recorded", facts.paid > 0 || Boolean(record.deposit_paid_date), "Payments", Boolean(facts.portal.quote && facts.paid <= 0))}
@@ -217,8 +217,7 @@
           ${workflowStep("Agreement", agreementStatus, facts.agreementComplete, "Journey", Boolean(facts.contract && !facts.agreementComplete))}
           ${workflowStep("Final wedding timings", facts.finalTimings ? "Submitted and retained" : "Waiting until final planning", Boolean(facts.finalTimings), "Journey")}
           ${workflowStep("Job complete", record.status === "completed" ? "Wedding marked complete" : "Complete after all work is finished", record.status === "completed", "Overview")}
-        </div></article>
-        <article class="v830-job-panel v830-mail-panel"><header><div><small>MAIL</small><h3>Conversation with ${esc(record.title)}</h3></div><span data-job-mail-count>Loading…</span></header><div class="v830-mail-list" data-job-mail-list><div class="loading">Loading this couple's emails…</div></div><footer><button class="secondary" data-job-tab="Emails" type="button">Open complete conversation</button></footer></article>
+        </div></details>
       </div>
       <div class="v830-job-right">
         <div class="v830-top-cards">
@@ -226,11 +225,7 @@
           <article class="v830-info-card"><header><span>♙</span><strong>Client</strong><button class="mini" data-job-edit type="button">Edit</button></header><dl><dt>Name</dt><dd>${esc([record.client.first_name, record.client.last_name].filter(Boolean).join(" "))}</dd>${record.client.partner_name ? `<dt>Partner</dt><dd>${esc(record.client.partner_name)}</dd>` : ""}<dt>Email</dt><dd><a href="mailto:${attr(record.client.email)}">${esc(record.client.email)}</a></dd><dt>Phone</dt><dd>${record.client.phone ? `<a href="tel:${attr(record.client.phone)}">${esc(record.client.phone)}</a>` : "Not set"}</dd></dl></article>
         </div>
         <div class="v830-summary-stack">
-          ${summaryCard("£", "INVOICES & PAYMENTS", facts.outstanding > 0 ? `${money(facts.outstanding)} outstanding` : "Account clear", `${facts.activeInvoices.length} active invoice${facts.activeInvoices.length === 1 ? "" : "s"} · ${money(facts.paid)} paid`, "Payments", facts.outstanding > 0 ? "attention" : "complete")}
-          ${summaryCard("✉", "QUOTE", quoteStatus, facts.portal.quote ? `${money(facts.portal.quote.total)} accepted` : "Open the complete quote and email controls", "Journey", facts.portal.quote ? "complete" : facts.quoteSent ? "" : "attention")}
-          ${summaryCard("✓", "AGREEMENT", agreementStatus, facts.contract ? (facts.contract.version || "Protected agreement") : "No signed agreement recorded yet", "Journey", facts.agreementComplete ? "complete" : "attention")}
-          ${summaryCard("?", "QUESTIONNAIRES & TIMINGS", `${submissions.length} submitted`, `${facts.bookingForm ? "Booking form ✓" : "Booking form waiting"} · ${facts.finalTimings ? "Final timings ✓" : "Final timings waiting"}`, "Journey", facts.bookingForm ? "complete" : "attention")}
-          ${summaryCard("▤", "FILES", `${files.length} retained`, files.length ? "Invoices, agreements, forms and uploaded documents" : "No files retained yet", "Files")}
+          ${summaryCard("£", "INVOICES & PAYMENTS", facts.outstanding > 0 ? `${money(facts.outstanding)} outstanding` : facts.activeInvoices.length ? "Account clear" : "No invoice yet", `${facts.activeInvoices.length} active invoice${facts.activeInvoices.length === 1 ? "" : "s"} · ${money(facts.paid)} paid`, "Payments", facts.outstanding > 0 ? "attention" : "complete")}
           ${summaryCard("✎", "NOTES & TASKS", `${openTasks.length} open task${openTasks.length === 1 ? "" : "s"}`, record.notes || "Open private notes and the complete activity history", "Activity", openTasks.length ? "attention" : "complete")}
         </div>
       </div>
@@ -238,7 +233,7 @@
 
     $$('[data-job-tab]', body).forEach(button => button.onclick = () => selectRecordTab(record, button.dataset.jobTab, true));
     $$('[data-job-edit]', body).forEach(button => button.onclick = () => openRecordModal(record));
-    loadJobMailV830(record, body, emails);
+
   };
 
   window.completeWeddingV830 = completeWeddingV830;

@@ -1,0 +1,26 @@
+V8.54 validation - personal BookingSystem2026
+
+27 targeted tests passed together:
+python -m pytest tests/test_v834_invoice_amendments.py tests/test_v840_invoice_email.py tests/test_v854_invoice_layout.py tests/test_v853_personal_studio_polish.py tests/test_v830_studio_workspace.py tests/test_v8301_mobile_workspace.py tests/test_v8284_invoice_preview.py -q
+
+PDF checks:
+- saved CRLF lines, inline bullets, and HTML lists in itemised and older invoices
+- distinct text baselines and unchanged stored totals/descriptions
+- 85-item package continues across pages without losing lines or totals
+- sample Gold package and multipage PDF pages rendered for visual inspection
+- previously downloaded files and historical email attachments are not rewritten
+
+Browser checks on a local isolated sample database:
+- desktop 1440x1000 and mobile 390x844
+- dashboard and booking Overview rendered
+- Emails/Texts switch and Booking & forms/Payments navigation
+- mobile Email button and More actions visible
+- Edit details opens; completion action remains available in More actions
+- no page JavaScript errors; no horizontal overflow at 390px
+
+Deployment:
+- bash syntax check passed
+- mocked Docker run verified dump, dump validation, image preservation,
+  build, app-only restart and health-check order
+- actual Docker image build and live TrueNAS deployment were not run here
+- original compose.yaml, Dockerfile, requirements and database schema retained

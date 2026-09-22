@@ -3,6 +3,8 @@ from datetime import timezone
 from io import BytesIO
 from pathlib import Path
 import re
+from html import unescape
+from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 from xml.sax.saxutils import escape
 
@@ -361,6 +363,37 @@ def final_timings_pdf(booking: Booking, submission: FormSubmission,
     return output.getvalue()
 
 
+class _InvoiceText(HTMLParser):
+    """Read formatting from saved descriptions; never fetch current packages."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"br", "p", "div", "li", "ul", "ol"}:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in {"p", "div", "li", "ul", "ol"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def invoice_description_lines(value) -> list[str]:
+    """Preserve explicit lines and list markers, without guessing at prose."""
+    text = str(value or "")
+    if re.search(r"</?(?:br|p|div|li|ul|ol|strong|b|em|i)(?:\s[^>]*|\s*/?)>", text, re.I):
+        parser = _InvoiceText()
+        parser.feed(text)
+        text = "".join(parser.parts)
+    text = unescape(text).replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[•●▪]\s*", "\n", text)
+    return [re.sub(r"^[-*]\s+", "", line.strip())
+            for line in text.splitlines() if line.strip()]
+
+
 def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = False) -> bytes:
     branding = BRAND_ASSETS.get(invoice.brand, BRAND_ASSETS[Brand.WBM])
     accent = branding["accent"]
@@ -380,7 +413,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     story = []
     contact = "<br/>".join(escape(str(x)) for x in [profile.legal_name, profile.address, profile.phone, profile.email, profile.website] if x)
     if invoice.brand == Brand.WBM:
-        logo = fitted_image(branding.get("logo"), 65 * mm, 40 * mm)
+        logo = fitted_image(branding.get("logo"), 58 * mm, 30 * mm)
         identity = [logo, Spacer(1, 2.5 * mm)] if logo else []
     else:
         logo = fitted_image(branding.get("logo"), 70 * mm, 25 * mm)
@@ -408,8 +441,8 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     if invoice.supply_date:
         meta_lines.append(f"<b>Supply date</b>&nbsp;&nbsp; {invoice.supply_date.strftime('%d %B %Y')}")
     details = Table([
-        [Paragraph("<font color='#65767c'><b>BILL TO</b></font>", small), Paragraph("<br/>".join(meta_lines), right)],
-        [Paragraph(client_lines, normal), ""]
+        [Paragraph("<font color='#65767c'><b>BILL TO</b></font><br/><br/>" + client_lines, normal),
+         Paragraph("<br/>".join(meta_lines), right)]
     ], colWidths=[94 * mm, 62 * mm])
     details.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                                  ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
@@ -418,26 +451,29 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     description = invoice.description or invoice.booking.package_name or invoice.booking.venue_or_project or "Professional services"
     rows = [[Paragraph("<b>DESCRIPTION</b>", small),
              Paragraph("<b>AMOUNT</b>", ParagraphStyle("AmountHead", parent=small, alignment=TA_RIGHT))]]
-    item_detail = ParagraphStyle("ItemDetail", parent=normal, fontSize=7.6, leading=10.6,
-                                 textColor=colors.HexColor("#526268"), spaceBefore=2)
+    item_detail = ParagraphStyle("ItemDetail", parent=normal, fontSize=9, leading=13,
+                                 textColor=ink, leftIndent=8)
     item_starts = []
     detail_rows = []
-    if invoice.line_items:
-        for item in invoice.line_items:
-            item_starts.append(len(rows))
-            name = escape(str(item.get("name") or item.get("description") or "Service"))
-            description = str(item.get("description") or "").replace("•", "-").strip()
-            rows.append([Paragraph(f"<b>{name}</b>", normal),
-                         Paragraph(f"<b>{pounds(item.get('total'))}</b>", right)])
-            if description and escape(description) != name:
-                for line in (line.strip() for line in description.splitlines()):
-                    if line:
-                        detail_rows.append(len(rows))
-                        rows.append([Paragraph(escape(line), item_detail), ""])
-    else:
+    first_details = []
+    items = invoice.line_items or [{"name": "", "description": description, "total": invoice.total}]
+    for item in items:
+        saved_name = str(item.get("name") or "").strip()
+        saved_description = str(item.get("description") or "")
+        parts = invoice_description_lines(saved_description)
+        if not saved_name:
+            saved_name = parts.pop(0) if parts else "Professional services"
+        elif len(parts) == 1 and parts[0] == saved_name:
+            parts = []
         item_starts.append(len(rows))
-        rows.append([Paragraph(escape(description), normal), Paragraph(f"<b>{pounds(invoice.total)}</b>", right)])
-    lines = Table(rows, colWidths=[125 * mm, 31 * mm], repeatRows=1)
+        rows.append([Paragraph(f"<b>{escape(saved_name)}</b>", normal),
+                     Paragraph(f"<b>{pounds(item.get('total'))}</b>", right)])
+        if parts:
+            first_details.append(len(rows) - 1)
+        for line in parts:
+            detail_rows.append(len(rows))
+            rows.append([Paragraph(escape(line), item_detail), ""])
+    lines = Table(rows, colWidths=[125 * mm, 31 * mm], repeatRows=1, splitInRow=1)
     line_style = [
         ("BACKGROUND", (0, 0), (-1, 0), pale),
         ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#d9d2c6")),
@@ -453,8 +489,10 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
         line_style += [("TOPPADDING", (0, row_index), (-1, row_index), 8),
                        ("BOTTOMPADDING", (0, row_index), (-1, row_index), 3)]
     for row_index in detail_rows:
-        line_style += [("TOPPADDING", (0, row_index), (-1, row_index), 1),
-                       ("BOTTOMPADDING", (0, row_index), (-1, row_index), 1)]
+        line_style += [("TOPPADDING", (0, row_index), (-1, row_index), 2),
+                       ("BOTTOMPADDING", (0, row_index), (-1, row_index), 2)]
+    for row_index in first_details:
+        line_style.append(("NOSPLIT", (0, row_index), (-1, row_index + 1)))
     lines.setStyle(TableStyle(line_style))
     story += [lines, Spacer(1, 6 * mm)]
     closed = invoice.status in ("void", "cancelled")
@@ -482,7 +520,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     totals.setStyle(TableStyle([("ALIGN", (1, 0), (1, -1), "RIGHT"), ("TEXTCOLOR", (0, 0), (-1, 2), MUTED),
                                 ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"), ("LINEABOVE", (0, -1), (-1, -1), 1, accent),
                                 ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
-    story += [totals, Spacer(1, 6 * mm)]
+    story += [KeepTogether([totals]), Spacer(1, 6 * mm)]
 
     expected_deposit = min(invoice.total, invoice.booking.deposit_amount or Decimal("0"))
     schedule_rows = []
@@ -554,7 +592,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
         if bank_lines and not receipt:
             note_parts.append("<br/>".join(bank_lines))
     if invoice.notes:
-        note_parts.append(escape(invoice.notes))
+        note_parts.append("<br/>".join(escape(line) for line in invoice_description_lines(invoice.notes)))
     box = Table([[Paragraph("<br/><br/>".join(note_parts), normal)]], colWidths=[156 * mm])
     box.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7f9fa")),
                              ("BOX", (0, 0), (-1, -1), .5, colors.HexColor("#dce5e7")),
@@ -562,6 +600,12 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
                              ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10)]))
     story.append(box)
     def branded_footer(canvas, _doc):
+        if _doc.page > 1:
+            canvas.saveState()
+            canvas.setFont("Helvetica-Bold", 9)
+            canvas.setFillColor(ink)
+            canvas.drawString(18 * mm, A4[1] - 11 * mm, f"{document_title} {invoice.number} - continued")
+            canvas.restoreState()
         awards_path = branding.get("awards")
         if invoice.brand != Brand.WBM or not awards_path or not awards_path.exists():
             return
@@ -577,6 +621,9 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
         canvas.line(18 * mm, y + draw_height + 2.5 * mm, A4[0] - 18 * mm, y + draw_height + 2.5 * mm)
         canvas.drawImage(str(path), x, y, width=draw_width, height=draw_height,
                          preserveAspectRatio=True, mask="auto")
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(ink)
+        canvas.drawRightString(A4[0] - 18 * mm, 8 * mm, f"{invoice.number} | Page {_doc.page}")
         canvas.restoreState()
 
     doc.build(story, onFirstPage=branded_footer, onLaterPages=branded_footer)

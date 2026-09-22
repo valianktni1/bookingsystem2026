@@ -8,3 +8,6 @@ storage/
 tests/*-storage/
 tests/*-test-backups/
 *.zip
+
+# Local deployment backups contain private data.
+deployment-backups/

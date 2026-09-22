@@ -11,6 +11,7 @@
     Overview: "overview",
     Journey: "journey",
     Emails: "emails",
+    Texts: "texts",
     Payments: "payments",
     Files: "files",
     Activity: "activity",
@@ -51,12 +52,13 @@
   let dashboardMailCheckedAt = 0;
   let dashboardMailPromise = null;
   let searchTimer = null;
+  let waitingExpanded = false;
 
   function canonicalSection(tab) {
     return ({
       Quote: "Journey", Journey: "Journey", Forms: "Journey", Questionnaires: "Journey",
       "Client portal": "Journey", Workflow: "Overview", Finance: "Payments",
-      Email: "Emails", Mail: "Emails", Emails: "Emails",
+      Email: "Emails", Mail: "Emails", Emails: "Emails", Texts: "Texts", SMS: "Texts",
       Documents: "Files", Notes: "Activity", "Notes & activity": "Activity",
     })[tab] || (sectionSlugs[tab] ? tab : "Overview");
   }
@@ -531,9 +533,15 @@
     const waitingKeys = waitingQueueOrder.filter(key => queues[key].length);
     $("#content").innerHTML = `<section class="v811-today-head"><div><small>YOUR WORKING DAY</small><h2>Today</h2><p>Action items are separated from clients you are simply waiting for.</p></div><b class="${urgent ? "attention" : "clear"}">${urgent ? `${urgent} client${urgent === 1 ? "" : "s"} need action` : "All clear"}</b></section>
       <section class="panel v824-upcoming-weddings"><div class="panel-title"><div><h2>${esc(upcomingTitle)}</h2><p>${esc(upcomingHelp)}</p></div><button data-jump="calendar">View all</button></div>${upcoming.length ? upcoming.slice(0, 7).map(recordRow).join("") : `<div class="empty"><strong>No upcoming records</strong>Your next dated booking will appear here.</div>`}</section>
-      <section class="v828-dashboard-group action"><header><div><small>START HERE</small><h2>Needs your action</h2><p>Only clients with something you can genuinely do now.</p></div><b>${urgent}</b></header><div class="v811-queue-cards">${actionQueueOrder.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${actionKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>You are clear to move on to the waiting and upcoming list.</article>`}</div></section>
-      <section class="v828-dashboard-group waiting"><header><div><small>KEEP AN EYE ON</small><h2>Waiting and upcoming</h2><p>No action is needed until the couple responds or a payment becomes due.</p></div><b>${waitingKeys.reduce((sum, key) => sum + queues[key].length, 0)}</b></header><div class="v811-queue-cards">${waitingQueueOrder.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${waitingKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing is waiting</strong>There are no watched client steps or payments in the next 60 days.</article>`}</div></section>
+      <section class="v828-dashboard-group action"><header><div><small>START HERE</small><h2>Needs your action</h2><p>Only clients with something you can genuinely do now.</p></div><b>${urgent}</b></header><div class="v811-queue-cards">${actionKeys.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${actionKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>You are clear to move on to the waiting and upcoming list.</article>`}</div></section>
+      <details class="v828-dashboard-group waiting v854-waiting" ${waitingExpanded ? "open" : ""}><summary><div><small>KEEP AN EYE ON</small><h2>Waiting and upcoming</h2><p>No action is needed until the couple responds or a payment becomes due.</p></div><b>${waitingKeys.reduce((sum, key) => sum + queues[key].length, 0)}</b></summary><div class="v811-queue-cards">${waitingKeys.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${waitingKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing is waiting</strong>There are no watched client steps or payments in the next 60 days.</article>`}</div></details>
       <section class="dash-grid v811-dashboard-lower v824-dashboard-tasks"><article class="panel"><div class="panel-title"><div><h2>Private things to do · ${d.open_tasks || 0}</h2><p>These never email a client</p></div><button data-jump="workflows">View all</button></div>${tasks.length ? tasks.slice(0, 7).map(task => taskRow(task, true)).join("") : `<div class="empty"><strong>You're all caught up</strong>No open private tasks.</div>`}</article></section>`;
+    const dashboardHost = $("#content");
+    const upcomingPanel = $(".v824-upcoming-weddings", dashboardHost);
+    const actionsPanel = $(".v828-dashboard-group.action", dashboardHost);
+    if (upcomingPanel && actionsPanel) actionsPanel.after(upcomingPanel);
+    const waitingPanel = $(".v854-waiting", dashboardHost);
+    if (waitingPanel) waitingPanel.ontoggle = () => { waitingExpanded = waitingPanel.open; };
     $$('[data-queue-record]', $("#content")).forEach(button => button.onclick = () => {
       if (button.dataset.action === "open_email" && window.openInboxMessageFromDashboard) {
         window.openInboxMessageFromDashboard(button.dataset.mailBrand, button.dataset.mailUid);
@@ -549,7 +557,7 @@
         openDrawer(button.dataset.queueRecord, button.dataset.section, { action: button.dataset.action });
       }
     });
-    $$('[data-queue-jump]', $("#content")).forEach(button => button.onclick = () => $(`#queue-${button.dataset.queueJump}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    $$('[data-queue-jump]', $("#content")).forEach(button => button.onclick = () => { const target = $(`#queue-${button.dataset.queueJump}`); if (target) target.scrollIntoView({ behavior: "smooth", block: "start" }); });
     wireRecords();
     $$('[data-action="toggle-task"]', $("#content")).forEach(button => button.onclick = () => toggleTask(button.closest("[data-task]")));
   }

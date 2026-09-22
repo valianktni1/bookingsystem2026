@@ -1,3 +1,9 @@
+## Current release: V8.54
+
+Personal wedding booking app: clearer invoice descriptions, simpler dashboard and booking navigation.
+Start with **DEPLOY-V8.54-READ-ME.txt** for GitHub Desktop and TrueNAS instructions.
+See **VALIDATION-V8.54.txt** for checks and limitations.
+
 # Mark's Business Studio — Version 8.52
 
 Mark's private, self-hosted booking and business management system. The current
