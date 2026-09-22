@@ -432,6 +432,8 @@
 
   async function performRecordAction(r, section, action, details = {}) {
     await selectRecordTab(r, section, true);
+    const revealSelector = {send_quote:'.v811-journey-quote', countersign:'.v811-journey-forms', review_forms:'.v811-journey-forms', review_booking_form:'.v811-journey-forms', review_final_timings:'.v820-final', open_final_call_pack:'.v823-final-call-pack'}[action];
+    if (revealSelector) window.WBMLayoutV855?.reveal($(revealSelector, $("#drawer")));
     if (action === "send_quote") $("#send-quote")?.click();
     else if (action === "record_payment") ($("[data-payment-invoice]") || $("#new-invoice"))?.click();
     else if (action === "countersign") {

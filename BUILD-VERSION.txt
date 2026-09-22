@@ -1,3 +1,14 @@
+BookingSystem2026 - Booking Paperwork & Messages
+Build: 2026.09.22-paperwork-messages-v8.55
+
+- Booking & forms: four shortcuts, expandable paperwork panels.
+- Completed quote and paperwork collapsed; outstanding review/signature/email steps remain open.
+- Final timings and private call pack available on demand without changing their timing.
+- Messages: conversation first, grouped delivery history, local search and sent/received filters.
+- New layout helpers skip imported records entirely.
+- No invoice, database schema, payment, credential or automation changes.
+- Correct archive-download commands: DEPLOY-V8.55-READ-ME.txt.
+
 BookingSystem2026 - Clear Bookings & Invoice Layout
 Build: 2026.09.22-clear-bookings-v8.54
 

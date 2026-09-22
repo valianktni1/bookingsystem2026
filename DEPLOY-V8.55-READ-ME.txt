@@ -1,0 +1,41 @@
+PERSONAL BOOKINGSYSTEM2026 - V8.55
+
+1. Copy the unzipped bookingsystem2026-main CONTENTS into the existing
+   GitHub Desktop repository. Replace matching files. Keep .git and .env.
+2. Commit, then Push origin.
+3. Paste this whole block in TrueNAS. This folder is NOT a Git checkout.
+
+(
+set -e
+cd /mnt/apps/dockge/data/bookingsystem2026
+WBM_UPDATE=$(mktemp -d)
+curl -fL https://github.com/valianktni1/bookingsystem2026/archive/refs/heads/main.zip -o "$WBM_UPDATE/update.zip"
+unzip -q "$WBM_UPDATE/update.zip" -d "$WBM_UPDATE" -x '*/.env' '*/compose.yaml' '*/compose.yml' '*/docker-compose.yaml' '*/docker-compose.yml'
+test -f "$WBM_UPDATE/bookingsystem2026-main/DEPLOY-V8.55.sh"
+cp -a "$WBM_UPDATE/bookingsystem2026-main/." ./
+bash DEPLOY-V8.55.sh
+)
+
+The existing TrueNAS .env and Compose file are retained. The helper validates
+and backs up the database, preserves the running app image for rollback,
+builds while the old app runs, starts only the app and checks V8.55 health.
+It prints the exact rollback command. The database is not recreated.
+If download returns 404, stop: the GitHub repo may be private.
+After success, Ctrl+F5. The header should say COMPLETE V8.55.
+
+WHAT TO CHECK
+- Open a non-imported booking > Booking & forms.
+- Use Quote & package, Booking form & contract, Final wedding timings or
+  Private final-call pack. Each button opens the corresponding panel.
+- Completed quote/paperwork starts collapsed; review/signature/email work
+  stays open. Existing controls, forms and protected signatures are retained.
+- Messages > Emails puts the conversation first. Search loaded message text
+  or filter All / Received / Sent. Refresh still fetches the existing feed.
+- Delivery history is grouped below; failed delivery records stay expanded.
+- SMS controls stay in Messages > Texts.
+
+IMPORTS AND DATA
+New layout helpers skip imported records. There are no changes to the invoice
+renderer, imported records, payment rules, database schema, email sending,
+automation timing, client portal, credentials or integrations in this release.
+Filters search the existing 60-message feed, not the entire mailbox.

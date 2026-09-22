@@ -1,0 +1,21 @@
+V8.55 focused validation
+
+16 invoice/payment regression tests passed:
+python -m pytest tests/test_v834_invoice_amendments.py tests/test_v840_invoice_email.py tests/test_v854_invoice_layout.py -q
+
+Local browser checks at 1440x1000 and 390x844:
+- all four Booking & forms shortcuts open the correct existing content
+- final-call save button remains accessible (not clicked)
+- Messages conversation, search including zero results, direction filters,
+  refresh without duplicate controls, Emails/Texts navigation
+- mobile horizontal overflow check and desktop/mobile screenshots reviewed
+- completed folds collapse; existing node handlers retained
+- reveal helper opens collapsed ancestors for next-action shortcuts
+- imported Studio Ninja record passed to layout helper remains unchanged
+- zero JavaScript errors and zero mutation requests during navigation/filtering
+- sample conversation responses used; no live email sent
+
+JavaScript and deployment Bash syntax checked.
+Invoice renderer and all backend behaviour files compared with V8.54:
+unchanged apart from release metadata in main.py and backup.py.
+No live TrueNAS deployment or Docker build performed here.

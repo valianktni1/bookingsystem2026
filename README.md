@@ -1,3 +1,9 @@
+## Current release: V8.55
+
+Read **DEPLOY-V8.55-READ-ME.txt** for the correct TrueNAS download/update commands.
+This server folder is not a Git checkout: do not run git pull there.
+Read **VALIDATION-V8.55.txt** for checks.
+
 ## Current release: V8.54
 
 Personal wedding booking app: clearer invoice descriptions, simpler dashboard and booking navigation.

@@ -109,6 +109,7 @@
     if (formsHost && window.WBMWorkspaceV895?.renderFormsAndAgreement) {
       window.WBMWorkspaceV895.renderFormsAndAgreement(record, formsHost);
     }
+    window.WBMLayoutV855?.journey(record, body, state.currentPortal || {});
   }
 
   renderTab = async function (record, tab, target = null) {
