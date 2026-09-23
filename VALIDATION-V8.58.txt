@@ -1,0 +1,12 @@
+V8.58 validation (local synthetic records only)
+- Integration test: preview and real client quote share catalog/preparation data;
+  authentication required; protected imports rejected; preview GETs do not change
+  portal-token, invoice, quote, email or audit counts; booking ID cannot accept quote.
+- Two V8.57 integration tests passed: quote restrictions, bank snapshots,
+  old invoice preservation, acceptance locking and protected import behaviour.
+- Chromium: summary includes compulsory charge in package total; displayed bank
+  uses saved details after account settings change; same client renderer responds
+  to package selection; acceptance remains disabled; zero mutation requests;
+  no JS errors; desktop and mobile layouts inspected for overflow/readability.
+- Node syntax checked for changed scripts; deployment Bash syntax checked.
+- No production data or communications changed. No schema migration.

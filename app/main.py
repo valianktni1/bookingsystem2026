@@ -144,7 +144,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.57.1", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.58", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -3793,6 +3793,10 @@ def public_portal_data(
                     "template": access_log.template_key,
                 })
             db.commit()
+    return client_booking_data(booking, db)
+
+
+def client_booking_data(booking: Booking, db: Session):
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
     contract = db.scalar(select(ContractTemplate).where(ContractTemplate.brand == booking.brand,
                                                         ContractTemplate.is_active.is_(True)))
@@ -5442,3 +5446,20 @@ def admin_workspace_page(view: str):
 
 
 register_quote_template_routes(app)
+
+
+@app.get("/api/bookings/{booking_id}/quote-preview-data")
+def admin_quote_preview_data(booking_id: str, _: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    from .quote_templates import booking_bank_details
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    if booking.legacy_source or booking.brand != Brand.WBM or booking.kind != RecordKind.WEDDING:
+        raise HTTPException(409, "Quote preview is available for native WBM wedding bookings")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))
+    return {**client_booking_data(booking, db), "preview_bank": booking_bank_details(booking, profile)}
+
+
+@app.get("/quote-preview/{booking_id}", include_in_schema=False)
+def admin_quote_preview_page(booking_id: str, _: Admin = Depends(current_admin)):
+    return FileResponse(STATIC_DIR / "quote-preview.html", headers={"Cache-Control": "private, no-store"})

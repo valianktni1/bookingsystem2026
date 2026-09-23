@@ -1,0 +1,34 @@
+PERSONAL WBM BOOKING SYSTEM V8.58
+
+Copy this complete repo into your GitHub Desktop checkout, preserving .git and
+.env. Commit and push to main before deploying. Keep your live TrueNAS Compose.
+If you normally make this personal repo public for the build, do that first.
+
+Paste into TrueNAS:
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.58.sh -o /tmp/wbm-deploy-v858.sh && sudo bash /tmp/wbm-deploy-v858.sh
+
+The helper backs up and checks the database, preserves the old image, builds
+from GitHub, restarts only app, checks health/version and prints rollback.
+Your live folder is NOT a git checkout; no git pull is required.
+Refresh the app with Ctrl+F5 after success.
+
+WHAT CHANGED
+1. Review quote email now shows a summary of the actual saved quote: package
+   prices INCLUDING compulsory extras and discounts, optional extras, and the
+   bank label/account-name/sort-code with the account number masked.
+   It does not allow sending until the summary loads successfully.
+2. Preview as the couple opens in a separate tab from the review screen or
+   booking Overview. It shares the actual client quote renderer and data.
+   You can try package/extra choices and totals, but acceptance is disabled.
+   It creates no portal token, invoice, audit event or email and saves no choices.
+   Preview requires your admin login and is not a link to send to a couple.
+3. Booking Overview shows the saved quote's bank label and last four digits.
+   Expand Account on each invoice to distinguish older invoices using the
+   original business account from invoices with their own saved bank details.
+4. Template extras now say Extras the couple can choose and Compulsory extras -
+   automatically included. Rules and pricing have not changed.
+
+Studio Ninja imports have none of these additional controls. No data migration,
+password change or automatic email is introduced. Existing invoice/quote data
+is not rewritten. Includes the V8.57 templates/two-bank feature and V8.57.1
+email-logo fix. All testing used local synthetic data.

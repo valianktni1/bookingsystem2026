@@ -1,3 +1,7 @@
+## V8.58: quote review, preview and bank labels
+
+See DEPLOY-V8.58-READ-ME.txt. Includes all previous V8.57.1 changes.
+
 ## V8.57.1: email logo contrast
 
 Includes V8.57 in full. Use DEPLOY-V8.57.1-READ-ME.txt.

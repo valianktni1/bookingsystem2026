@@ -1,4 +1,5 @@
 const $ = selector => document.querySelector(selector);
+const quotePreview = location.pathname.startsWith("/quote-preview/");
 let data = null;
 let bookingStep = 0;
 const initialQuery = new URLSearchParams(location.search);
@@ -17,6 +18,7 @@ const money = value => new Intl.NumberFormat("en-GB", {style:"currency", currenc
 const date = value => value ? new Intl.DateTimeFormat("en-GB", {day:"numeric", month:"long", year:"numeric"}).format(new Date(value.slice(0,10) + "T12:00:00")) : "To be confirmed";
 
 async function api(path, options = {}) {
+  if (quotePreview && (options.method || "GET").toUpperCase() !== "GET") throw new Error("Preview only — no changes can be saved");
   const response = await fetch(path, {headers:{"Content-Type":"application/json"}, ...options});
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(Array.isArray(body.detail) ? body.detail.map(x => x.msg).join(", ") : body.detail || "Something went wrong");
@@ -77,7 +79,7 @@ function directionsUrl() {
 
 async function init() {
   try {
-    data = await api(`/api/client/${token}${emailAccess ? `?email_access=${encodeURIComponent(emailAccess)}` : ""}`);
+    data = await api(quotePreview ? `/api/bookings/${token}/quote-preview-data` : `/api/client/${token}${emailAccess ? `?email_access=${encodeURIComponent(emailAccess)}` : ""}`);
     if (emailAccess) {
       const cleanQuery = new URLSearchParams(location.search);
       cleanQuery.delete("email_access");
@@ -97,6 +99,14 @@ async function init() {
     $("#countdown").innerHTML = data.record.kind === "wedding" ? countdown() : "Your project space";
     $("#loading").classList.add("hidden");
     $("#portal").classList.remove("hidden");
+    if (quotePreview) {
+      $("#tabs").style.display = "block";
+      $("#tabs").innerHTML = '<p style="margin:0;padding:12px;background:#fff2cc;color:#403514">Preview only — try package choices and extras. Nothing is saved or sent; accepting is disabled.</p>';
+      quotePanel();
+      const invoiceButton = $("[data-open-invoices]");
+      if (invoiceButton) invoiceButton.remove();
+      return;
+    }
     renderTabs();
     render();
     openRequestedEmailDocument();
@@ -199,10 +209,10 @@ function renderAddons() {
   document.querySelectorAll('input[name="addon_id"]').forEach(input => input.onchange = updateQuoteTotal);
   const confirmation = document.querySelector('input[name="confirmed"]');
   const acceptButton = $("#quote-form button[type='submit']");
-  confirmation.disabled = !selected;
+  confirmation.disabled = quotePreview || !selected;
   if (!selected) confirmation.checked = false;
-  acceptButton.disabled = !selected;
-  acceptButton.textContent = selected ? "Accept package & create invoice" : "Choose a package first";
+  acceptButton.disabled = quotePreview || !selected;
+  acceptButton.textContent = quotePreview ? "Preview only — accepting disabled" : selected ? "Accept package & create invoice" : "Choose a package first";
   updateQuoteTotal();
 }
 function updateQuoteTotal() {
@@ -221,6 +231,7 @@ function updateQuoteTotal() {
 }
 async function acceptSelectedQuote(event) {
   event.preventDefault();
+  if (quotePreview) return;
   const form = new FormData(event.currentTarget);
   if (!form.get("package_id")) {
     toast("Please choose your wedding package first");
