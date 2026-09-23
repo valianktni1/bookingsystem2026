@@ -1,0 +1,14 @@
+V8.59 - local validation
+- 11 new PDF/allocation tests passed: full/partial/no payment, embedded fonts,
+  extractable fields, saved bank snapshot, closed invoices, receipts/discounts,
+  and unchanged protected import text/pixels at invoice and booking level.
+- 8 prior invoice-description/pagination tests passed, including 85 inclusions.
+- 2 quote/bank integration tests passed in their isolated process. A mixed test
+  invocation initially hit the suite's global environment/config ordering at
+  login; rerunning its expected standalone process passed both tests.
+- Sample matching supplied WBM01205 totals: 475 + 155 = 630; paid 100; owed 530.
+  One page. Inspected rendered output and extracted text; original invoice data
+  and labels retained. Embedded fonts avoid relying on viewer substitution.
+- Python compilation and deployment Bash syntax checks passed.
+- No production data, accounts records, emails or deployments changed.
+- Live accounting PDF-import parser could not be accessed; actual import untested.

@@ -62,6 +62,7 @@ from .payment_arrangements import (
     reactivate_arrangement_after_payment_deletion,
 )
 from .pdf import contract_acceptance_pdf, final_timings_pdf, invoice_pdf
+from .payment_display import allocated_schedule
 from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, BusinessPatch,
                       ContractAcceptIn, ContractTemplatePatch, EmailTemplateIn, EmailTemplatePatch, EnquiryIn,
                       BookingFormTemplateIn, EnquiryFormTemplateIn,
@@ -144,7 +145,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.58", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.59", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -331,19 +332,6 @@ def schedule_rows(total: Decimal, package_fee: Decimal, plan: str, accepted_on: 
     return package_fee, due_45, rows
 
 
-def allocated_schedule(invoice: Invoice) -> list[dict]:
-    paid_left = Decimal(invoice.paid or 0)
-    result = []
-    for original in invoice.payment_schedule or []:
-        item = dict(original)
-        amount = Decimal(str(item.get("amount") or 0))
-        applied = min(amount, max(Decimal("0"), paid_left))
-        paid_left -= applied
-        item["paid"] = money(applied)
-        item["balance"] = money(max(Decimal("0"), amount - applied))
-        item["status"] = "paid" if applied >= amount else "part_paid" if applied > 0 else "scheduled"
-        result.append(item)
-    return result
 
 
 def apply_payment_plan(db: Session, booking: Booking, plan: str) -> None:

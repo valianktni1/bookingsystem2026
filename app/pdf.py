@@ -396,6 +396,15 @@ def invoice_description_lines(value) -> list[str]:
 
 
 def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = False) -> bytes:
+    if (invoice.brand == Brand.WBM
+            and not getattr(invoice, "legacy_source", None)
+            and not getattr(invoice.booking, "legacy_source", None)):
+        from .invoice_layout import native_invoice_pdf
+        return native_invoice_pdf(invoice, profile, receipt)
+    return _original_invoice_pdf(invoice, profile, receipt)
+
+
+def _original_invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = False) -> bytes:
     branding = BRAND_ASSETS.get(invoice.brand, BRAND_ASSETS[Brand.WBM])
     accent = branding["accent"]
     ink = branding["ink"]

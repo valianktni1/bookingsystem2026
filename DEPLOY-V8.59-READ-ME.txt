@@ -1,0 +1,35 @@
+PERSONAL WEDDINGS BY MARK - V8.59
+
+1. Unzip and copy the repo contents into your existing GitHub Desktop checkout.
+   Preserve .git and .env. Commit and push to main.
+2. Keep the live TrueNAS compose.yaml and .env unchanged.
+3. Run:
+   curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.59.sh -o /tmp/wbm-deploy-v859.sh && sudo bash /tmp/wbm-deploy-v859.sh
+4. Refresh with Ctrl+F5, then download a native booking invoice to see the layout.
+
+The helper backs up/checks the database, preserves the previous image, builds
+from GitHub, restarts only app, checks the release and prints rollback.
+The TrueNAS stack directory is not a git checkout. Do not run git pull there.
+
+CHANGES
+- Native WBM invoice/receipt PDFs embed a readable font with selectable text.
+- Package inclusions remain separate lines, with compact spacing and aligned
+  totals. The supplied two-item example fits one page; long invoices paginate.
+- Payment schedule display uses the same read-only allocation of recorded paid
+  amounts as the existing API. No payments, due dates or schedule records change.
+- Both invoice-level and booking-level protected imports keep the old renderer.
+- Invoice number, dates, descriptions, prices, discounts, VAT labels, total,
+  paid, outstanding, payment reference and saved bank details remain unchanged.
+- Existing stored PDFs are not rewritten. No schema changes or emails sent.
+- Cumulative release includes all V8.58 features.
+
+ACCOUNTING IMPORT
+The PDF is still extractable text, not an image. Existing financial labels are
+preserved. Sample extraction checks passed, and the direct accounts integration
+is unchanged. The accounting app's upload parser was unavailable, so an actual
+import has NOT been verified. Review the app's extracted fields on the next
+normal upload before saving it. Do not re-import an already-accounted invoice
+just to test the design. Original issue dates and source invoice numbers remain.
+
+The separate WBM01205-Invoice-Layout-Preview.pdf is a design preview reconstructed
+from the supplied PDF; it is not a new or reissued invoice or a live database export.

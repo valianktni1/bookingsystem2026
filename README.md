@@ -1,3 +1,7 @@
+## V8.59: clearer native invoice PDFs
+
+Embedded fonts, compact layout and payment schedule status from recorded payments. Existing invoice values, labels and protected import rendering preserved. See DEPLOY-V8.59-READ-ME.txt.
+
 ## V8.58: quote review, preview and bank labels
 
 See DEPLOY-V8.58-READ-ME.txt. Includes all previous V8.57.1 changes.
