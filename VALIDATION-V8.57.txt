@@ -1,0 +1,12 @@
+V8.57 validation
+- New integration scenarios cover template create/update/delete, authentication,
+  package and optional-extra restrictions in client display AND acceptance API,
+  bank details in email values and PDF output, snapshot preservation after bank
+  settings change, existing invoice preservation, accepted-quote locking,
+  protected Studio Ninja handling and compatibility with old preparation payloads.
+- Existing quote-edit, quote-email-review and PDF layout regression tests run.
+- Local Chromium: set second bank, create quote template, apply two-package offer,
+  save preparation, check selected email wording, switch saved email templates,
+  verify no quote send, desktop/mobile layout, no JavaScript errors.
+- JavaScript and deployment Bash syntax checked.
+- Only local synthetic records used. No live client communications sent.

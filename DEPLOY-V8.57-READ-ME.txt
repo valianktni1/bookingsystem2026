@@ -1,0 +1,50 @@
+BOOKINGSYSTEM2026 V8.57 - PERSONAL WBM APP
+
+1. Unzip the full repo and copy its contents into your existing GitHub Desktop
+   repository. Keep your existing .git folder and private .env file.
+2. Commit and push to main in valianktni1/bookingsystem2026.
+3. If you normally make this personal repo public for deployment, do that first.
+4. Paste this into TrueNAS shell:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.57.sh -o /tmp/wbm-deploy-v857.sh && sudo bash /tmp/wbm-deploy-v857.sh
+
+The helper uses /mnt/apps/dockge/data/bookingsystem2026.
+It does NOT use git pull. Your live folder is not a Git checkout.
+It preserves live compose.yaml and .env, backs up the database, validates the
+backup, tags the previous image, builds from GitHub while the old app remains
+running, starts the updated app and checks the running version.
+It prints the exact rollback command for your backup folder.
+Do not copy the repo's Compose file over your working TrueNAS Compose file.
+After success refresh with Ctrl+F5 (on mobile reload the page).
+
+USING THE UPDATE
+- Business settings > Manage two bank accounts: enter labels and account details.
+  These are the accounts offered for new quotes. Existing business bank fields
+  continue to serve old bookings/defaults. Do not edit those old fields just to
+  add your new account. Saving these two quote accounts changes no old invoices.
+- Packages & pricing OR Email & SMS templates > Manage quote templates.
+  Create, edit, duplicate or delete named templates.
+- Choose packages, optional extras, required extras, private discounts, bank
+  account, email subject and wording. Prices come from your package catalogue;
+  required extras and discounts can have template-specific amounts.
+- Required extras apply to EVERY package in that quote. Use separate templates
+  if packages require different compulsory extras. Optional extras still follow
+  your existing package eligibility rules.
+- In a native enquiry choose Prepare quote and select your named template.
+  Adjust it for the couple, then Save quote & review email.
+- The email review now has an Email template selector. It changes wording only;
+  it does not silently change the packages already saved in the previous step.
+- No email is sent until you click Send quote now.
+- Editing a sent but unaccepted quote updates its existing client link and sends
+  no email. Accepted quotes and protected imports keep their existing locks.
+- Selected bank details are saved with the quote and copied to newly created
+  invoices. Changing the two saved account choices later does not rewrite them.
+  You can deliberately change a quote's chosen bank before acceptance.
+- Templates are starting points: later template edits/deletions do not update
+  existing quotes. They are stored in the database and included in its backups.
+
+SCOPE
+Personal WBM wedding app only; no tenant application changes.
+No schema migration, credential changes, live data updates or live email sends
+were performed while preparing this release. Changes are tested locally with
+synthetic data. Deploy only after pushing the complete repo to GitHub.

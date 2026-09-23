@@ -1,0 +1,10 @@
+Email logo validation
+- WBM MIME logo has an opaque RGB cream backing, with dark lettering retained.
+- Email preview and sent-message preparation use identical image bytes.
+- Original logo files remain byte-identical.
+- Custom transparent logos covered.
+- Hidden-logo choice, awards and Ivory artwork unchanged.
+- Existing signature settings/upload/preview/removal tests retained.
+- Deployment script syntax checked.
+- No live email sent; real device email-client rendering remains to be checked
+  with the existing Send test control after deployment.

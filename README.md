@@ -1,3 +1,12 @@
+## V8.57.1: email logo contrast
+
+Includes V8.57 in full. Use DEPLOY-V8.57.1-READ-ME.txt.
+WBM email logo images include a solid cream backing for dark email headers.
+
+## V8.57: reusable quote templates and two bank accounts
+
+See DEPLOY-V8.57-READ-ME.txt for deployment and how to use the new controls.
+
 ## Current release: V8.56.1
 
 Restores the direct Final timings shortcut for native and protected imported bookings.

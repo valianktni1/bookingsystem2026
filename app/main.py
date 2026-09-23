@@ -22,6 +22,7 @@ from starlette.background import BackgroundTask
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from .quote_templates import bank_snapshot, validate_offer, register_quote_template_routes, capture_invoice_bank
 from .bootstrap import bootstrap
 from .backup import BACKUP_BUILD, BackupBusyError, create_complete_backup
 from .backup_jobs import (get_complete_backup_file, get_complete_backup_job,
@@ -143,7 +144,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.56.1", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.57.1", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1584,8 +1585,8 @@ def get_email_signature_asset(
     asset = email_signature_asset(profile, kind) if profile else None
     if not asset:
         raise HTTPException(404, "No email signature image is selected")
-    return FileResponse(
-        asset["path"],
+    return Response(
+        asset["data"] if "data" in asset else asset["path"].read_bytes(),
         media_type=f"image/{asset['subtype']}",
         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
     )
@@ -2363,6 +2364,7 @@ def create_invoice(booking_id: str, payload: InvoiceIn, admin: Admin = Depends(c
                       status=invoice_status(payload.total, payload.paid), **values)
     db.add(invoice)
     db.flush()
+    capture_invoice_bank(booking, invoice)
     if payload.paid > 0:
         booking.deposit_amount = max(booking.deposit_amount or Decimal("0"), payload.paid)
         booking.deposit_paid_date = booking.deposit_paid_date or payload.issue_date
@@ -3070,6 +3072,9 @@ def contract_acceptance_json(acceptance: ContractAcceptance) -> dict:
 def quote_preparation_json(booking: Booking) -> dict:
     raw = (booking.workflow_state or {}).get("quote_preparation") or {}
     return {
+        "package_ids": raw.get("package_ids"),
+        "optional_addon_ids": raw.get("optional_addon_ids"),
+        "bank_account_id": raw.get("bank_account_id"),
         "prepared": bool(raw),
         "prepared_at": raw.get("updated_at"),
         "required_addons": [item for item in (raw.get("required_addons") or []) if isinstance(item, dict)],
@@ -3363,6 +3368,7 @@ def save_quote_preparation(booking_id: str, payload: QuotePreparationIn,
                                         Quote.status == "accepted").limit(1)):
         raise HTTPException(409, "The accepted quote and invoice are locked")
 
+    validate_offer(db, payload)
     required_input = {item.addon_id: item for item in payload.required_addons}
     discount_input = {item.addon_id: item for item in payload.discounts}
     if set(required_input) & set(discount_input):
@@ -3390,6 +3396,15 @@ def save_quote_preparation(booking_id: str, payload: QuotePreparationIn,
         "discounts": [snapshot(item_id, payload, True) for item_id in discount_input],
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    old_preparation = (booking.workflow_state or {}).get("quote_preparation") or {}
+    for key in ("package_ids", "optional_addon_ids", "email_subject", "email_body"):
+        preparation[key] = getattr(payload, key) if key in payload.model_fields_set else old_preparation.get(key)
+    if payload.bank_account_id:
+        preparation["bank_account_id"] = payload.bank_account_id
+        preparation["bank_details"] = bank_snapshot(db, payload.bank_account_id)
+    elif "bank_details" in old_preparation:
+        preparation["bank_account_id"] = old_preparation.get("bank_account_id")
+        preparation["bank_details"] = old_preparation["bank_details"]
     booking.workflow_state = {**(booking.workflow_state or {}), "quote_preparation": preparation}
     audit(db, "prepare_quote", "booking", booking.id,
           {"required_addons": len(required_input), "discounts": len(discount_input)})
@@ -3590,6 +3605,7 @@ def client_email_centre(booking_id: str, _: Admin = Depends(current_admin),
         "cancelled": booking.status == RecordStatus.CANCELLED,
         "manual_only": not automations_allowed(booking),
         "automation_suppressed": booking.automation_suppressed,
+        "quote_email": {k: ((booking.workflow_state or {}).get("quote_preparation") or {}).get("email_" + k) for k in ("subject", "body")},
         "recommended_template_key": recommended,
         "account_link_included": True,
         "templates": [{
@@ -3791,6 +3807,12 @@ def public_portal_data(
                                                   AddOnOption.is_active.is_(True),
                                                   AddOnOption.is_discount.is_(False))
                         .order_by(AddOnOption.display_order, AddOnOption.price)).all()
+    offer = quote_preparation_json(booking)
+    if not booking.legacy_source:
+        if offer["package_ids"] is not None:
+            packages = [p for p in packages if p.id in offer["package_ids"]]
+        if offer["optional_addon_ids"] is not None:
+            addons = [a for a in addons if a.id in offer["optional_addon_ids"]]
     client_invoices = db.scalars(select(Invoice).options(selectinload(Invoice.booking),
                                                           selectinload(Invoice.payments))
                                  .where(Invoice.booking_id == booking.id)
@@ -3887,6 +3909,12 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
     if not package:
         raise HTTPException(404, "The selected package is no longer available")
     preparation = quote_preparation_json(booking)
+    if not booking.legacy_source:
+        if preparation["package_ids"] is not None and package.id not in preparation["package_ids"]:
+            raise HTTPException(422, "This package is not included in your quote")
+        required_set = {i["addon_id"] for i in preparation["required_addons"]}
+        if preparation["optional_addon_ids"] is not None and set(payload.addon_ids) - required_set - set(preparation["optional_addon_ids"]):
+            raise HTTPException(422, "An extra is not included in your quote")
     required_items = preparation["required_addons"]
     discount_items = preparation["discounts"]
     required_ids = [item["addon_id"] for item in required_items]
@@ -3956,6 +3984,7 @@ def accept_quote(token: str, payload: QuoteAcceptIn, db: Session = Depends(get_d
                                 if balance_due_date else "The final balance date will be confirmed once the wedding date is set.")))
     db.add(invoice)
     db.flush()
+    capture_invoice_bank(booking, invoice)
     quote.invoice_id = invoice.id
     booking.package_name = package.name
     booking.quoted_total = total
@@ -5410,3 +5439,6 @@ def admin_workspace_page(view: str):
     if view not in allowed:
         raise HTTPException(404, "Page not found")
     return FileResponse(STATIC_DIR / "index.html")
+
+
+register_quote_template_routes(app)

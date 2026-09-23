@@ -1,4 +1,7 @@
+from .quote_templates import booking_bank_details
 import html
+from io import BytesIO
+from PIL import Image, UnidentifiedImageError
 import re
 import smtplib
 import ssl
@@ -104,18 +107,35 @@ def email_signature_asset(profile: BusinessProfile, kind: str) -> dict | None:
         return None
     suffix = path.suffix.lower()
     subtype = "jpeg" if suffix in {".jpg", ".jpeg"} else "png"
-    return {
+    asset = {
         "path": path,
         "cid": assets[f"{kind}_cid"],
         "subtype": subtype,
         "filename": path.name,
     }
+    if profile.brand == Brand.WBM and kind == "logo":
+        # Email clients can darken the HTML header without changing transparent
+        # black lettering. Bake the light backing into the MIME image itself.
+        # Never overwrite the original artwork used elsewhere in the app.
+        try:
+            with Image.open(path) as original:
+                logo = original.convert("RGBA")
+                logo.thumbnail((980, 600), Image.Resampling.LANCZOS)
+                backing = Image.new("RGB", (logo.width + 32, logo.height + 32), assets["soft"])
+                backing.paste(logo, (16, 16), logo)
+                output = BytesIO()
+                backing.save(output, format="PNG")
+            asset.update(data=output.getvalue(), subtype="png", filename=path.stem + "-email.png")
+        except (OSError, UnidentifiedImageError, Image.DecompressionBombError):
+            # Keep existing delivery behaviour for an old unreadable upload.
+            pass
+    return asset
 
 
 def template_values(booking: Booking, profile: BusinessProfile, portal_url: str | None = None,
                     extra_values: dict[str, str] | None = None) -> dict[str, str]:
     client = booking.client
-    bank = profile.bank_details or {}
+    bank = booking_bank_details(booking, profile)
     final_call_date = None
     if booking.event_date:
         # The call is on the Monday immediately before the wedding. For a
@@ -359,7 +379,7 @@ def build_email_message(booking: Booking, profile: BusinessProfile, subject: str
     for kind in ("logo", "awards"):
         asset = email_signature_asset(profile, kind)
         if asset:
-            html_part.add_related(asset["path"].read_bytes(), maintype="image", subtype=asset["subtype"],
+            html_part.add_related(asset["data"] if "data" in asset else asset["path"].read_bytes(), maintype="image", subtype=asset["subtype"],
                                   cid=f"<{asset['cid']}>", filename=asset["filename"],
                                   disposition="inline")
     return message

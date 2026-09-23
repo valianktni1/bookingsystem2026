@@ -284,6 +284,11 @@ class QuotePreparationItemIn(BaseModel):
 
 
 class QuotePreparationIn(BaseModel):
+    email_subject: str | None = Field(default=None, min_length=1, max_length=240)
+    email_body: str | None = Field(default=None, min_length=1, max_length=20000)
+    package_ids: list[str] | None = Field(default=None, max_length=100)
+    optional_addon_ids: list[str] | None = Field(default=None, max_length=100)
+    bank_account_id: str | None = Field(default=None, pattern="^(primary|alternate)$")
     required_addons: list[QuotePreparationItemIn] = Field(default_factory=list, max_length=50)
     discounts: list[QuotePreparationItemIn] = Field(default_factory=list, max_length=20)
 

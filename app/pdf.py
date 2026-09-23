@@ -1,3 +1,4 @@
+from .quote_templates import invoice_bank_details
 from decimal import Decimal
 from datetime import timezone
 from io import BytesIO
@@ -567,7 +568,7 @@ def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = Fals
     else:
         story.append(Spacer(1, 2 * mm))
 
-    bank = profile.bank_details or {}
+    bank = invoice_bank_details(invoice, profile)
     bank_lines = []
     for label, key in [("Account name", "account_name"), ("Sort code", "sort_code"), ("Account number", "account_number")]:
         if bank.get(key):
