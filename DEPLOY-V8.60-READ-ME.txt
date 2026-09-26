@@ -1,0 +1,28 @@
+WEDDINGS BY MARK - V8.60 - REMEMBER YOUR PLACE
+
+Copy the unzipped contents into your existing GitHub Desktop repository,
+preserving .git and .env. Commit and push to main. Keep live Compose unchanged.
+Then paste into TrueNAS:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.60.sh -o /tmp/wbm-deploy-v860.sh && sudo bash /tmp/wbm-deploy-v860.sh
+
+The helper backs up the database and preserves the previous image before
+building. It checks the running version and prints rollback instructions.
+Refresh once with Ctrl+F5 after deploying to load the updated scripts.
+
+CHANGES
+- Saves the main page, booking panel and table scroll positions on scrolling,
+  switching away and page exit. Restores after the route and content load.
+- Returning to the root URL in the SAME browser tab resumes the last section.
+  Explicit links to other sections/bookings are respected.
+- Stops restoring when you start interacting, so you can scroll immediately.
+- Clears position memory on logout. Uses bounded session/browser-history data.
+- No form answers, email drafts, bank details or booking contents are stored.
+- Normal app switching does not re-render or reset the open form.
+
+LIMITS
+This is navigation memory, not unsaved-form autosave. If the browser fully
+reloads, unsaved edits are not recovered. A newly opened tab or cleared browser
+session has no saved position. No authentication bypass or session extension.
+No booking records, payments, protected imports or invoices are changed by
+this feature. Cumulative package includes the V8.59 native invoice update.

@@ -1,0 +1,7 @@
+- Real Chromium harness, desktop 1280x850 and mobile 390x844: exact booking
+  scroll restored after reload; root resumes saved booking/section; list
+  scroll restored; explicit routes respected; visibility event did not reset
+  draft input; logout cleared memory; no JavaScript errors.
+- Harness used the shipped v860.js with synthetic DOM/data, not live records.
+- Router hook integration and script load ordering inspected; syntax checked.
+- No live deployment, data writes or client communications performed.

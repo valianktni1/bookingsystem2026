@@ -89,6 +89,7 @@
   }
 
   function rememberScroll() {
+    window.WBMPlace?.save();
     if (!history.state?.wbm) return;
     history.replaceState({ ...history.state, scrollY: window.scrollY }, "", location.href);
   }
@@ -132,6 +133,7 @@
 
   async function applyCurrentRoute(options = {}) {
     if ($("#app")?.classList.contains("hidden")) return;
+    const savedPlace = window.WBMPlace?.begin();
     const route = parseRoute();
     applyingRoute = true;
     try {
@@ -162,10 +164,11 @@
       if (options.replace || !history.state?.wbm) {
         history.replaceState({ ...history.state, wbm: true, scrollY: history.state?.scrollY || 0 }, "", location.href);
       }
-      requestAnimationFrame(() => window.scrollTo(0, Number(history.state?.scrollY || 0)));
+      if (!savedPlace) requestAnimationFrame(() => window.scrollTo(0, Number(history.state?.scrollY || 0)));
     } finally {
       applyingRoute = false;
       initialRouteApplied = true;
+      window.WBMPlace?.finish(savedPlace);
     }
   }
 

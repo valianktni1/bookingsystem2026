@@ -1,3 +1,7 @@
+## V8.60: remember your place
+
+Restores admin booking/list scroll after reload and remembers the section in the same browser tab. See DEPLOY-V8.60-READ-ME.txt. Includes V8.59.
+
 ## V8.59: clearer native invoice PDFs
 
 Embedded fonts, compact layout and payment schedule status from recorded payments. Existing invoice values, labels and protected import rendering preserved. See DEPLOY-V8.59-READ-ME.txt.
