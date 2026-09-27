@@ -1,0 +1,20 @@
+PERSONAL WEDDINGS BY MARK - V8.62
+
+Copy the unzipped repo contents into your existing GitHub Desktop checkout.
+Preserve .git and .env. Commit and push to main. Keep live TrueNAS Compose.
+
+Then paste this single line into TrueNAS:
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.62.sh -o /tmp/wbm-deploy-v862.sh && sudo bash /tmp/wbm-deploy-v862.sh
+
+The helper checks a database backup, preserves the old image, builds from
+GitHub, restarts app only and prints a rollback command. Refresh with Ctrl+F5.
+
+Completed agreements now leave New client updates automatically when both
+signatures and a successful contract_completed email are recorded. Opening
+or manually reviewing the agreement is unnecessary. Missing countersignatures
+and unsent/failed confirmations remain actionable, including after two days.
+An older confirmation cannot clear a subsequently re-signed agreement.
+
+The agreement remains stored in the booking. This is a read-only queue rule:
+no migration, deletion, signature changes or emails sent by this update.
+Studio Ninja imported contracts retain their exclusion. Includes V8.61.

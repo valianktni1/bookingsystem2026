@@ -1,0 +1,13 @@
+V8.62 validation - 2026-09-27
+
+PASS: focused agreement queue lifecycle test. Checks outstanding countersignature,
+missing/failed confirmation beyond two days, old sent email before new signatures,
+successful retry clearing the update, repeated read-only queue reads, signature
+preservation and imported-contract exclusion. Uses isolated synthetic SQLite data.
+PASS: two existing owner-notification behavioral tests run in isolation.
+PASS: Python compilation and deployment helper bash syntax.
+
+The historical V8.36 static build-marker test still expects V8.53 and fails on
+current releases; excluded from the focused behavioral rerun. No live data,
+real email delivery or deployment tested/performed. No frontend assets changed
+except the displayed version. Previous V8.61 mobile layout remains included.

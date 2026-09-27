@@ -157,7 +157,7 @@ def test_all_client_progress_steps_email_mark_and_remain_private(monkeypatch):
         )
         updates = client.get("/api/workflow-queues").json()["queues"]["client_updates"]
         update_types = {row["update_type"] for row in updates}
-        assert {"quote_accepted", "booking_form", "final_timings", "agreement_completed"} <= update_types
+        assert {"quote_accepted", "booking_form", "final_timings", "agreement_confirmation_pending"} <= update_types
 
 
 def test_failed_private_notification_never_undoes_action_and_can_be_retried(monkeypatch):

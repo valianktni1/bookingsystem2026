@@ -1,2 +1,2 @@
-BookingSystem2026 V8.61 - Direct paperwork review
-Build: 2026.09.26-paperwork-v8.61
+BookingSystem2026 V8.62 - Completed agreement updates
+Build: 2026.09.27-agreement-updates-v8.62

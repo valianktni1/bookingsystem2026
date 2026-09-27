@@ -1,3 +1,7 @@
+## V8.62: completed agreements clear automatically
+
+Both signatures plus a successful confirmation email remove the agreement from dashboard client updates. Missing confirmation stays actionable. See DEPLOY-V8.62-READ-ME.txt. Includes V8.61.
+
 ## V8.61: direct paperwork review
 
 Direct dashboard Review destinations, readable saved quote details, original enquiry access and compact native quote panels. Desktop/mobile browser checks completed. See DEPLOY-V8.61-READ-ME.txt.

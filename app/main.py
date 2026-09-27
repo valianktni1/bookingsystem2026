@@ -145,7 +145,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.61", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.62", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1779,6 +1779,26 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
         )).all()
     } if booking_ids else {}
 
+    # A completed agreement is actionable only while its confirmation has not
+    # successfully sent for the current pair of signatures. Old agreements'
+    # emails must not clear a newly signed agreement after a reset.
+    completion_sent = {}
+    if booking_ids:
+        for log in db.scalars(select(EmailLog).where(
+                EmailLog.booking_id.in_(booking_ids),
+                EmailLog.template_key == "contract_completed",
+                EmailLog.status == "sent",
+        ).order_by(EmailLog.sent_at.asc())).all():
+            completion_sent[log.booking_id] = log.sent_at
+
+    def confirmed_after_signatures(booking_id, contract):
+        sent = completion_sent.get(booking_id)
+        if not sent or not contract.accepted_at or not contract.supplier_signed_at:
+            return False
+        def utc(value):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return utc(sent) >= max(utc(contract.accepted_at), utc(contract.supplier_signed_at))
+
     queues: dict[str, list[dict]] = {
         "communication_failures": [],
         "client_updates": [],
@@ -1885,13 +1905,14 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
                 update_type="agreement",
             ))
         elif (workflow_active and contract and not contract.is_legacy_import
-              and contract.supplier_signed_at and recent_progress(contract.accepted_at)):
+              and contract.supplier_signed_at
+              and not confirmed_after_signatures(booking.id, contract)):
             queues["client_updates"].append(item(
                 booking,
-                f"Wedding agreement signed by {contract.accepted_name} and safely completed",
+                "Both agreement signatures recorded · confirmation email still needs attention",
                 "Journey", "review_forms",
                 occurred_at=contract.accepted_at,
-                update_type="agreement_completed",
+                update_type="agreement_confirmation_pending",
             ))
 
         if native_workflow and booking.status == RecordStatus.ENQUIRY and not accepted_quote:
