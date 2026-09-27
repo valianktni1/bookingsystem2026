@@ -273,7 +273,7 @@
     const fullySigned = Boolean(contract && (contract.is_legacy_import || contract.fully_signed || contract.supplier_signed_at));
     const needsCountersignature = Boolean(contract && !contract.is_legacy_import && !fullySigned);
     const completionEmail = (portal.emails || []).find(item => item.template_key === "contract_completed");
-    const needsCompletionEmail = Boolean(fullySigned && !contract.is_legacy_import && completionEmail?.status !== "sent");
+    const needsCompletionEmail = window.WBMSetup?.native(r) ? Boolean(fullySigned && !contract.is_legacy_import && !window.WBMSetup.progress(r,portal).confirmed) : Boolean(fullySigned && !contract.is_legacy_import && completionEmail?.status !== "sent");
     const answerHost = document.createElement("div");
     originalQuestionnairesV895(r, answerHost);
     body.innerHTML = `<section class="forms-status-grid">

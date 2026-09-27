@@ -1,3 +1,7 @@
+## V8.63: clear booking setup and direct actions
+
+Direct countersign/confirmation navigation, a shared four-step booking setup checklist and a concise native Overview. Includes V8.62. See DEPLOY-V8.63-READ-ME.txt.
+
 ## V8.62: completed agreements clear automatically
 
 Both signatures plus a successful confirmation email remove the agreement from dashboard client updates. Missing confirmation stays actionable. See DEPLOY-V8.62-READ-ME.txt. Includes V8.61.

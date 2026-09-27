@@ -47,7 +47,7 @@
     const signed = Boolean(contract && (contract.fully_signed || contract.supplier_signed_at));
     const formReview = (record.tasks || []).some(task => task.workflow_key === 'wbm_review_booking_form' && !task.completed);
     const agreementEmail = (portal?.emails || []).some(email => email.template_key === 'contract_completed' && email.status === 'sent');
-    const formsComplete = Boolean(bookingForm && signed && !formReview && agreementEmail);
+    const formsComplete = window.WBMSetup?.native(record) ? (()=>{const p=window.WBMSetup.progress(record,portal);return p.reviewed&&p.confirmed;})() : Boolean(bookingForm && signed && !formReview && agreementEmail);
     const quote = body.querySelector('.v811-journey-quote');
     const forms = body.querySelector('.v811-journey-forms');
     const timings = body.querySelector('.v820-final');

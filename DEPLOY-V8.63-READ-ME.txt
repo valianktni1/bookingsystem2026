@@ -1,0 +1,29 @@
+PERSONAL WEDDINGS BY MARK - V8.63
+
+Unzip and copy repo contents into your existing GitHub Desktop checkout.
+Preserve .git and .env. Commit and push to main; keep live TrueNAS Compose.
+
+Paste this single line into TrueNAS:
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.63.sh -o /tmp/wbm-deploy-v863.sh && sudo bash /tmp/wbm-deploy-v863.sh
+
+The helper verifies a database backup, preserves the old image, builds from
+GitHub, restarts only app, checks the version and prints a rollback command.
+Refresh once with Ctrl+F5 afterwards. No git pull in the live stack folder.
+
+CHANGES
+1. Countersign and confirmation dashboard/next-step shortcuts open and focus
+   the relevant explicit control, not the PDF. Viewing an agreement remains
+   read-only. Navigation never signs or sends; existing confirmation prompts
+   and server protections remain.
+2. Native booking setup uses one four-step definition across Overview,
+   Booking & forms, its tab count and paperwork completion folding:
+   accepted quote; first payment; reviewed booking form; both signatures plus
+   successfully sent confirmation for the current signatures. Final timings,
+   wedding completion and delivery are explicitly separate later stages.
+3. Native Overview keeps the current next action, a compact setup checklist,
+   wedding/couple facts and payment summary. Repeated progress navigation is
+   removed; private notes are expandable. Mobile cards stack and text wraps.
+
+Includes V8.62 completed-agreement dashboard clearing and all earlier releases.
+No database migration, email automation, invoice calculation, accounting export
+or protected Studio Ninja data changes. Native layout changes exclude imports.

@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const context={window:{},recordNextAction:()=>({action:'view'}),recordJourneyStrip:()=> 'legacy',renderOverview:()=>{},esc:String,recordJourneyFacts:(r,p)=>({quote:p.quote,quoteSent:false,bookingForm:p.submissions?.find(s=>s.form_type==='booking_form'),bookingFormReview:r.tasks?.find(t=>t.workflow_key==='wbm_review_booking_form'&&!t.completed),hasPayment:!!r.deposit_paid_date})};
+vm.createContext(context);vm.runInContext(fs.readFileSync('app/static/v863.js','utf8'),context);
+const r={brand:'wbm',kind:'wedding',status:'confirmed',tasks:[],deposit_paid_date:'2026-09-01'};
+const p={quote:{status:'accepted'},submissions:[{form_type:'booking_form'}],contract:{accepted_at:'2026-09-27T08:00:00',supplier_signed_at:'2026-09-27T08:01:00'},emails:[]};
+const progress=()=>context.window.WBMSetup.progress(r,p);
+assert.equal(progress().count,3);assert.equal(context.recordNextAction(r,p).action,'review_confirmation');
+p.emails.push({template_key:'contract_completed',status:'sent',sent_at:'2026-09-26T08:02:00Z'});assert.equal(progress().confirmed,false);
+p.emails.push({template_key:'contract_completed',status:'failed',sent_at:'2026-09-27T08:02:00Z'});assert.equal(progress().confirmed,false);
+p.emails.push({template_key:'contract_completed',status:'sent',sent_at:'2026-09-27T09:02:00+01:00'});assert.equal(progress().count,4);
+r.tasks.push({workflow_key:'wbm_review_booking_form',completed:false});assert.equal(progress().count,3);assert.equal(progress().steps[2].detail,'Needs your review');
+r.legacy_source='studio_ninja';assert.equal(context.window.WBMSetup.native(r),false);assert.equal(context.recordJourneyStrip(r,p),'legacy');
+console.log('PASS: four-step status, review pending, old/failed/successful confirmation, timezone comparison, legacy exclusion');

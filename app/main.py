@@ -145,7 +145,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.62", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.63", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1910,7 +1910,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             queues["client_updates"].append(item(
                 booking,
                 "Both agreement signatures recorded · confirmation email still needs attention",
-                "Journey", "review_forms",
+                "Journey", "review_confirmation",
                 occurred_at=contract.accepted_at,
                 update_type="agreement_confirmation_pending",
             ))

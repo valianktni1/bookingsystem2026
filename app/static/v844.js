@@ -59,7 +59,7 @@
     const openTasks = (record?.tasks || []).filter(task => !task.completed).length;
     return [
       {tab: "Overview", icon: "⌂", label: "Overview", meta: `${openTasks} to do`},
-      {tab: "Journey", icon: "✓", label: "Booking & forms", meta: `${journeyComplete}/3 complete`},
+      {tab: "Journey", icon: "✓", label: "Booking & forms", meta: window.WBMSetup?.native(record) ? `${window.WBMSetup.progress(record,portal).count}/4 setup complete` : `${journeyComplete}/3 complete`},
       {tab: "Emails", icon: "✉", label: "Messages", meta: "Email & text"},
       {tab: "Payments", icon: "£", label: "Payments", meta: outstanding > 0 ? `${money(outstanding)} due` : invoices.length ? "Clear" : "No invoice"},
       {tab: "Files", icon: "▤", label: "Files", meta: `${(record?.documents || []).length} retained`},
@@ -110,6 +110,14 @@
       window.WBMWorkspaceV895.renderFormsAndAgreement(record, formsHost);
     }
     window.WBMLayoutV855?.journey(record, body, state.currentPortal || {});
+    if(window.WBMSetup?.native(record)) {
+      const summary=body.querySelector('.v828-journey-summary');
+      if(summary)summary.outerHTML=window.WBMSetup.checklist(record,state.currentPortal||{});
+      const heading=body.querySelector('.v811-journey-quote>header');
+      if(heading)heading.innerHTML='<div><h3>Quote & package</h3></div><span>Saved package choice and quote controls</span>';
+      const formsHeading=body.querySelector('.v811-journey-forms>header small');
+      if(formsHeading)formsHeading.textContent='BOOKING PAPERWORK';
+    }
   }
 
   renderTab = async function (record, tab, target = null) {

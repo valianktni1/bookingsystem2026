@@ -527,7 +527,7 @@
     const mailData = row.action === "open_email" ? ` data-mail-brand="${attr(row.mail_brand)}" data-mail-uid="${attr(row.mail_uid)}"` : "";
     const failureData = row.failure_id ? ` data-failure-kind="${attr(row.failure_kind)}" data-failure-id="${attr(row.failure_id)}"` : "";
     const ownerData = row.private_owner_notification ? ` data-private-owner="1"` : "";
-    const openLabel = row.action === "open_email" ? "Read email" : row.action === "retry_communication" ? "Retry now" : row.update_type ? "Review" : "Open";
+    const openLabel = row.action === "countersign" ? "Countersign" : row.action === "review_confirmation" ? "Review confirmation" : row.action === "review_agreement" ? "View agreement" : row.action === "open_email" ? "Read email" : row.action === "retry_communication" ? "Retry now" : row.update_type ? "Review" : "Open";
     return `<button class="v811-queue-item" data-queue-record="${attr(row.booking_id)}" data-section="${attr(row.section)}" data-action="${attr(row.action)}"${mailData}${failureData}${ownerData}><span class="record-avatar ${row.brand}">${esc(row.title.split(/\s+|&/).filter(Boolean).slice(0, 2).map(word => word[0]).join(""))}</span><span><strong>${esc(row.title)}</strong><small>${esc(row.detail)}${esc(received)}${esc(due)}${esc(amount)}</small></span><b>${openLabel} →</b></button>`;
   }
 

@@ -1,0 +1,22 @@
+V8.63 validation - 2026-09-27
+
+PASS: Node shared setup checks: four steps, review pending, old confirmation,
+failed confirmation, successful confirmation, UTC/offset comparisons and
+legacy exclusion.
+PASS: V8.62 agreement queue lifecycle regression, run standalone.
+PASS: V8.61 original enquiry preservation test. These test modules each set
+process-wide database configuration and must be run separately; a combined
+run mixed their fixtures and was discarded, then V8.62 passed in isolation.
+PASS: Actual local app browser checks at 1280px and 390px using synthetic data:
+- Overview renders one shared checklist; redundant left progress list removed.
+- No page or drawer horizontal overflow at either width.
+- Confirmation shortcut reveals folded controls and focuses the send button
+  inside the viewport at both widths.
+- Client-only signature fixture: countersign shortcut focuses the explicit
+  countersign control; does not open a PDF or sign/send.
+- No browser errors or POST/PUT/PATCH/DELETE calls during navigation checks.
+- Mobile Overview and confirmation controls visually inspected.
+PASS: JavaScript syntax checks, Python compilation, deploy-helper bash syntax.
+
+No live deployment, real email sending or production-data access performed.
+Existing invoice/accounting and protected import paths are unchanged.

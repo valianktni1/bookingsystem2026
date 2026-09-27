@@ -41,8 +41,17 @@
     }catch(e){if(host.isConnected)host.textContent=e.message;}
   }
   async function direct(r, action) {
-    if (!['review_quote','review_booking_form','review_final_timings','review_forms','review_agreement','countersign'].includes(action)) return false;
+    if (!['review_quote','review_booking_form','review_final_timings','review_forms','review_agreement','countersign','review_confirmation'].includes(action)) return false;
     if (action==='review_quote' && native(r)) {await viewQuote(r);return true;}
+    if (native(r) && ['countersign','review_confirmation','review_forms'].includes(action)) {
+      await selectRecordTab(r,'Journey');
+      if(state.current?.id!==r.id)return true;
+      const body=$('#drawer-body');
+      const selector=action==='countersign'?'[data-countersign-contract]':action==='review_confirmation'?'[data-send-contract-completion]':'.v811-journey-forms';
+      const target=body?.querySelector(selector)||body?.querySelector('.agreement-summary')||body?.querySelector('.v811-journey-forms');
+      if(target){window.WBMLayoutV855?.reveal(target);target.scrollIntoView({behavior:'smooth',block:'center'});if(target.matches('button'))target.focus({preventScroll:true});}
+      return true; // Navigation never signs or sends; explicit controls retain confirmation.
+    }
     if (['review_forms','review_agreement','countersign'].includes(action)) {
       const d=await api(`/api/bookings/${r.id}/portal`);
       if (state.current?.id !== r.id) return true;
