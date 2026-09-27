@@ -1,0 +1,15 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const c={window:{addEventListener:()=>{}},renderBookingEmails:()=>{},renderTab:()=>{},selectRecordTab:()=>{}};
+vm.createContext(c);vm.runInContext(fs.readFileSync('app/static/v864.js','utf8'),c);
+const finished=c.window.WBMTidyV864.finishedFollowups;
+assert.equal(finished({quote:{status:'accepted'}}),true);
+assert.equal(finished({quote_followups:[{status:'sent'},{status:'not_needed'}]}),true);
+assert.equal(finished({quote_followups:[{status:'sent'},{status:'pending'}]}),false);
+assert.equal(finished({quote_followups:[{status:'failed'}]}),false);
+assert.equal(finished({}),false);
+const source=fs.readFileSync('app/static/v811.js','utf8');
+const helper=source.slice(source.indexOf('  function groupedActionItems'),source.indexOf('  function renderTodayDashboard'));
+const groupContext={esc:s=>s.replaceAll('<','&lt;'),queueItem:r=>`<button>${r.action}</button>`};vm.createContext(groupContext);vm.runInContext(helper,groupContext);
+const html=groupContext.groupedActionItems({updates:[{booking_id:'a',title:'A < B',action:'review'},{booking_id:'b',title:'Second',action:'open'}],failures:[{booking_id:'a',title:'A < B',action:'retry'}]},['failures','updates']);
+assert.equal((html.match(/class="v864-client-group"/g)||[]).length,2);assert.equal((html.match(/<button>/g)||[]).length,3);assert(html.includes('A &lt; B'));assert(html.includes('2 items'));assert(html.indexOf('retry')<html.indexOf('review'));
+console.log('PASS: active/finished/failed follow-ups; grouping retains every action and escapes titles');

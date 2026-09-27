@@ -1,2 +1,2 @@
-BookingSystem2026 V8.63 - Clear booking setup and direct actions
-Build: 2026.09.27-booking-setup-v8.63
+BookingSystem2026 V8.64 - Messages, dashboard and mobile tidy-up
+Build: 2026.09.27-workspace-tidy-v8.64

@@ -145,7 +145,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.63", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.64", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")

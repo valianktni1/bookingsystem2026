@@ -1,0 +1,33 @@
+PERSONAL WEDDINGS BY MARK - V8.64
+
+Copy the unzipped repo contents into your existing GitHub Desktop checkout.
+Preserve .git and .env. Commit and push to main. Keep live TrueNAS Compose.
+
+Then paste this single line into TrueNAS:
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.64.sh -o /tmp/wbm-deploy-v864.sh && sudo bash /tmp/wbm-deploy-v864.sh
+
+The helper verifies a database backup, preserves the old image, builds from
+GitHub, restarts only app and prints a rollback command. Refresh with Ctrl+F5.
+
+CHANGES
+- Accepted/finished quote follow-ups fold into Previous quote follow-ups.
+  Active and failed follow-ups remain visible. Existing pause/resume controls
+  are retained; no automation scheduling or sending changes.
+- Messages puts conversation first; stats, milestone delivery and sent-email
+  logs are grouped under Email delivery details. Unresolved email failures
+  open this section automatically. Records are moved, not deleted.
+- Activity filters: All, Notes, Booking changes and Emails. Counts and empty
+  states are shown. Existing add/delete note and retry controls are retained.
+- Dashboard groups updates/actions by client. The headline separately counts
+  clients and items. Each item preserves its own direct action. Waiting items
+  stay separate; no tasks are marked complete by grouping.
+- On native mobile bookings, Call and Directions move into More actions.
+  The duplicated Client area shortcut is hidden; Open quote & client area
+  remains in More actions. Quote, enquiry and timings shortcuts stay visible.
+  Repeated stage help and jump buttons are hidden on mobile; the current next
+  action and expandable paperwork sections remain available.
+
+Includes V8.63 and all previous updates. No database migration, invoice,
+accounting export, email automation or protected Studio Ninja data changes.
+Native booking layout changes exclude imports; dashboard grouping retains
+all visible clients' existing actions and protections.

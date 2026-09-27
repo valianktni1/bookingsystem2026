@@ -1,3 +1,7 @@
+## V8.64: messages, dashboard and mobile tidy-up
+
+Completed follow-ups fold away; conversation comes first; Activity has filters; dashboard groups client items with explicit counts; mobile secondary shortcuts move to More actions. Includes V8.63. See DEPLOY-V8.64-READ-ME.txt.
+
 ## V8.63: clear booking setup and direct actions
 
 Direct countersign/confirmation navigation, a shared four-step booking setup checklist and a concise native Overview. Includes V8.62. See DEPLOY-V8.63-READ-ME.txt.

@@ -1,0 +1,21 @@
+V8.64 validation - 2026-09-27
+
+PASS: JavaScript tests for finished/active/failed follow-ups, grouping multiple
+items under the same booking, retaining each action and escaping client titles.
+PASS: V8.63 setup-model regression tests.
+PASS: Actual local app browser checks with synthetic data at 1280px and 390px:
+- Three items for one client grouped and counted correctly.
+- Grouped confirmation action opens the correct control.
+- Conversation precedes stats, follow-ups and delivery logs.
+- Accepted quote follow-ups are folded, active controls remain visible.
+- Unresolved email failure opens delivery details.
+- Activity filters hide only other categories; All restores every event.
+- Mobile Call control moves to More actions and remains visible on opening;
+  resizing to desktop returns it to the shortcut row.
+- No page/drawer horizontal overflow on tested Messages views.
+- No browser errors or POST/PUT/PATCH/DELETE requests during navigation checks.
+PASS: Mobile Messages/Activity and desktop dashboard visually inspected.
+PASS: JavaScript syntax and deployment-helper shell syntax.
+
+No live deployment, real SMTP or inbox connection tested. No booking data,
+protected import, invoice, export or automation logic altered.

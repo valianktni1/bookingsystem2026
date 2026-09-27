@@ -542,12 +542,23 @@
     return `<button data-queue-jump="${key}" class="${rows.length ? "has-items" : ""}"><i>${icon}</i><span><strong>${rows.length}</strong><small>${label}</small>${total}<em>${help}</em></span></button>`;
   }
 
+  function groupedActionItems(queues, keys) {
+    const groups = new Map();
+    for (const key of keys) for (const row of queues[key]) {
+      if (!groups.has(row.booking_id)) groups.set(row.booking_id, {title:row.title,rows:[]});
+      groups.get(row.booking_id).rows.push(row);
+    }
+    return [...groups.values()].map(group => `<article class="v864-client-group"><header><strong>${esc(group.title)}</strong><span>${group.rows.length} item${group.rows.length===1?'':'s'}</span></header>${group.rows.map(queueItem).join('')}</article>`).join('');
+  }
+
   function renderTodayDashboard(data, renderNumber) {
     if (renderNumber !== dashboardRenderNumber || state.view !== "dashboard") return;
     const d = state.dashboard || {};
     const queues = Object.fromEntries(queueOrder.map(key => [key, (data.queues[key] || []).filter(row => state.brand === "all" || row.brand === state.brand)]));
     const actionBookingIds = new Set(actionQueueOrder.flatMap(key => queues[key].map(row => row.booking_id)));
     const urgent = actionBookingIds.size;
+    const actionCount = actionQueueOrder.reduce((sum,key)=>sum+queues[key].length,0);
+    const actionSummary = `${urgent} client${urgent===1?"":"s"} · ${actionCount} update${actionCount===1?"":"s"} / action${actionCount===1?"":"s"}`;
     const upcomingSource = state.brand === "ivory"
       ? (d.upcoming || []).filter(record => record.kind === "digital")
       : (d.upcoming_weddings || d.upcoming || []);
@@ -559,10 +570,10 @@
     const tasks = (d.tasks || []).filter(task => state.brand === "all" || state.records.find(record => record.id === task.booking_id)?.brand === state.brand);
     const actionKeys = actionQueueOrder.filter(key => queues[key].length);
     const waitingKeys = waitingQueueOrder.filter(key => queues[key].length);
-    $("#content").innerHTML = `<section class="v811-today-head"><div><small>YOUR WORKING DAY</small><h2>Today</h2><p>Action items are separated from clients you are simply waiting for.</p></div><b class="${urgent ? "attention" : "clear"}">${urgent ? `${urgent} client${urgent === 1 ? "" : "s"} need action` : "All clear"}</b></section>
+    $("#content").innerHTML = `<section class="v811-today-head"><div><small>YOUR WORKING DAY</small><h2>Today</h2><p>Action items are separated from clients you are simply waiting for.</p></div><b class="${urgent ? "attention" : "clear"}">${urgent ? actionSummary : "All clear"}</b></section>
       <section class="panel v824-upcoming-weddings"><div class="panel-title"><div><h2>${esc(upcomingTitle)}</h2><p>${esc(upcomingHelp)}</p></div><button data-jump="calendar">View all</button></div>${upcoming.length ? upcoming.slice(0, 7).map(recordRow).join("") : `<div class="empty"><strong>No upcoming records</strong>Your next dated booking will appear here.</div>`}</section>
-      <section class="v828-dashboard-group action"><header><div><small>START HERE</small><h2>Needs your action</h2><p>Only clients with something you can genuinely do now.</p></div><b>${urgent}</b></header><div class="v811-queue-cards">${actionKeys.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${actionKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>You are clear to move on to the waiting and upcoming list.</article>`}</div></section>
-      <details class="v828-dashboard-group waiting v854-waiting" ${waitingExpanded ? "open" : ""}><summary><div><small>KEEP AN EYE ON</small><h2>Waiting and upcoming</h2><p>No action is needed until the couple responds or a payment becomes due.</p></div><b>${waitingKeys.reduce((sum, key) => sum + queues[key].length, 0)}</b></summary><div class="v811-queue-cards">${waitingKeys.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${waitingKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing is waiting</strong>There are no watched client steps or payments in the next 60 days.</article>`}</div></details>
+      <section class="v828-dashboard-group action"><header><div><small>START HERE</small><h2>Needs your attention</h2><p>Updates and actions grouped by client. Each item opens its own next step.</p></div></header><div class="v811-worklists v864-group-list">${groupedActionItems(queues,actionKeys) || `<article class="panel empty"><strong>Nothing needs immediate attention</strong>Your upcoming weddings and waiting items are below.</article>`}</div></section>
+      <details class="v828-dashboard-group waiting v854-waiting" ${waitingExpanded ? "open" : ""}><summary><div><small>KEEP AN EYE ON</small><h2>Waiting and upcoming</h2><p>No action is needed until the couple responds or a payment becomes due.</p></div><b>${waitingKeys.reduce((sum, key) => sum + queues[key].length, 0)} items</b></summary><div class="v811-queue-cards">${waitingKeys.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${waitingKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing is waiting</strong>There are no watched client steps or payments in the next 60 days.</article>`}</div></details>
       <section class="dash-grid v811-dashboard-lower v824-dashboard-tasks"><article class="panel"><div class="panel-title"><div><h2>Private things to do · ${d.open_tasks || 0}</h2><p>These never email a client</p></div><button data-jump="workflows">View all</button></div>${tasks.length ? tasks.slice(0, 7).map(task => taskRow(task, true)).join("") : `<div class="empty"><strong>You're all caught up</strong>No open private tasks.</div>`}</article></section>`;
     const dashboardHost = $("#content");
     const upcomingPanel = $(".v824-upcoming-weddings", dashboardHost);
