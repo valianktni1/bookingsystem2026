@@ -145,7 +145,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.60", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.61", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1850,7 +1850,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
             queues["client_updates"].append(item(
                 booking,
                 f"Quote accepted · {booking.package_name or 'package selected'} · look out for the first payment",
-                "Payments", "record_payment",
+                "Journey", "review_quote",
                 occurred_at=accepted_quote.accepted_at,
                 update_type="quote_accepted",
             ))
@@ -4076,6 +4076,8 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
     if payload.form_type == "booking_form":
         previous_plan = payment_plan_code(booking)
         booking.form_data = {**form_values,
+                             **({"website_enquiry": booking.form_data["website_enquiry"]}
+                                if (booking.form_data or {}).get("website_enquiry") is not None else {}),
                              **({"_answer_snapshot": form_snapshot,
                                  "_form_template_updated_at": form_template_updated_at}
                                 if form_snapshot is not None else {})}
@@ -5451,3 +5453,25 @@ def admin_quote_preview_data(booking_id: str, _: Admin = Depends(current_admin),
 @app.get("/quote-preview/{booking_id}", include_in_schema=False)
 def admin_quote_preview_page(booking_id: str, _: Admin = Depends(current_admin)):
     return FileResponse(STATIC_DIR / "quote-preview.html", headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/api/bookings/{booking_id}/original-enquiry")
+def original_enquiry(booking_id: str, _: Admin = Depends(current_admin),
+                     db: Session = Depends(get_db)):
+    booking = db.get(Booking, booking_id)
+    if not booking:
+        raise HTTPException(404, "Booking not found")
+    original = (booking.form_data or {}).get("website_enquiry")
+    if original is not None:
+        return {"source": "website_submission", "answers": original,
+                "received_at": (booking.workflow_state or {}).get("received_at")}
+    # Retain exact historic notification wording; never reconstruct an enquiry
+    # using the couple's subsequently edited booking or current templates.
+    notice = db.scalar(select(EmailLog).where(
+        EmailLog.booking_id == booking.id, EmailLog.template_key == "new_enquiry_admin",
+        EmailLog.body.is_not(None), EmailLog.body != "",
+    ).order_by(EmailLog.sent_at.asc(), EmailLog.id.asc()).limit(1))
+    if notice:
+        return {"source": "saved_notification", "subject": notice.subject,
+                "body": notice.body, "received_at": notice.sent_at.isoformat()}
+    return {"source": "unavailable"}

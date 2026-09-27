@@ -1,0 +1,15 @@
+Local validation only; no production deployment or client email.
+
+1. New integration test passed: original-enquiry endpoint requires login;
+   authentic saved snapshot returned; submitting a booking form preserves it;
+   missing snapshot falls back to exact saved owner-notification email;
+   GET does not alter booking data; unknown booking returns 404.
+2. Real application in Chromium with synthetic database, desktop 1280x850 and
+   mobile 390x844: header quote/enquiry controls; accepted saved quote values;
+   duplicate communication sections removed from native quote panel; actual
+   dashboard agreement and booking-form Review buttons open the specific item;
+   no horizontal modal overflow; zero UI mutation requests; zero JS errors.
+3. Desktop quote and mobile quote/form screenshots visually inspected.
+4. Changed JS and Python syntax checked; deployment Bash syntax checked.
+5. Historic data that lacks both the enquiry snapshot and saved notification
+   cannot be recovered by this release and is labelled unavailable.

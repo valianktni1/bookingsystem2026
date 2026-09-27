@@ -1,2 +1,2 @@
-BookingSystem2026 V8.60 - Remember your place
-Build: 2026.09.26-remember-place-v8.60
+BookingSystem2026 V8.61 - Direct paperwork review
+Build: 2026.09.26-paperwork-v8.61

@@ -1,3 +1,7 @@
+## V8.61: direct paperwork review
+
+Direct dashboard Review destinations, readable saved quote details, original enquiry access and compact native quote panels. Desktop/mobile browser checks completed. See DEPLOY-V8.61-READ-ME.txt.
+
 ## V8.60: remember your place
 
 Restores admin booking/list scroll after reload and remembers the section in the same browser tab. See DEPLOY-V8.60-READ-ME.txt. Includes V8.59.

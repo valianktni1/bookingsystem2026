@@ -241,8 +241,8 @@
     if (selected === "Emails") enhanceReplyStatusV845(record, body);
   };
 
-  openDrawer = async function (id, tab = "Overview") {
-    await baseOpenDrawerV845(id, tab);
+  openDrawer = async function (id, tab = "Overview", options = {}) {
+    await baseOpenDrawerV845(id, tab, options);
     if (state.current?.id === id) enhanceRecordActionsV845(state.current);
   };
 

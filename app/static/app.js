@@ -306,7 +306,7 @@ async function renderQuotePortal(r,body){
     if($("#edit-quote"))$("#edit-quote").onclick=()=>prepareQuote(r,body,d);
     $("#generate-link").onclick=isLegacy?()=>createManualPortalLink(r,body):async()=>{const x=await api(`/api/bookings/${r.id}/portal`,{method:"POST",body:JSON.stringify({expires_days:90})});state.portalLinks[r.id]=x.url;toast("General portal link generated");renderQuotePortal(r,body)};
     if(url){$("#copy-link").onclick=async()=>{await navigator.clipboard.writeText(url);toast("Wedding booking link copied")};$("#send-portal-email").onclick=isLegacy?()=>sendOneManualPortalEmail(r,body,url):async()=>{try{await api(`/api/bookings/${r.id}/emails/send`,{method:"POST",body:JSON.stringify({template_key:value("#portal-email-template"),portal_url:url})});toast("Email sent");renderQuotePortal(r,body)}catch(e){toast(e.message,"error")}}}
-    loadBookingConversation(r,body);
+    if (!window.WBMReview?.tidyQuote(r,body,d)) loadBookingConversation(r,body);
   }catch(e){body.innerHTML=`<div class="empty"><strong>Unable to load quote controls</strong>${esc(e.message)}</div>`}
 }
 

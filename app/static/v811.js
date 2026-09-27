@@ -435,6 +435,8 @@
   }
 
   async function performRecordAction(r, section, action, details = {}) {
+    try { if (window.WBMReview && await window.WBMReview.direct(r, action)) return; }
+    catch (error) { toast(error.message, "error"); return; }
     await selectRecordTab(r, section, true);
     const revealSelector = {send_quote:'.v811-journey-quote', countersign:'.v811-journey-forms', review_forms:'.v811-journey-forms', review_booking_form:'.v811-journey-forms', review_final_timings:'.v820-final', open_final_call_pack:'.v823-final-call-pack'}[action];
     if (revealSelector) window.WBMLayoutV855?.reveal($(revealSelector, $("#drawer")));

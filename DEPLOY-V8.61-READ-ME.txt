@@ -1,0 +1,40 @@
+PERSONAL WEDDINGS BY MARK - V8.61
+
+Unzip and copy the repo contents into your existing GitHub Desktop checkout.
+Preserve .git and .env. Commit and push to main. Keep live TrueNAS Compose.
+
+Then paste this single line into TrueNAS:
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.61.sh -o /tmp/wbm-deploy-v861.sh && sudo bash /tmp/wbm-deploy-v861.sh
+
+Backup-first helper: checks the database backup, preserves the old image,
+builds from GitHub, restarts app only and prints a rollback command.
+Refresh once with Ctrl+F5 afterwards. No git pull in the TrueNAS stack folder.
+
+WHAT CHANGED
+- Fixed a booking-opening wrapper that discarded the dashboard action.
+- Review quote acceptance opens saved quote details, not a payment entry form.
+- Review signed agreement opens its PDF. Reviewing an agreement does not
+  countersign it or email anyone; existing explicit countersign controls remain.
+- Review submitted booking form opens readable answers directly, with explicit
+  mark-reviewed action when needed. Review timings opens the existing full form.
+- Native booking header has View quote and Original enquiry buttons.
+- Saved quote shows package contents, extras, discounts, total and acceptance.
+  Unaccepted quotes link to the existing read-only offered-quote preview.
+- Quote panels no longer repeat email delivery, email history and conversation.
+  Those remain under Messages. General link/send and reset controls are folded.
+- Mobile: readable text, wrapping buttons, 44px primary tap targets, no sideways
+  scrolling in the checked quote/booking-form modals.
+
+ORIGINAL ENQUIRY
+The authenticated read-only endpoint shows the saved website submission.
+The booking-form save previously replaced that field; future submissions now
+preserve it. For older missing snapshots, the exact saved new-enquiry-admin
+notification email is shown with a clear label. If neither exists, the app
+says unavailable; it never fabricates the original from current booking fields.
+No bulk migration or reconstruction of historic data is performed.
+
+PROTECTION
+Native quote-panel cleanup excludes Studio Ninja imports. No accepted quote,
+invoice, bank detail or protected original is rewritten. Read-only Review
+opens no email/send/payment action. All existing explicit save/send controls
+retain their safeguards. Includes V8.60 position memory and earlier updates.
