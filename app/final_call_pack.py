@@ -381,6 +381,8 @@ def final_call_pack_pdf(
             (final_labels.get(key, key.replace("_", " ").title()), answer)
             for key, answer in final_values.items() if not key.startswith("_")
         ]
+        if final_values.get("_answer_snapshot"):
+            final_rows = [(item["label"], item.get("answer")) for item in final_values["_answer_snapshot"]]
         story.extend([Paragraph("Final Wedding Timings - complete answers", section),
                       answer_table(final_rows)])
 

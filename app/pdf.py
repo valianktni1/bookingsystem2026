@@ -331,6 +331,9 @@ def final_timings_pdf(booking: Booking, submission: FormSubmission,
     }
     story.extend([PageBreak(), Paragraph("Complete submitted answers", section)])
     answer_rows = []
+    snapshot = values.get("_answer_snapshot")
+    if snapshot:
+        labels = {item["key"]: item["label"] for item in snapshot}
     for key, label in labels.items():
         answer_rows.append([
             Paragraph(f"<b>{escape(label)}</b>", small),

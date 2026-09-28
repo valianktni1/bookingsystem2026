@@ -1,0 +1,19 @@
+V8.65 — Editable Final Timings Form
+
+1. Unzip the full repository. Copy its contents into your existing GitHub Desktop repository, keeping your .git folder and existing .env. Commit and push to main.
+2. On TrueNAS run:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.65.sh -o /tmp/wbm-deploy-v865.sh && sudo bash /tmp/wbm-deploy-v865.sh
+
+3. After the success message, refresh with Ctrl+F5.
+4. Open Settings & templates → Final Timings Form.
+
+Edit the heading, introduction, button wording, question labels and help text. Hide optional questions or make them required. Add up to 30 custom questions across the four sections: text, long answer, choices, yes/no, date, time or number. Preview then Save & publish. Publishing does not send emails.
+
+Calculation and essential fields retain their existing types, choices and required rules. Their wording is editable. Existing submitted forms keep their original questions and answers, even when the couple updates their submission. New wording applies to forms not yet submitted. A couple with an older open form is asked to reopen it before submitting a changed version; local drafts remain available.
+
+The existing form remains unchanged until you publish edits. Studio Ninja imported submissions are not rewritten. This update does not recover forms that were never saved.
+
+Final timings shortcut now opens freshly retrieved saved answers directly, or clearly says when no final timings have been submitted.
+
+This is cumulative and includes V8.64 and earlier changes. No database migration is required. The deployment script backs up the database and existing image, builds from GitHub, restarts only the app and prints a rollback command. It preserves the live .env and Compose configuration. No live deployment has been performed for you.

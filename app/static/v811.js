@@ -4,7 +4,7 @@
 
   const workspaceViews = new Set([
     "dashboard", "enquiries", "weddings", "projects", "calendar", "workflows",
-    "mail", "invoices", "documents", "forms", "bookingforms", "packages",
+    "mail", "invoices", "documents", "forms", "bookingforms", "timingsforms", "packages",
     "communications", "settings"
   ]);
   const sectionSlugs = {

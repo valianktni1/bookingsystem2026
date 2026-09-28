@@ -149,6 +149,38 @@
     host.innerHTML=`<small>LIVE COVERAGE CHECK</small><div><span><b>${clock(result.start)}</b> suggested start</span><span><b>${clock(result.finish)}</b> expected finish</span><span><b>${minutesToText(result.coverage)}</b> coverage</span></div><strong>${status}</strong>${result.earlierBy?`<p>I can use the spare ${minutesToText(result.earlierBy)} in your package to arrive earlier for preparations without creating an overrun.</p>`:""}`;
   }
 
+  function applyTimingsTemplate(form, values) {
+    const template=data.final_timings?.template;if(!template)return;
+    document.querySelector('.timings-heading h2').textContent=template.heading;
+    document.querySelector('.timings-heading p').textContent=template.introduction;
+    document.querySelector('#timings-save').textContent=template.submit_label;
+    const revision=document.createElement('input');revision.type='hidden';revision.name='_template_revision';revision.value=template.revision;form.append(revision);
+    for(const q of template.fields||[]) {
+      let input=form.elements.namedItem(q.key),label;
+      if(q.kind==='builtin') {
+        if(!input)continue;label=input.closest('label');
+        for(const child of [...label.childNodes])if(child.nodeType===Node.TEXT_NODE)child.remove();
+        const title=document.createElement('span');title.dataset.timingLabel=q.label;title.textContent=q.label;label.prepend(title);
+        if(template.optional_keys.includes(q.key)){label.hidden=!q.enabled;input.disabled=!q.enabled;input.required=q.enabled&&q.required;}
+      } else {
+        if(!q.enabled)continue;
+        label=document.createElement('label');label.className=q.kind==='textarea'?'full':'';label.append(document.createTextNode(q.label+(q.required?' *':'')+' '));
+        input=document.createElement(['select','yesno'].includes(q.kind)?'select':q.kind==='textarea'?'textarea':'input');
+        input.name=q.key;input.required=q.required;
+        if(input.tagName==='INPUT'){input.type=q.kind==='text'?'text':q.kind;if(q.kind==='number')input.step='any';}
+        if(['INPUT','TEXTAREA'].includes(input.tagName))input.maxLength=5000;
+        if(input.tagName==='TEXTAREA')input.rows=4;
+        if(input.tagName==='SELECT'){
+          const blank=document.createElement('option');blank.value='';blank.textContent='Please choose';input.append(blank);
+          for(const option of (q.kind==='yesno'?['yes','no']:q.options)){const node=document.createElement('option');node.value=option;node.textContent=q.kind==='yesno'?(option==='yes'?'Yes':'No'):option;input.append(node);}
+        }
+        input.value=values[q.key]??'';label.append(input);
+        form.querySelector(`[data-timing-step="${q.step}"]>.form-grid`).append(label);
+      }
+      if(q.help){const help=document.createElement('small');help.className='timings-field-help';help.textContent=q.help;label.append(help);}
+    }
+  }
+
   function finalTimingsForm() {
     if (!data.final_timings?.available && !data.final_timings?.submitted) {
       $("#panel").innerHTML='<div class="final-details-locked"><i>🔒</i><strong>Your Final Wedding Timings Form is not open yet</strong><span>It opens 30 days before your wedding, unless I open it earlier for you.</span></div>';
@@ -167,6 +199,7 @@
       <div class="form-step-actions"><button id="timings-back" class="secondary-client" type="button">Back</button><button id="timings-next" class="primary" type="button">Continue</button><button id="timings-save" class="primary" type="submit">Send my final timings</button></div></form>`;
 
     const form=document.querySelector("#final-timings-form"),steps=[...form.querySelectorAll("[data-timing-step]")],bars=[...form.querySelectorAll(".timings-progress span")];
+    applyTimingsTemplate(form,x);
     form.elements.ceremony_venue.required=true;
     form.elements.ceremony_duration.min="10";form.elements.ceremony_duration.max="180";
     form.elements.travel_minutes.min="0";form.elements.travel_minutes.max="180";
@@ -195,6 +228,7 @@
       form.querySelector("[data-prep-fields]").classList.toggle("hidden",!prep);form.elements.prep_person.required=prep;form.elements.prep_venue.required=prep;
       form.querySelector("[data-requested-start]").classList.toggle("hidden",!earlier);form.elements.requested_start.required=earlier;
       form.querySelector("[data-later-event]").classList.toggle("hidden",!later);form.elements.later_event_name.required=later;form.elements.later_event_time.required=later;
+      form.querySelectorAll("[data-timing-label]").forEach(label=>{const field=label.parentElement.querySelector("input,textarea,select");label.textContent=label.dataset.timingLabel+(field?.required?" *":"");});
       updateTimingsPreview();
     };
     const show=()=>{steps.forEach((step,index)=>step.classList.toggle("active",index===timingsStep));bars.forEach((bar,index)=>bar.className=index<timingsStep?"done":index===timingsStep?"active":"");$("#timings-back").classList.toggle("hidden",timingsStep===0);$("#timings-next").classList.toggle("hidden",timingsStep===steps.length-1);$("#timings-save").classList.toggle("hidden",timingsStep!==steps.length-1);conditional()};
@@ -218,7 +252,7 @@
         await api(`/api/client/${token}/forms`,{method:"POST",body:JSON.stringify({form_type:"final_timings",data:formValues(form)})});
         clearTimingsDraft();data=await api(`/api/client/${token}`);timingsStep=0;renderTabs();render();toast("Your final wedding timings have been sent safely");
       }catch(error){
-        submitting=false;saveButton.disabled=false;saveButton.removeAttribute("aria-busy");saveButton.textContent="Send my final timings";
+        submitting=false;saveButton.disabled=false;saveButton.removeAttribute("aria-busy");saveButton.textContent=data.final_timings?.template?.submit_label||"Send my final timings";
         writeTimingsDraft(form);showFormError(`${error.message||"Your timings could not be sent."} Your answers are still saved on this device.`);
       }
     };

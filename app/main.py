@@ -51,6 +51,10 @@ from .migrations import apply_safe_migrations
 from .legacy_archive_import import register_legacy_archive_import_routes
 from .legacy_import import register_legacy_import_routes
 from .mail_routes import register_mail_routes
+from .timings_forms import (TimingsTemplateIn, current_template as current_timings_template,
+    effective_template as effective_timings_template, public_template as public_timings_template,
+    validate_template as validate_timings_template, revision as timings_revision,
+    default_template as default_timings_template, validate_extra_answers, answer_snapshot)
 from .models import (AddOnOption, Admin, AuditLog, Booking, BookingNote, Brand, BusinessProfile,
                      Client, ClientPortalToken, ContractAcceptance, ContractTemplate, Document,
                      DateBlock, EmailLog, EmailTemplate, FormSubmission, FormTemplate, Invoice, LoginAttempt,
@@ -145,7 +149,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.64", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.65", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -1156,6 +1160,35 @@ def save_wedding_booking_form(payload: BookingFormTemplateIn,
     result.update({"id": item.id, "display_name": item.display_name,
                    "is_active": item.is_active, "updated_at": item.updated_at.isoformat()})
     return result
+
+
+@app.get("/api/forms/final-timings")
+def admin_final_timings_form(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
+    return public_timings_template(current_timings_template(db))
+
+
+@app.put("/api/forms/final-timings")
+def save_final_timings_form(payload: TimingsTemplateIn, _: Admin = Depends(current_admin),
+                           db: Session = Depends(get_db)):
+    item = db.scalar(select(FormTemplate).where(FormTemplate.brand == Brand.WBM,
+        FormTemplate.template_key == "final_timings").with_for_update())
+    if payload.expected_revision != timings_revision(current_timings_template(db)):
+        raise HTTPException(409, "This template changed in another window. Reload before publishing.")
+    try:
+        config = validate_timings_template(payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if item is None:
+        item = FormTemplate(brand=Brand.WBM, template_key="final_timings",
+                            display_name="Final Wedding Timings", config=config, is_active=True)
+        db.add(item)
+        db.flush()
+    else:
+        item.config = config
+    audit(db, "publish_final_timings_form", "form_template", item.id,
+          {"question_count": len(config["fields"])})
+    db.commit()
+    return public_timings_template(config)
 
 
 @app.get("/api/testing-mode")
@@ -3043,6 +3076,7 @@ def portal_status_json(db: Session, booking: Booking) -> dict:
         "quote_reply_detection": (booking.workflow_state or {}).get("quote_reply_detection"),
         "final_details_unlocked": final_details_unlocked(db, booking),
         "final_timings": {
+            "template": public_timings_template(effective_timings_template(db, booking.id)),
             "available": final_timings_unlocked(db, booking),
             "submitted": bool(final_submission),
             "submitted_at": (final_submission.submitted_at.isoformat()
@@ -4070,11 +4104,22 @@ def submit_public_form(token: str, payload: PublicFormIn, db: Session = Depends(
     if payload.form_type == FINAL_TIMINGS_FORM_TYPE:
         if not final_timings_unlocked(db, booking):
             raise HTTPException(409, "Your Final Wedding Timings Form opens 30 days before your wedding")
+        config = effective_timings_template(db, booking.id)
+        supplied_revision = form_values.get("_template_revision")
+        if supplied_revision != timings_revision(config) and not (
+                supplied_revision is None and config == default_timings_template()):
+            raise HTTPException(409, "The timings questions have changed. Reopen the form before sending; your device draft is retained.")
         try:
+            extra_values = validate_extra_answers(config, form_values)
             form_values = validated_final_timings(db, booking, form_values)
+            form_values.update(extra_values)
+            form_values["_form_template"] = config
+            form_values["_answer_snapshot"] = answer_snapshot(config, form_values)
         except ValidationError as exc:
             message = exc.errors()[0].get("msg", "Please check the timings form")
             raise HTTPException(422, str(message).removeprefix("Value error, ")) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     if (payload.form_type == "booking_form" and booking.brand == Brand.WBM
             and booking.kind == RecordKind.WEDDING and not booking.legacy_source):
         template = wedding_booking_template(db)
@@ -5449,7 +5494,7 @@ def admin_workspace_page(view: str):
     allowed = {
         "dashboard", "enquiries", "weddings", "projects", "calendar",
         "workflows", "mail", "invoices", "documents", "forms",
-        "bookingforms", "packages", "communications", "settings",
+        "bookingforms", "timingsforms", "packages", "communications", "settings",
     }
     if view not in allowed:
         raise HTTPException(404, "Page not found")

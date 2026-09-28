@@ -1,3 +1,7 @@
+## V8.65: editable Final Timings form
+
+Settings & templates → Final Timings Form: edit wording and help, hide optional questions, add custom questions, preview and publish. Calculation fields keep their existing types and rules. Submitted forms keep their original question version. Includes V8.64 and the direct final-timings answer shortcut. See DEPLOY-V8.65-READ-ME.txt.
+
 ## V8.64: messages, dashboard and mobile tidy-up
 
 Completed follow-ups fold away; conversation comes first; Activity has filters; dashboard groups client items with explicit counts; mobile secondary shortcuts move to More actions. Includes V8.63. See DEPLOY-V8.64-READ-ME.txt.

@@ -1,0 +1,6 @@
+V8.65 validation — local synthetic data only
+PASS: tests/test_v820_final_timings.py (5 tests).
+PASS: tests/test_v865_timings_editor.py (editor lifecycle, authentication, validation, stale revisions, immutable old submissions, imported submission preservation, original calculation equivalence, PDF text).
+PASS: Chromium desktop/mobile admin editor publishing, adding and previewing questions; mobile client form submission; hidden optional field; saved custom answers visible via final-timings shortcut; no JavaScript errors or horizontal overflow.
+PDF answer page visually inspected; custom wording and answers fit in the existing table.
+No live database, booking, imported record or email was touched. Deployment remains for the user after GitHub push.

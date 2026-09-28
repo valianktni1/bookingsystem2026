@@ -25,7 +25,8 @@
 
   function showCompleteFinalTimings(r,submission){
     const values=submission.data||{},content=document.querySelector("#modal-content"),modal=document.querySelector("#modal");
-    const rows=Object.entries(finalTimingsLabels).map(([key,label])=>`<div><dt>${esc(label)}</dt><dd>${esc(answer(values,key)).replace(/\n/g,"<br>")}</dd></div>`).join("");
+    const labels=values._answer_snapshot?.length ? values._answer_snapshot.map(q=>[q.key,q.label]) : Object.entries(finalTimingsLabels);
+    const rows=labels.map(([key,label])=>`<div><dt>${esc(label)}</dt><dd>${esc(answer(values,key)).replace(/\n/g,"<br>")}</dd></div>`).join("");
     modal.classList.remove("pdf-preview-modal");
     content.innerHTML=`<div class="modal-head"><div><small>COMPLETE CLIENT SUBMISSION</small><h2>Final Wedding Timings</h2><p>${esc(r.title)} · submitted ${esc(fmtDateTime(submission.submitted_at))}</p></div><button type="button" id="close-modal">×</button></div><div class="v821-answer-modal"><dl>${rows}</dl><footer><span>This is the complete form submitted by the couple.</span><div class="v8331-answer-actions"><a class="primary" href="/api/bookings/${attr(r.id)}/final-timings.pdf" download>↓ Download PDF</a><button class="secondary" id="close-final-answers" type="button">Close</button></div></footer></div>`;
     modal.classList.remove("hidden");document.querySelector("#modal-overlay").classList.remove("hidden");
@@ -33,18 +34,18 @@
   }
 
   window.openFinalTimingsRecord=async function(r){
-    const portal=state.currentPortal||{},submission=(portal.submissions||[]).find(item=>item.form_type==="final_timings");
-    if(submission){showCompleteFinalTimings(r,submission);return}
-    await selectRecordTab(r,"Journey",true);
-    let attempts=0;
-    const reveal=()=>{
-      const panel=document.querySelector("#drawer .v820-final");
-      if(panel){window.WBMLayoutV855?.reveal(panel);panel.scrollIntoView({behavior:"smooth",block:"start"});return}
-      attempts+=1;
-      if(attempts<20)setTimeout(reveal,75);
-      else toast("Final Wedding Timings has not been submitted yet");
-    };
-    reveal();
+    try {
+      const portal=await api(`/api/bookings/${r.id}/portal`);
+      if(state.current?.id!==r.id)return;
+      state.currentPortal=portal;
+      const submission=(portal.submissions||[]).find(item=>item.form_type==="final_timings");
+      if(submission){showCompleteFinalTimings(r,submission);document.querySelector('#modal').scrollTop=0;return;}
+      const modal=document.querySelector('#modal'),content=document.querySelector('#modal-content');
+      modal.classList.remove('pdf-preview-modal','hidden');document.querySelector('#modal-overlay').classList.remove('hidden');
+      content.innerHTML=`<div class="modal-head"><div><h2>No saved final timings yet</h2><p>${esc(r.title)}</p></div><button type="button" id="close-modal" aria-label="Close">×</button></div><div class="v821-answer-modal"><p>The latest record for this booking does not contain a submitted Final Wedding Timings form. A sent or opened invitation does not confirm submission.</p><p>If the couple says they submitted it, check their confirmation or the link they used before asking them to fill it in again.</p><footer><button type="button" id="close-final-answers" class="secondary">Close</button></footer></div>`;
+      modal.scrollTop=0;document.querySelector('#close-modal').onclick=document.querySelector('#close-final-answers').onclick=closeModal;
+      document.querySelector('#close-modal').focus({preventScroll:true});
+    }catch(error){toast(`Could not check Final Wedding Timings: ${error.message}`,'error');}
   };
 
   function waitingPanel(r, portal) {
