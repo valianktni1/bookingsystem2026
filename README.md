@@ -1,3 +1,7 @@
+## V8.67: agreed discounts after quote acceptance
+
+Payments → Amend invoice now offers saved extras/discounts and custom discounts. Enter a positive discount amount; the server stores a negative invoice line and recalculates the balance. Original package lines, invoice number and recorded payments are preserved. Includes the complete V8.66 workspace and appearance update. See DEPLOY-V8.67-READ-ME.txt.
+
 ## V8.66: clearer booking workspace and light/dark appearance
 
 Native wedding bookings now show workflow, correspondence, details and direct document actions in an organised workspace. Phone layouts stack cleanly. Appearance offers System, Light and Dark across the admin screens and dialogs, remembered per browser. Existing quote preparation, review, sending and protected imported record controls are retained. See DEPLOY-V8.66-READ-ME.txt.

@@ -272,8 +272,49 @@ def test_imported_invoice_cannot_be_amended_and_frontend_has_protected_controls(
     assert "No email is sent" in js
     assert "Protected by the accepted invoice" in js
     assert "@media(max-width:700px)" in css
-    assert "/static/v834.js?v=protected-invoice-amendments-v8-34" in index
+    assert "/static/v834.js?v=invoice-discounts-v8-67" in index
     assert "/static/v834.css?v=protected-invoice-amendments-v8-34" in index
+
+
+def test_discount_deducts_preserves_payment_and_pdf_and_reopens_safely():
+    reset_database()
+    with TestClient(app) as client:
+        login(client)
+        bid, iid, number = create_accepted_invoice(paid=Decimal('200'), status='part_paid')
+        token = client.post(f'/api/bookings/{bid}/portal', json={'expires_days':90}).json()['url'].split('/client/')[1]
+        with SessionLocal() as db:
+            original = db.get(Invoice,iid).line_items[0].copy()
+            before_emails = len(db.scalars(select(EmailLog)).all())
+        items = [{'kind':'discount','name':'Agreed £100 discount','unit_price':100,'quantity':1}]
+        response=client.put(f'/api/invoices/{iid}/amendment',json=amendment_payload(899,200,items))
+        assert response.status_code==200,response.text
+        data=response.json()
+        assert data['number']==number and data['total']==799 and data['paid']==200 and data['balance']==599
+        assert data['line_items'][0]==original
+        assert data['line_items'][-1]['type']=='discount' and data['line_items'][-1]['total']==-100
+        with SessionLocal() as db:
+            assert len(db.scalars(select(EmailLog)).all())==before_emails
+            assert db.get(Booking,bid).quoted_total==Decimal('799')
+            assert sum(Decimal(str(x['amount'])) for x in db.get(Invoice,iid).payment_schedule)==Decimal('799')
+        public=client.get(f'/api/client/{token}').json()
+        assert public['quote']['total']==799
+        pdf=client.get(f'/api/invoices/{iid}/pdf')
+        text=''.join(p.get_text() for p in fitz.open(stream=pdf.content,filetype='pdf'))
+        assert 'Agreed' in text and '100.00' in text and '799.00' in text and '599.00' in text
+        # A second save replaces the adjustment, rather than applying it again.
+        again=client.put(f'/api/invoices/{iid}/amendment',json=amendment_payload(799,200,items))
+        assert again.status_code==200 and again.json()['total']==799
+        excessive=[{**items[0],'unit_price':700}]
+        assert client.put(f'/api/invoices/{iid}/amendment',json=amendment_payload(799,200,excessive)).status_code==422
+        assert client.put(f'/api/invoices/{iid}/amendment',json=amendment_payload(899,200,items)).status_code==409
+        invalid=[{**items[0],'unit_price':-100}]
+        assert client.put(f'/api/invoices/{iid}/amendment',json=amendment_payload(799,200,invalid)).status_code==422
+        charge=[{'name':'Travel','unit_price':50,'quantity':1}]
+        mixed=client.put(f'/api/invoices/{iid}/amendment',json=amendment_payload(799,200,items+charge))
+        assert mixed.status_code==200 and mixed.json()['total']==849
+        # Fixture for the mobile editor test (no real email/SMTP configured).
+        import json
+        Path('/tmp/wbm-v867-fixture.json').write_text(json.dumps({'booking':bid,'invoice':iid}))
 
 
 def teardown_module():

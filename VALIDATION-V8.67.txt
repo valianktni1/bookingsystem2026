@@ -1,0 +1,13 @@
+V8.67 local validation
+
+7 accepted-invoice amendment tests passed (test_v834_invoice_amendments.py), including the new positive-input discount case:
+£899 total / £200 paid -> £100 discount -> £799 total / £599 balance.
+Checks cover same invoice number, original package preservation, quote/client total, payment schedule, PDF text, no new email, repeat save without duplicate deduction, invalid negative input, stale version rejection, reduction below paid blocked, mixed discounts/charges, paid-in-full locks, imported protection, existing complimentary coverage and agreed due date behaviour.
+
+11 invoice layout regression tests passed (test_v859_invoice_layout.py).
+
+Mobile Chromium browser check passed: select a saved discount, positive 100 amount, reduced live total and balance, save and reopen with discount type/positive input retained. Light/dark screenshots inspected; no page-width overflow or JavaScript errors. Nested item headings were made non-sticky so they cannot cover the dialog heading. Existing catalogue items are read only; invoice amendment snapshots the selected wording and amount.
+
+No live records, real emails, accounting application or deployment were accessed. Invoice PDF generation code remains unchanged; accounting compatibility is checked through retained invoice structure/text, not a live accounting import.
+
+Includes the complete V8.66 release and its prior verification. New files/changes are confined to the amendment schema/handler, amendment UI/styles, tests, version metadata and release documentation.

@@ -1,2 +1,2 @@
-BookingSystem2026 V8.66 - Responsive booking workspace and light/dark appearance
-Build: 2026.09.29-responsive-workspace-v8.66
+BookingSystem2026 V8.67 - Accepted invoice discounts and saved item picker
+Build: 2026.09.29-invoice-discounts-v8.67

@@ -149,7 +149,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.66", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.67", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -2508,9 +2508,11 @@ def amend_accepted_invoice(invoice_id: str, payload: InvoiceAmendmentIn,
             raise HTTPException(422, "Give every added invoice item a name")
         quantity = int(item.quantity)
         unit_price = Decimal(item.unit_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if item.kind == "discount":
+            unit_price = -unit_price
         line_total = (unit_price * quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         additional_items.append({
-            "type": "addon",
+            "type": item.kind,
             "code": f"manual_amendment_{index}",
             "name": name,
             "description": item.description.strip() if item.description else "",

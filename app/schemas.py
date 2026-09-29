@@ -133,6 +133,7 @@ class InvoiceDueDatePatch(BaseModel):
 
 
 class InvoiceAmendmentItemIn(BaseModel):
+    kind: Literal["addon", "discount"] = "addon"
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     quantity: int = Field(default=1, ge=1, le=24)

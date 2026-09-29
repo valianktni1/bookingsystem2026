@@ -1,0 +1,25 @@
+V8.67 — Accepted invoice discounts + V8.66 layout
+
+Use this complete release instead of V8.66. You do not need to deploy V8.66 first.
+
+1. Unzip and copy the contents into your existing GitHub Desktop repository, preserving .git and .env. Commit and push main.
+2. Run on TrueNAS:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.67.sh -o /tmp/wbm-deploy-v867.sh && sudo bash /tmp/wbm-deploy-v867.sh
+
+3. Refresh with Ctrl+F5 on desktop; close/reopen and refresh on your phone if needed.
+
+HOW TO APPLY THE £100 DISCOUNT
+Open the couple → Payments → Amend invoice.
+Choose your discount under Saved extra or discount, then Add selected item.
+Alternatively choose Custom discount. Check Item type says Discount (−).
+Enter 100 as the positive amount. The line total is negative and the invoice total/balance reduce immediately in the preview.
+Enter your reason and Save amended invoice.
+
+The picker uses your existing saved discount/extra catalogue. You can adjust the amount/wording for this invoice without changing that saved item. Entire quote templates do not replace an already accepted package. Both charges and discounts can be amended together.
+
+Saving updates the same invoice, the linked quote/client view, payment schedule and PDF. No email is sent automatically. Existing downloaded/exported PDFs do not update themselves; use the revised PDF if uploading to your accounting app, and amend/replace the corresponding accounting invoice rather than importing a duplicate.
+
+Original accepted package lines and recorded payments remain protected. Discounts cannot reduce the total below money already paid. Paid-in-full, closed and Studio Ninja imported invoices retain their existing locks. A stale editor is rejected if the invoice/payment changes. No database migration is needed.
+
+All V8.66 layout, mobile and System/Light/Dark appearance improvements are included. The deploy script backs up and verifies the database dump, preserves the current image, restarts only the app and prints rollback instructions. Live .env and Compose are preserved. The assistant has not deployed this or accessed live couple data.

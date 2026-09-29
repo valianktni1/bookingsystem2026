@@ -1,0 +1,5 @@
+.v867-picker{display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:16px 0;padding:16px;background:var(--wbm-surface);border:1px solid var(--wbm-border);border-radius:10px;color:var(--wbm-text)}
+.v867-picker label{flex:1 1 280px}.v867-picker p{flex:1 1 100%;margin:0;font-size:14px;line-height:1.5}.v867-picker select{width:100%;min-height:46px;font-size:16px}.v834-amendment-fields{grid-template-columns:minmax(150px,1fr) minmax(180px,2fr) minmax(80px,.5fr) minmax(110px,.7fr)}
+@media(max-width:700px){.v834-amendment-fields{grid-template-columns:1fr 1fr}.v834-amendment-fields>label:first-child,.v834-amendment-fields>label:nth-child(2),.v834-line-description{grid-column:1/-1}.v867-picker button{min-height:46px;flex:1 1 100%}}
+/* Only the dialog heading sticks; item-section headings must not cover it while scrolling. */
+.modal .v834-protected-lines>header,.modal .v834-additions>header{position:static;z-index:auto}
