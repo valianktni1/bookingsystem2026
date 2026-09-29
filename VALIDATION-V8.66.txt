@@ -1,0 +1,21 @@
+V8.66 — local validation with synthetic data
+
+19 Python tests passed across:
+- test_v857_quote_templates.py: 2 (template selection, package restrictions, bank snapshots, client acceptance and imported protection)
+- test_v858_quote_review.py: 1 (owner preview matches real quote without writes)
+- test_v865_timings_editor.py: 1 (editor, validation, saved questions/answers, calculations, PDF)
+- test_v861_paperwork.py: 1 (original enquiry preservation and read-only views)
+- test_v859_invoice_layout.py: 11 (invoice layout/text compatibility)
+- test_v825_quote_email_review.py: 3 (quote save/send flow, unchanged master template, imported email safeguards; stale cache-string assertion made independent of release number)
+
+Chromium browser regression passed:
+- Mobile native booking overview and all six booking sections.
+- Original enquiry and saved final timings direct views.
+- Select saved quote template; bank and email wording retained.
+- Save preparation; review summary; final send handler exercised with delivery intercepted.
+- Theme changes, remembered theme, System following device changes, reload and back navigation.
+- Desktop and phone layouts; no JavaScript errors or page-width overflow in tested flow.
+
+Appearance checked on 13 admin screens in Light and Dark. Screenshots inspected for mobile overview, mobile quote preparation/review, desktop overview and dashboard. A sticky desktop header overlap found during review was corrected.
+
+Backend business logic, client portal files, invoice generation and send handlers are byte-identical to V8.65, apart from application version/build metadata. No live couple data or real email delivery was used. This is local verification, not a guarantee about every possible production record.

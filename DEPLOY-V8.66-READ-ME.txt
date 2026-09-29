@@ -1,0 +1,22 @@
+V8.66 — Booking workspace and appearance
+
+INSTALL
+1. Unzip the complete repository and copy its contents into your existing GitHub Desktop checkout. Keep your .git folder and .env. Commit and push main.
+2. Run this single command in the TrueNAS shell:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.66.sh -o /tmp/wbm-deploy-v866.sh && sudo bash /tmp/wbm-deploy-v866.sh
+
+3. Wait for the V8.66 success message, then Ctrl+F5 on desktop. On your phone, close and reopen the app and refresh if the old layout is cached.
+4. Choose Appearance: System, Light or Dark. The choice is saved on that browser/device, so choose it separately on your phone if needed.
+
+WHAT CHANGED
+Native wedding bookings have an organised two-column overview on desktop, stacked on mobile: wedding workflow and correspondence, wedding/couple details, direct original enquiry/quote/form/agreement/final-timings actions, payment summary and existing bank details. Payment, Files, Messages and Notes & activity sections remain available. The original controls, confirmation steps, forms and validation remain in use.
+
+The quote flow deliberately retains the working save-and-review process: choose template/packages/extras/bank, save the quote, review the email and summary, then explicitly send. This release does not replace the production quote editor with the simulated three-screen preview. Larger controls and readable fields improve mobile use without changing how quotes are stored or sent.
+
+Appearance applies to admin pages and dialogs. It does not restyle outgoing emails, PDF invoices or the couple-facing portal. Native booking layout changes exclude protected imported records; imported controls and communication safeguards remain intact. Existing client links, enquiries, automation, accounts integration, packages and invoices use unchanged backend logic. No database migration is required.
+
+DEPLOYMENT SAFETY
+The script backs up and verifies the database dump, preserves the running app image and prints a rollback command. It builds from GitHub while the app runs, then restarts only the app. The live .env and Compose configuration are retained. No live access or deployment has been performed by the assistant.
+
+Includes V8.65 and all earlier releases. If the build fails, do not remove the existing database or volumes; share the error output. The printed rollback restores the previous app image, not the database.

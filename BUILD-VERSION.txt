@@ -1,2 +1,2 @@
-BookingSystem2026 V8.65 - Editable Final Timings Form
-Build: 2026.09.28-timings-editor-v8.65
+BookingSystem2026 V8.66 - Responsive booking workspace and light/dark appearance
+Build: 2026.09.29-responsive-workspace-v8.66

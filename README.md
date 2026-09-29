@@ -1,3 +1,7 @@
+## V8.66: clearer booking workspace and light/dark appearance
+
+Native wedding bookings now show workflow, correspondence, details and direct document actions in an organised workspace. Phone layouts stack cleanly. Appearance offers System, Light and Dark across the admin screens and dialogs, remembered per browser. Existing quote preparation, review, sending and protected imported record controls are retained. See DEPLOY-V8.66-READ-ME.txt.
+
 ## V8.65: editable Final Timings form
 
 Settings & templates → Final Timings Form: edit wording and help, hide optional questions, add custom questions, preview and publish. Calculation fields keep their existing types and rules. Submitted forms keep their original question version. Includes V8.64 and the direct final-timings answer shortcut. See DEPLOY-V8.65-READ-ME.txt.
