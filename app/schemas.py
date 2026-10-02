@@ -2,7 +2,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from .email_attachments import EmailAttachmentIn, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_COUNT
 
 from .models import Brand, RecordKind, RecordStatus
 
@@ -233,6 +234,16 @@ class ClientEmailComposeIn(BaseModel):
     body: str = Field(min_length=1, max_length=20000)
     manual_confirmation: str | None = Field(default=None, max_length=100)
     manual_reason: str | None = Field(default=None, max_length=1000)
+
+
+class ClientEmailWithAttachmentsIn(ClientEmailComposeIn):
+    attachments: list[EmailAttachmentIn] = Field(default_factory=list, max_length=MAX_ATTACHMENT_COUNT)
+
+    @model_validator(mode="after")
+    def attachment_total(self):
+        if sum(len(item.decoded()) for item in self.attachments) > MAX_ATTACHMENT_BYTES:
+            raise ValueError("Attachments must total no more than 10 MB")
+        return self
 
 
 class TemplateTestIn(BaseModel):

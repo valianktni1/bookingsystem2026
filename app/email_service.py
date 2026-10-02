@@ -390,7 +390,8 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
                         extra_values: dict[str, str] | None = None,
                         recipient: str | None = None,
                         reply_to: str | None = None,
-                        open_tracking_url: str | None = None) -> tuple[str, str]:
+                        open_tracking_url: str | None = None,
+                        attachments: list[dict] | None = None) -> tuple[str, str]:
     username, _ = smtp_credentials(booking.brand)
     if not smtp_ready(booking.brand):
         raise RuntimeError(
@@ -403,6 +404,10 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
     message = build_email_message(booking, profile, subject, body, username,
                                   recipient=recipient, reply_to=reply_to,
                                   open_tracking_url=open_tracking_url)
+    for attachment in attachments or []:
+        maintype, subtype = attachment["content_type"].split("/", 1)
+        message.add_attachment(attachment["data"], maintype=maintype, subtype=subtype,
+                               filename=attachment["filename"])
     try:
         send_email_message(message, booking.brand)
     except Exception as exc:

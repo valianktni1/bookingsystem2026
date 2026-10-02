@@ -1,2 +1,2 @@
-BookingSystem2026 V8.67 - Accepted invoice discounts and saved item picker
-Build: 2026.09.29-invoice-discounts-v8.67
+BookingSystem2026 V8.68 - Manual client email attachments
+Build: 2026.10.02-email-attachments-v8.68

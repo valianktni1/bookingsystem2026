@@ -1,0 +1,24 @@
+V8.68 validation - 2 October 2026
+
+15 distinct Python tests passed across:
+- test_v868_email_attachments.py (9)
+- test_v8105_client_email_centre.py (2)
+- test_v840_invoice_email.py (2, run separately for its own database configuration)
+- test_v8571_email_logo.py (2)
+
+Coverage: supported types, DOCX structure, invalid encoding/type/filename,
+attachment count/combined size, exact MIME payload/filenames/content types,
+HTML and account link retained, imported confirmation, test recipient routing,
+SMTP failure and blocking attachment-free retries from the generic queue.
+Existing client composer, invoice send and logo regression tests passed.
+Combining invoice tests with the other modules initially caused a test-only
+SQLite invoice-number collision due to module-level database configuration;
+both invoice tests passed in their intended standalone process.
+
+Browser: disposable local app, 390px mobile and 1280px desktop, light/dark,
+add/remove files, unsupported type message, no modal horizontal overflow,
+failed-send draft/file retention and subsequent successful UI send payload.
+Delivery endpoint intercepted; no real email sent. Screenshots inspected.
+JavaScript syntax and deployment shell syntax checked.
+
+No live deployment, actual mailbox delivery or real-device phone test performed.

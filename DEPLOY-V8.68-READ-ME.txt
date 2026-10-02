@@ -1,0 +1,35 @@
+BookingSystem2026 V8.68 - Attachments in deliberate client emails
+
+WHERE TO FIND IT
+Open a couple > Email client (or Emails > Write email).
+Choose a template or write a manual email. Below Message is Attachments.
+Choose PDF, JPG/JPEG, PNG, GIF, WebP, DOC or DOCX files.
+Up to 5 files / 10 MB total. Choose more files to add to the list; Remove
+removes an individual file. Review subject, message and files, then Send email.
+Works in mobile and desktop light/dark modes.
+
+Files belong only to that one email, not to the saved template. Attachment
+names and sizes are recorded in the successful send's activity audit. Copies
+are not stored as downloadable booking documents by this feature.
+If sending fails, keep the composer open: the draft and selected files remain
+available for a deliberate retry. If you close it, select the files again.
+The generic failed-email queue cannot retry an attachment email without files.
+Automatic emails, invoice PDF generation and Studio Ninja automatic-email
+protection remain unchanged. Imported couples still require deliberate manual
+confirmation. No database schema change is required.
+
+INSTALL
+1. Unzip the FULL-REPO ZIP.
+2. Copy the CONTENTS of bookingsystem2026-main into your EXISTING GitHub
+   Desktop repository. Preserve your .git folder and your .env.
+3. Commit and Push origin to valianktni1/bookingsystem2026 main.
+4. On TrueNAS, paste this ONE command after the push completes:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.68.sh -o /tmp/wbm-deploy-v868.sh && sudo bash /tmp/wbm-deploy-v868.sh
+
+The script uses the existing /mnt/apps/dockge/data/bookingsystem2026 stack,
+backs up the database and running image, builds from GitHub and replaces only
+the app container. It prints the exact rollback command. It does not use git
+pull or replace live configuration. Refresh your browser after success.
+
+This full release includes the previous V8.67 invoice-discount and theme work.

@@ -72,7 +72,7 @@ from .schemas import (AddOnOptionIn, AddOnOptionPatch, BookingIn, BookingPatch, 
                       BookingFormTemplateIn, EnquiryFormTemplateIn,
                       InvoiceAmendmentIn, InvoiceDueDatePatch, InvoiceIn,
                       LoginIn, NoteIn, PackageOptionIn, PackageOptionPatch, PaymentIn, PortalCreateIn,
-                      ClientEmailComposeIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn, QuoteSendIn,
+                      ClientEmailComposeIn, ClientEmailWithAttachmentsIn, PublicFormIn, QuoteAcceptIn, QuotePreparationIn, QuoteSendIn,
                       FinalCallPackIn, SendEmailIn, TaskIn, TaskPatch,
                       TemplateTestIn, TestingModeIn, WorkflowStudioIn,
                       CustomWorkflowIn, CustomWorkflowActivationIn)
@@ -149,7 +149,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.67", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.68", lifespan=lifespan, docs_url=None, redoc_url=None)
 
 
 @app.middleware("http")
@@ -3663,7 +3663,7 @@ def client_email_centre(booking_id: str, _: Admin = Depends(current_admin),
 
 
 @app.post("/api/bookings/{booking_id}/email-centre/send")
-def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
+def send_client_composed_email(booking_id: str, payload: ClientEmailWithAttachmentsIn,
                                _: Admin = Depends(current_admin),
                                db: Session = Depends(get_db)):
     """Send one deliberate template-based or free-written client email."""
@@ -3712,7 +3712,8 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
     try:
         portal_url = issue_client_email_url(db, booking, template_key)
         subject, email_body, tracking_hash = send_tracked_booking_template_email(
-            db, booking, profile, composed, portal_url
+            db, booking, profile, composed, portal_url,
+            **({"attachments": [item.transport() for item in payload.attachments]} if payload.attachments else {})
         )
         db.add(EmailLog(
             booking_id=booking.id,
@@ -3728,6 +3729,7 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
                   "mode": payload.mode,
                   "template": template_key,
                   "subject": subject,
+                  "attachments": [{"filename": item.filename, "size": len(item.decoded())} for item in payload.attachments],
                   "account_link_included": True,
                   "manual_only": manual_only,
                   "reason": payload.manual_reason.strip() if manual_only else None,
@@ -3766,9 +3768,9 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailComposeIn,
             template_key=template_key,
             recipient=recipient,
             subject=getattr(exc, "rendered_subject", payload.subject.strip()),
-            body=getattr(exc, "rendered_body", None),
+            body=None if payload.attachments else getattr(exc, "rendered_body", None),
             status="failed",
-            error=str(exc)[:2000],
+            error=(("Attachments require the Email Centre: retry the open draft or reselect the files. " if payload.attachments else "") + str(exc))[:2000],
             last_attempt_at=datetime.now(timezone.utc),
         ))
         db.commit()
@@ -5372,6 +5374,7 @@ def retry_failed_communication(
     if not email.body:
         raise HTTPException(
             409,
+            email.error if (email.error or "").startswith("Attachments require the Email Centre:") else
             "The exact wording was not retained by the older version. Open the client Email Centre instead.",
         )
     booking = db.scalar(select(Booking).options(selectinload(Booking.client)).where(

@@ -94,18 +94,26 @@
         return;
       }
       const templates = centre.templates || [];
+      let attachedFiles = [];
       const recommended = centre.recommended_template_key || templates[0]?.template_key || "";
       const importedSafety = centre.manual_only ? `<div class="client-email-safety full"><strong>Imported Studio Ninja client · deliberate manual email only</strong><span>Automatic messages remain paused. This sends only the email you confirm below.</span></div><label class="full">Reason for this one-off email<input id="client-email-reason" value="One-off email deliberately sent by Mark" required></label><label class="full">Type SEND ONE MANUAL EMAIL<input id="client-email-confirm" autocomplete="off" required></label>` : "";
-      showModal("Email client", `<div class="client-email-recipient full"><small>TO</small><strong>${esc(centre.recipient)}</strong>${centre.is_test ? `<span>Testing Mode redirected this away from ${esc(centre.original_recipient)}</span>` : ""}</div><label class="full">How would you like to write it?<select id="client-email-mode"><option value="template" ${templates.length ? "" : "disabled"}>Use one of my templates</option><option value="manual" ${templates.length ? "" : "selected"}>Write a manual email</option></select></label><label id="client-email-template-row" class="full">Email template<select id="client-email-template">${templates.map(item => `<option value="${attr(item.template_key)}" ${item.template_key === recommended ? "selected" : ""}>${esc(item.display_name)}${item.template_key === recommended ? " · Recommended" : ""}</option>`).join("")}</select></label><div class="client-email-link-note full"><i>↗</i><span><strong>Their secure account link is included automatically</strong><small>It opens the right booking and lets them see their forms, agreement, invoices and balance.</small></span></div><label class="full">Subject<input id="client-email-subject" maxlength="240" required></label><label class="full">Message<textarea id="client-email-body" rows="15" maxlength="20000" required></textarea><small class="field-help">You can edit this one email without changing the saved template. Placeholders such as {client_first_name} are filled automatically.</small></label>${importedSafety}`, async () => {
+      showModal("Email client", `<div class="client-email-recipient full"><small>TO</small><strong>${esc(centre.recipient)}</strong>${centre.is_test ? `<span>Testing Mode redirected this away from ${esc(centre.original_recipient)}</span>` : ""}</div><label class="full">How would you like to write it?<select id="client-email-mode"><option value="template" ${templates.length ? "" : "disabled"}>Use one of my templates</option><option value="manual" ${templates.length ? "" : "selected"}>Write a manual email</option></select></label><label id="client-email-template-row" class="full">Email template<select id="client-email-template">${templates.map(item => `<option value="${attr(item.template_key)}" ${item.template_key === recommended ? "selected" : ""}>${esc(item.display_name)}${item.template_key === recommended ? " · Recommended" : ""}</option>`).join("")}</select></label><div class="client-email-link-note full"><i>↗</i><span><strong>Their secure account link is included automatically</strong><small>It opens the right booking and lets them see their forms, agreement, invoices and balance.</small></span></div><label class="full">Subject<input id="client-email-subject" maxlength="240" required></label><label class="full">Message<textarea id="client-email-body" rows="15" maxlength="20000" required></textarea><small class="field-help">You can edit this one email without changing the saved template. Placeholders such as {client_first_name} are filled automatically.</small></label><section class="full v868-attachments"><label for="client-email-files">Attachments (optional)</label><input id="client-email-files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx"><small>PDF, photos or Word documents · up to 5 files, 10 MB total. Files are attached to this email only.</small><ul id="client-email-file-list" aria-live="polite"></ul><p id="client-email-file-error" role="alert"></p></section>${importedSafety}`, async () => {
         const sendButton = $("#dynamic-form button[type='submit']");
         sendButton.disabled = true;
         sendButton.textContent = "Sending…";
         try {
+          const attachments = await Promise.all(attachedFiles.map(file => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({filename: file.name, content_base64: String(reader.result).split(",")[1]});
+            reader.onerror = () => reject(new Error(`Could not read ${file.name}. Please choose it again.`));
+            reader.readAsDataURL(file);
+          })));
           const mode = value("#client-email-mode");
           const result = await api(`/api/bookings/${r.id}/email-centre/send`, {
             method: "POST",
             body: JSON.stringify({
               mode,
+              attachments,
               template_key: mode === "template" ? value("#client-email-template") : null,
               subject: value("#client-email-subject").trim(),
               body: value("#client-email-body").trim(),
@@ -122,6 +130,30 @@
           throw error;
         }
       }, `Send a template or write a one-off message to ${centre.client_name}. Nothing is sent until you press Send email.`);
+      const fileInput = $("#client-email-files");
+      const fileList = $("#client-email-file-list");
+      const fileError = $("#client-email-file-error");
+      const renderFiles = () => {
+        fileList.innerHTML = attachedFiles.map((file, index) => `<li><span>${esc(file.name)} <small>${file.size < 1024 * 1024 ? `${Math.max(1, Math.ceil(file.size / 1024))} KB` : `${(file.size / 1024 / 1024).toFixed(1)} MB`}</small></span><button type="button" class="secondary" data-remove-file="${index}" aria-label="Remove ${attr(file.name)}">Remove</button></li>`).join("");
+        $$('[data-remove-file]', fileList).forEach(button => button.onclick = () => {
+          attachedFiles.splice(Number(button.dataset.removeFile), 1);
+          fileError.textContent = "";
+          renderFiles();
+        });
+      };
+      fileInput.onchange = () => {
+        const added = Array.from(fileInput.files || []);
+        const next = [...attachedFiles, ...added];
+        fileError.textContent = "";
+        if (added.some(file => !/\.(pdf|jpe?g|png|gif|webp|docx?)$/i.test(file.name)))
+          fileError.textContent = "Choose a PDF, JPG, PNG, GIF, WebP or Word document.";
+        else if (added.some(file => file.size === 0 || file.name.length > 180))
+          fileError.textContent = "Files must not be empty and filenames must be under 181 characters.";
+        else if (next.length > 5 || next.reduce((total, file) => total + file.size, 0) > 10 * 1024 * 1024)
+          fileError.textContent = "Choose up to 5 attachments totalling no more than 10 MB.";
+        else { attachedFiles = next; renderFiles(); }
+        fileInput.value = "";
+      };
       const mode = $("#client-email-mode");
       const templateSelect = $("#client-email-template");
       const templateRow = $("#client-email-template-row");
