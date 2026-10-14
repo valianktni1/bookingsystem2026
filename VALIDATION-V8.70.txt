@@ -1,0 +1,13 @@
+9 October 2026
+14 tests passed: light email render (1), logo (2), attachments (9), existing
+client email composer/protected imports (2). SMTP transport mocked; no real
+emails sent. WBM HTML/light theme, footer colours, plain-text alternative,
+secure links, tracking, logo CID and existing Ivory footer checked.
+390px browser preview in light and dark preference: no horizontal overflow.
+Light-mode screenshot visually inspected. Actual recipient mail apps may
+apply different dark-mode transformations; no claim of universal white inbox.
+Python compile and deployment shell syntax passed.
+All V8.69 enquiry CSS/JS/HTML, embed script, copied embed and attachment files
+compared byte-for-byte against the V8.69 full ZIP and preserved.
+Only email presentation and release markers changed; deployment script and
+release documentation/tests/preview added. No production deployment performed.

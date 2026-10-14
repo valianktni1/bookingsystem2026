@@ -294,6 +294,29 @@ def _plain_body(body: str) -> str:
 def _email_html(body: str, booking: Booking, profile: BusinessProfile,
                 open_tracking_url: str | None = None) -> str:
     assets = BRAND_ASSETS[booking.brand]
+    light_email = booking.brand == Brand.WBM
+    outer = "#f8f5ef" if light_email else "#f3f1ed"
+    footer_bg = "#f8f5ef" if light_email else "#242321"
+    footer_ink = "#45433e" if light_email else "#ffffff"
+    light_head = """
+  <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <style>
+      :root { color-scheme:light; supported-color-schemes:light; }
+      @media (prefers-color-scheme:dark) {
+        .wbm-email-outer,.wbm-email-soft { background-color:#f8f5ef!important; }
+        .wbm-email-card,.wbm-email-message,.wbm-email-awards { background-color:#ffffff!important; color:#2d2b28!important; }
+        .wbm-email-signature { color:#45433e!important; }
+        .wbm-email-message a { color:#76591f!important; }
+        .wbm-email-message a[style*="inline-block"] { background-color:#76591f!important; color:#ffffff!important; }
+      }
+      @media (max-width:480px) {
+        .wbm-email-message { padding:26px 20px!important; }
+      }
+    </style>
+  </head>""" if light_email else ""
     signature = email_signature_config(profile)
     logo_asset = email_signature_asset(profile, "logo")
     awards_asset = email_signature_asset(profile, "awards")
@@ -308,7 +331,7 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
     if awards_asset:
         awards = f"""
           <tr>
-            <td style="padding:22px 28px 26px;border-top:1px solid #ece6da;text-align:center;background:#ffffff">
+            <td class="wbm-email-awards" bgcolor="#ffffff" style="padding:22px 28px 26px;border-top:1px solid #ece6da;text-align:center;background:#ffffff">
               <div style="font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.4px;color:#7c6a49;font-weight:bold;margin-bottom:12px">
                 PROUDLY AWARD-WINNING
               </div>
@@ -326,24 +349,25 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
         )
     return f"""<!doctype html>
 <html>
-  <body style="margin:0;padding:0;background:#f3f1ed;color:#262626">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f3f1ed">
+  {light_head}
+  <body class="wbm-email-outer" bgcolor="{outer}" style="margin:0;padding:0;background:{outer};color:#262626">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="wbm-email-outer" bgcolor="{outer}" style="background:{outer}">
       <tr>
-        <td align="center" style="padding:24px 10px">
+        <td class="wbm-email-soft" bgcolor="{assets['soft']}" align="center" style="padding:24px 10px">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                 style="width:100%;max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e2d8">
+                 class="wbm-email-card" bgcolor="#ffffff" style="width:100%;max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e2d8">
             <tr>
-              <td align="center" style="padding:24px 28px;background:{assets['soft']};border-bottom:3px solid {assets['accent']}">
+              <td class="wbm-email-soft" bgcolor="{assets['soft']}" align="center" style="padding:24px 28px;background:{assets['soft']};border-bottom:3px solid {assets['accent']}">
                 {logo}
               </td>
             </tr>
             <tr>
-              <td style="padding:32px 32px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#2d2b28">
+              <td class="wbm-email-message" bgcolor="#ffffff" style="background:#ffffff;padding:32px 32px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#2d2b28">
                 {_body_html(body)}
               </td>
             </tr>
             <tr>
-              <td style="padding:18px 28px;background:#242321;color:#ffffff;text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px">
+              <td class="wbm-email-soft wbm-email-signature" bgcolor="{footer_bg}" style="padding:18px 28px;background:{footer_bg};color:{footer_ink};text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px">
                 {signature_html}
               </td>
             </tr>

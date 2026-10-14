@@ -1,0 +1,28 @@
+Weddings By Mark BookingSystem2026 V8.69 - Mobile enquiry form
+
+1. Unzip and copy the CONTENTS of bookingsystem2026-main into your existing
+GitHub Desktop repository, preserving .git and .env. Commit and Push origin.
+2. Paste this into TrueNAS after the push completes:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.69.sh -o /tmp/wbm-deploy-v869.sh && sudo bash /tmp/wbm-deploy-v869.sh
+
+The script backs up the database and preserves the running image for rollback,
+then builds from GitHub and replaces only the app container. It prints your
+rollback command. No git pull is used; your Dockge folder is not a checkout.
+
+3. In WordPress, edit the Contact page with Elementor. In the HTML widget
+containing the WBM enquiry form, replace the OLD iframe AND script with the
+complete contents of WEBSITE-EMBED-V8.69.html. Update the page.
+4. Purge the Contact page's LiteSpeed cache and reload on your phone.
+
+The existing unversioned embed script will pick up the repair once caches
+expire, but replacing the embed ensures the corrected script is requested now.
+The script also reduces the current Contact page's enquiry-wrapper padding on
+mobile. Other page sections remain unchanged. No WordPress change was made
+remotely as part of preparing this release.
+
+Changes: fields stay within narrow screens, larger readable mobile inputs,
+reduced nested margins, reliable iframe height despite WordPress lazy loading,
+height shrinks as well as grows, confirmation displayed within normal layout.
+No enquiry fields, required answers, server submission logic, email automation,
+invoices, saved bookings or Studio Ninja protections changed. Includes V8.68.

@@ -1,0 +1,31 @@
+BookingSystem2026 V8.70 - Lighter WBM emails (FULL CUMULATIVE REPO)
+
+This replaces the V8.69 ZIP you have not deployed. Deploy V8.70 only.
+Includes V8.68 email attachments and ALL V8.69 mobile enquiry/embed fixes.
+
+EMAIL DESIGN
+White message area, cream surrounding background and signature panel,
+charcoal text, warm gold buttons. Existing layout, wording, links, images,
+tracking and attachments retained. Mobile body padding is slightly reduced.
+Light-mode hints are included for supporting email readers. Some readers
+still force their own dark-mode colours; this cannot be universally prevented.
+Open EMAIL-PREVIEW-V8.70.html for an example rendered by the actual email code.
+The example wording does not replace any saved templates.
+New styling affects future WBM emails, not emails already delivered.
+No saved bookings, invoices, Studio Ninja protection or database schema changed.
+
+INSTALL WHEN HOME
+1. Unzip; copy the CONTENTS of bookingsystem2026-main into your existing
+GitHub Desktop checkout. Preserve .git and .env. Commit and Push origin.
+2. After the push, paste into TrueNAS:
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.70.sh -o /tmp/wbm-deploy-v870.sh && sudo bash /tmp/wbm-deploy-v870.sh
+
+The script backs up the database and keeps the running image for rollback,
+then rebuilds/replaces only the app container. It prints the rollback command.
+3. For the INCLUDED enquiry repair: edit the Contact page's Elementor HTML
+widget. Replace its old WBM enquiry iframe AND script with the contents of
+WEBSITE-EMBED-V8.69.html (the filename remains correct). Update and purge the
+Contact page's LiteSpeed cache. Reload the website on your phone.
+
+No live app or WordPress deployment was performed while preparing this ZIP.

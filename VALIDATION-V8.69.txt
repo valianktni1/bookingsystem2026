@@ -1,0 +1,13 @@
+7 October 2026
+Browser test: 320, 360, 390, 412, 768 and 1280 CSS-pixel viewports.
+Passed lazy-src handshake (website script runs before iframe src exists), no
+horizontal overflow, near-full mobile field width, content height expansion
+and contraction, standalone form, manual venue entry, successful submission
+payload and normal-flow confirmation. Submission intercepted, no real enquiry
+or email sent. JavaScript and deployment shell syntax checks passed.
+Mobile screenshot inspected. Backend submission code and venue-search JS are
+unchanged. Google Places live lookup and physical Android/iPhone not tested.
+Live contact HTML inspected read-only; WordPress caches src in data-src and
+its existing script could therefore select the wrong trusted message origin.
+Test fixtures use the repository default form questions; production wording
+remains controlled by the existing form builder. No production deployment made.

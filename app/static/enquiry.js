@@ -1,3 +1,4 @@
+if (window.parent !== window) document.documentElement.classList.add("embedded");
 const form = document.querySelector("#enquiry-form");
 const fieldHost = document.querySelector("#enquiry-fields");
 const errorBox = document.querySelector("#form-error");
@@ -35,6 +36,7 @@ function safeAttribution(value) {
 window.addEventListener("message", event => {
   if (event.source !== window.parent || !allowedParentOrigins.has(event.origin)) return;
   parentOrigin = event.origin;
+  if (event.data?.type === "wbm-enquiry-resize") { tellParentHeight(); return; }
   if (event.data?.type === "wbm-growth-attribution-clear") {
     growthAttribution = null;
     return;
@@ -49,7 +51,8 @@ function tellParent(message) {
 }
 
 function tellParentHeight() {
-  const height = Math.ceil(document.documentElement.scrollHeight);
+  const main = document.querySelector("main");
+  const height = Math.ceil(main.getBoundingClientRect().height) + 2;
   tellParent({type: "wbm-enquiry-height", height});
 }
 
@@ -59,7 +62,8 @@ function tellParentSubmitted() {
   tellParent({type: "wbm-enquiry-height", height: 520});
   tellParent({type: "wbm-enquiry-submitted", height: 520});
 }
-new ResizeObserver(tellParentHeight).observe(document.documentElement);
+new ResizeObserver(tellParentHeight).observe(document.querySelector("main"));
+window.addEventListener("resize", tellParentHeight);
 window.addEventListener("load", tellParentHeight);
 form.addEventListener("focusin", () => {
   if (startReported) return;

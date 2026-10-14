@@ -1,2 +1,2 @@
-BookingSystem2026 V8.68 - Manual client email attachments
-Build: 2026.10.02-email-attachments-v8.68
+BookingSystem2026 V8.70 - Light Weddings By Mark emails, including V8.69 mobile enquiry fixes
+Build: 2026.10.09-light-emails-v8.70

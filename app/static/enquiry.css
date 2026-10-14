@@ -14,7 +14,7 @@ header p { margin:0; color:#798789; font-size:14px; }
 .payment-note>div.payment-option { display:block; color:#5f6f70; font-size:12px; line-height:1.5; }
 .payment-note b { color:#806a4d; font-size:11px; }
 .payment-note span { font-size:12px; line-height:1.45; }
-.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:17px; }
+.form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:17px; }
 label { display:grid; gap:7px; color:#5f6f70; font-size:12px; font-weight:650; }
 label.full { grid-column:1/-1; }
 input,select,textarea { width:100%; border:1px solid #d7cdbd; border-radius:7px; outline:0; color:#445557; background:var(--cream); font:inherit; font-size:13px; }
@@ -47,5 +47,31 @@ button:disabled { opacity:.6; cursor:wait; }
 .success h1 { margin:15px 0 4px; color:var(--deep); font-size:30px; }
 .success p { max-width:520px; line-height:1.6; }
 .success strong { margin-top:7px; }
-@media(max-width:700px){main{padding:12px}.card{padding:22px 17px}header h1{font-size:23px}.form-grid{grid-template-columns:1fr;gap:14px}label.full{grid-column:auto}button{width:100%}.enquiry-complete .success{bottom:8px;width:calc(100% - 16px);min-height:min(340px,calc(100% - 16px));max-height:calc(100% - 16px)}}
+@media(max-width:700px){main{padding:12px}.card{padding:22px 17px}header h1{font-size:23px}.form-grid{grid-template-columns:minmax(0,1fr);gap:18px}label.full{grid-column:auto}button{width:100%}.enquiry-complete .success{bottom:8px;width:calc(100% - 16px);min-height:min(340px,calc(100% - 16px));max-height:calc(100% - 16px)}}
 @media(max-width:420px){.payment-note>div{grid-template-columns:1fr;gap:3px}.payment-note b{font-size:12px}}
+
+/* V8.69: natural mobile width, including long selects and the venue widget. */
+html,body,main,.card,form,.form-grid,label,.venue-picker,.venue-summary { min-width:0; }
+input,select,textarea,.venue-picker gmp-place-autocomplete { min-width:0; max-width:100%; }
+.venue-picker gmp-place-autocomplete { display:block; }
+label,.venue-summary span,.venue-summary strong,.venue-summary small,.counter { overflow-wrap:anywhere; }
+.venue-summary>span { min-width:0; }
+.counter { text-align:left; }
+html.embedded body { background:transparent; }
+html.embedded main { width:100%;padding:16px; }
+html.embedded .card { box-shadow:none; }
+html.embedded .enquiry-complete .success { position:static;transform:none;width:100%;max-height:none;min-height:340px; }
+@media(max-width:700px) {
+ main { padding:16px 12px; }
+ .card { padding:20px 0;border:0;border-radius:0;box-shadow:none; }
+ body { background:#fff; }
+ html.embedded main { padding:12px 0; }
+ header p,label { font-size:15px;line-height:1.5; }
+ input,select,textarea { font-size:16px; }
+ input,select { height:52px;padding-inline:12px; }
+ .venue-label { padding:12px; }
+ .venue-manual-toggle { min-height:44px;font-size:14px;line-height:1.4; }
+ .counter { font-size:13px; }
+ .privacy { font-size:14px; }
+ button { font-size:16px;min-height:52px; }
+}
