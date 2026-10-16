@@ -63,6 +63,7 @@ def apply_safe_migrations() -> None:
             "is_discount": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
         },
         "email_logs": {
+            "planner_deposit_eligible": "BOOLEAN NOT NULL DEFAULT FALSE" if engine.dialect.name == "postgresql" else "BOOLEAN NOT NULL DEFAULT 0",
             "body": "TEXT NULL",
             "tracking_token_hash": "VARCHAR(64) NULL",
             "first_opened_at": "TIMESTAMP WITH TIME ZONE NULL" if engine.dialect.name == "postgresql" else "DATETIME NULL",

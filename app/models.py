@@ -472,6 +472,7 @@ class EmailLog(Base):
     subject: Mapped[str] = mapped_column(String(240))
     body: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="sent", index=True)
+    planner_deposit_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     tracking_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     first_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

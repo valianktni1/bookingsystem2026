@@ -1,2 +1,2 @@
-BookingSystem2026 V8.70 - Light Weddings By Mark emails, including V8.69 mobile enquiry fixes
-Build: 2026.10.09-light-emails-v8.70
+BookingSystem2026 V8.71 - Optional complimentary planner invitations, 30 minutes after deposit confirmation
+Build: 2026.10.16-planner-invitations-v8.71

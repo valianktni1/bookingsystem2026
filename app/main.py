@@ -31,6 +31,7 @@ from .business_time import (automatic_delivery_allowed, business_date,
                             business_today)
 from .booking_forms import public_booking_form, validate_booking_answers, validate_booking_form
 from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
+from .planner_integration import planner_invitation_loop, register_planner_routes, eligible as planner_booking_eligible
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .date_blocks import register_date_block_routes
@@ -131,12 +132,16 @@ async def lifespan(_: FastAPI):
     accounts_task = asyncio.create_task(accounts_sync_loop())
     growth_task = asyncio.create_task(growth_sync_loop())
     sms_task = asyncio.create_task(sms_automation_loop())
+    planner_task = asyncio.create_task(planner_invitation_loop())
     yield
+    planner_task.cancel()
     reminder_task.cancel()
     calendar_retry_task.cancel()
     accounts_task.cancel()
     growth_task.cancel()
     sms_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await planner_task
     with suppress(asyncio.CancelledError):
         await reminder_task
     with suppress(asyncio.CancelledError):
@@ -149,7 +154,8 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.70", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.71", lifespan=lifespan, docs_url=None, redoc_url=None)
+register_planner_routes(app)
 
 
 @app.middleware("http")
@@ -2709,6 +2715,7 @@ def create_payment(invoice_id: str, payload: PaymentIn, admin: Admin = Depends(c
         )
         outstanding = max(Decimal("0"), invoice.total - invoice.paid)
         deposit_remaining = max(Decimal("0"), booking.deposit_amount - invoice.paid)
+        planner_receipt_eligible = planner_booking_eligible(db, booking)
         try:
             subject, email_body, tracking_hash = send_tracked_booking_template_email(
                 db, booking,
@@ -2727,6 +2734,7 @@ def create_payment(invoice_id: str, payload: PaymentIn, admin: Admin = Depends(c
                 },
             )
             db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
+                            planner_deposit_eligible=planner_receipt_eligible,
                             recipient=client_email_recipient(db, booking), subject=subject,
                             body=email_body, status="sent",
                             tracking_token_hash=tracking_hash))
@@ -2734,6 +2742,7 @@ def create_payment(invoice_id: str, payload: PaymentIn, admin: Admin = Depends(c
         except Exception as exc:
             payment_email_error = str(exc)
             db.add(EmailLog(booking_id=booking.id, template_key="payment_received",
+                            planner_deposit_eligible=planner_receipt_eligible,
                             recipient=client_email_recipient(db, booking),
                             subject=getattr(exc, "rendered_subject", template.subject),
                             body=getattr(exc, "rendered_body", None), status="failed",
@@ -5414,6 +5423,7 @@ def retry_failed_communication(
         recipient=email.recipient,
         subject=email.subject,
         body=email.body,
+        planner_deposit_eligible=email.planner_deposit_eligible,
         status="sent",
         tracking_token_hash=(token_digest(tracking_token) if tracking_token else None),
         retry_count=email.retry_count,
