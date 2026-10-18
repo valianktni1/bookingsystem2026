@@ -62,14 +62,15 @@
     if(!$('#quote-email-subject'))return;
     if(window.WBMQuoteReviewV858 && r.brand==='wbm' && r.kind==='wedding' && !r.legacy_source) $('#dynamic-form button[type=submit]').disabled=true;
     try {
-      const [centre,templates]=await Promise.all([api(`/api/bookings/${r.id}/email-centre`),api('/api/quote-templates')]);
+      const centre=await api(`/api/bookings/${r.id}/email-centre`);
       const emails=(centre.templates||[]).map(t=>({id:'email:'+t.template_key,name:t.display_name,subject:t.subject,body:t.body}));
-      const choices=[...emails,...templates.map(t=>({...t,id:'offer:'+t.id,name:'Quote: '+t.name}))];
+      const choices=emails;
       const chosen=pendingEmail.get(r.id);
-      $('#quote-email-subject').closest('label').insertAdjacentHTML('beforebegin',`<label class="full">Email template<select id="v857-email-choice"><option value="">Current wording</option>${options(choices,chosen?'offer:'+chosen.id:'email:quote')}</select><small>Changes the email wording only. Package choices were saved in the previous step.</small></label>`);
+      $('#quote-email-subject').closest('label').insertAdjacentHTML('beforebegin',`<label class="full">Email wording<select id="v857-email-choice"><option value="">Saved quote wording</option>${options(choices,'')}</select><small>Changes the message only. Packages, extras, discounts and bank details stay as shown in the quote summary.</small></label>`);
       const apply=t=>{if(t){$('#quote-email-subject').value=t.subject;$('#quote-email-body').value=t.body}};
-      if(chosen)apply(chosen);else if(centre.quote_email?.subject&&centre.quote_email?.body){apply(centre.quote_email);$('#v857-email-choice').value=''}
-      $('#v857-email-choice').onchange=e=>apply(choices.find(x=>x.id===e.target.value));
+      const saved=chosen||(centre.quote_email?.subject&&centre.quote_email?.body?centre.quote_email:{subject:$('#quote-email-subject').value,body:$('#quote-email-body').value});
+      apply(saved);$('#v857-email-choice').value='';
+      $('#v857-email-choice').onchange=e=>apply(choices.find(x=>x.id===e.target.value)||saved);
     }catch(e){error(e)}
   };
   prepareQuote=async function(r,body,d){
@@ -102,3 +103,4 @@
     $('#content').insertAdjacentHTML('afterbegin','<section class="panel v857-toolbar"><div><h2>Bank accounts for new quotes</h2><p>Choose your current or new business account when preparing a quote.</p></div><button class="primary" id="v857-banks">Manage two bank accounts</button></section>');$('#v857-banks').onclick=editBanks;
   }return result};
 })();
+

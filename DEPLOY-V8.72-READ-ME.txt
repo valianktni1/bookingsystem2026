@@ -1,0 +1,39 @@
+BookingSystem2026 V8.72 - clearer booking workspace
+
+This is a cumulative update to the existing personal WBM application.
+
+CHANGES
+- Shorter native booking header, with appearance and secondary shortcuts in More actions.
+- One booking-document list. Original enquiry and quote stay easy to find.
+- Completed paperwork and later booking stages remain available in expandable sections.
+- Submitted final timings needing review remain prominent, even for a distant wedding.
+- Recent messages load correctly, newest first.
+- Opening the native Overview loads booking portal facts once. Returning to Overview still refreshes them.
+- Prepared, sent and accepted quote wording is distinct.
+- Email wording selection no longer offers package-template names which change only the message.
+
+SCOPE
+No database migration, existing-record rewrite, invoice/PDF/accounting change,
+client-facing quote change, payment change, or automation/sending-rule change.
+Studio Ninja imports keep their existing workspace and protections.
+Existing planner invitation settings and 30-minute scheduling remain unchanged.
+The application version is 2.8.72 / V8.72.
+
+CHECKS
+Isolated browser fixtures cover native/imported records, phone widths 320/390/768,
+desktop, light/dark mode, all booking sections, initial/revisit loading, recent
+message order and quote preparation/review/send payloads. All requests are
+intercepted locally: no real enquiry, booking, payment or email is created.
+
+DEPLOY ON TRUENAS
+The repository must be accessible to your existing GitHub-based Docker build.
+The existing stack folder is not a git checkout; do not run git pull there.
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.72.sh -o /tmp/wbm-deploy-v872.sh && sudo bash /tmp/wbm-deploy-v872.sh
+
+The script backs up the database, compose file and environment, preserves the
+old image for rollback, builds while the app stays running, then replaces only
+the app container. It prints the rollback command and checks V8.72 is responding.
+The database container is not recreated. Refresh your browser after deployment.
+If the download returns 404, do not rerun an older update: check repository access.
+No planner deployment is required for this update.

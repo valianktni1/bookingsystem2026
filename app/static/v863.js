@@ -11,7 +11,7 @@
     const confirmed = signed && (p.emails || []).some(e => e.template_key === 'contract_completed' && e.status === 'sent' && timestamp(e.sent_at) >= Math.max(timestamp(c.accepted_at),timestamp(c.supplier_signed_at)));
     const reviewed = Boolean(f.bookingForm && !f.bookingFormReview);
     const steps = [
-      {label:'Quote',done:Boolean(f.quote),detail:f.quote?'Accepted':f.quoteSent?'Waiting for their choice':'Not sent',tab:'Journey'},
+      {label:'Quote',done:Boolean(f.quote),detail:f.quote?'Accepted':f.quoteSent?'Sent · waiting for their choice':p.quote_preparation?.prepared?'Prepared · not sent':'Not prepared',tab:'Journey'},
       {label:'First payment',done:Boolean(f.hasPayment),detail:f.hasPayment?'Date secured':'Not recorded',tab:'Payments'},
       {label:'Booking form',done:reviewed,detail:reviewed?'Reviewed':f.bookingForm?'Needs your review':'Waiting for the couple',tab:'Journey'},
       {label:'Agreement',done:Boolean(confirmed),detail:confirmed?'Signed & confirmation sent':signed?'Confirmation needs attention':c?'Your signature needed':'Waiting for the couple',tab:'Journey'},
@@ -54,3 +54,4 @@
     }
   };
 })();
+

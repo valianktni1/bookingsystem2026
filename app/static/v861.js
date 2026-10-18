@@ -15,7 +15,7 @@
   }
   function quoteContent(r, d) {
     const q = d.quote;
-    if (!q) return `<p>${d.quote_preparation?.prepared ? 'Saved quote — awaiting their package choice.' : 'No accepted quote is recorded yet.'}</p><p>Preview the packages and extras currently offered to this couple.</p><a class="primary v861-link" href="/quote-preview/${encodeURIComponent(r.id)}" target="_blank" rel="noopener">Preview offered quote ↗</a>`;
+    if (!q) return `<p>${(d.emails || []).some(e => e.template_key === 'quote' && e.status === 'sent') ? 'Quote sent — awaiting their package choice.' : d.quote_preparation?.prepared ? 'Quote prepared — not sent to the couple yet.' : 'Quote not prepared or sent yet.'}</p><p>Preview the packages and extras currently offered to this couple.</p><a class="primary v861-link" href="/quote-preview/${encodeURIComponent(r.id)}" target="_blank" rel="noopener">Preview offered quote ↗</a>`;
     return `<div class="v861-status"><strong>${esc(q.status || 'Accepted')} quote</strong><span>${q.accepted_at ? esc(fmtDateTime(q.accepted_at)) : ''}</span></div><div class="v861-items">${(q.line_items || []).map(item => `<article><header><strong>${esc(item.name || 'Quote item')}</strong><b>${money(item.total)}</b></header>${item.description ? `<p>${lines(item.description)}</p>` : ''}</article>`).join('') || '<p>No saved line items are available for this quote.</p>'}</div><div class="v861-total"><strong>Quote total</strong><b>${money(q.total)}</b></div><p class="muted">Booking fee: ${money(q.deposit_amount)}. These are the saved quote details, not today’s package prices.</p>`;
   }
   async function viewQuote(r) {
@@ -105,7 +105,7 @@
   function shortcuts(r) {
     if(!native(r))return;
     const nav=$('#drawer .record-contact-actions');
-    if(!nav || nav.querySelector('[data-v861-quote]'))return;
+    if(!nav || $('#drawer [data-v861-quote]'))return;
     nav.insertAdjacentHTML('afterbegin','<button type="button" data-v861-quote>View quote</button><button type="button" data-v861-enquiry>Original enquiry</button>');
     $('[data-v861-quote]',nav).onclick=()=>viewQuote(r);
     $('[data-v861-enquiry]',nav).onclick=()=>viewEnquiry(r);
@@ -123,3 +123,4 @@
   };
   window.WBMReview={direct,tidyQuote,quoteContent,viewQuote,viewEnquiry};
 })();
+

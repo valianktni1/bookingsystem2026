@@ -253,7 +253,7 @@
       if ($("#next-record-action")) $("#next-record-action").onclick = () => selectRecordTab(r, next.tab, true);
       $$('[data-stage-tab]', drawer).forEach(button => button.onclick = () => selectRecordTab(r, button.dataset.stageTab, true));
       $$('[data-tab]', drawer).forEach(button => button.onclick = () => selectRecordTab(r, button.dataset.tab));
-      selectRecordTab(r, selected);
+      await selectRecordTab(r, selected);
     } catch (error) {
       toast(error.message, "error");
     }
@@ -354,3 +354,4 @@
     renderFormsAndAgreement: renderFormsAndAgreementV895,
   });
 })();
+

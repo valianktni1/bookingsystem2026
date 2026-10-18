@@ -494,7 +494,10 @@
     }
     await baseOpenDrawerV811(id, legacySection(selected));
     if (state.current) {
-      await selectRecordTab(state.current, selected, false, { replace: true });
+      const alreadyRendered = window.WBMSetup?.native(state.current) &&
+        $('#drawer-body')?.dataset.v844Section === normaliseRecordTab(selected) &&
+        !$('#drawer-body')?.querySelector('.v844-section-error');
+      if (!alreadyRendered) await selectRecordTab(state.current, selected, false, { replace: true });
       decorateOpenRecord(state.current);
       if (options.action) await performRecordAction(state.current, selected, options.action);
     }
@@ -738,3 +741,4 @@
     }
   }, 250);
 })();
+

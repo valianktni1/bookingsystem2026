@@ -1,2 +1,2 @@
-BookingSystem2026 V8.71 - Optional complimentary planner invitations, 30 minutes after deposit confirmation
-Build: 2026.10.16-planner-invitations-v8.71
+BookingSystem2026 V8.72 - Clearer mobile booking workspace and efficient loading
+Build: 2026.10.18-booking-flow-v8.72
