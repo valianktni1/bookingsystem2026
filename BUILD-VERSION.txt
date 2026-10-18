@@ -1,2 +1,2 @@
-BookingSystem2026 V8.72 - Clearer mobile booking workspace and efficient loading
-Build: 2026.10.18-booking-flow-v8.72
+BookingSystem2026 V8.73 - Responsive personal email layout and readable light/dark colours
+Build: 2026.10.18-mobile-email-v8.73

@@ -7,7 +7,7 @@ def test_light_wbm_email_preserves_links_plain_text_and_logo():
     body = 'Hi Alex,\n\nYour wedding quote is ready.\n\n[VIEW YOUR QUOTE](https://example.com/client/test?tab=quote)\n\nMark'
     message = build_email_message(_booking(), _profile(), 'Your wedding quote', body, 'mark@example.com', open_tracking_url='https://example.com/open.gif')
     markup = message.get_body(preferencelist=('html',)).get_content()
-    assert 'content="light"' in markup
+    assert 'content="light dark"' in markup
     assert 'background:#f8f5ef;color:#45433e' in markup
     assert 'background:#242321' not in markup
     assert 'class="wbm-email-message" bgcolor="#ffffff"' in markup
@@ -19,4 +19,5 @@ def test_light_wbm_email_preserves_links_plain_text_and_logo():
     booking.brand = Brand.IVORY
     ivory = _email_html('Hello', booking, _profile(brand=Brand.IVORY))
     assert 'background:#242321;color:#ffffff' in ivory
-    assert 'content="light"' not in ivory
+    assert 'content="light dark"' not in ivory
+

@@ -298,22 +298,48 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
     outer = "#f8f5ef" if light_email else "#f3f1ed"
     footer_bg = "#f8f5ef" if light_email else "#242321"
     footer_ink = "#45433e" if light_email else "#ffffff"
+    # Mobile-first inline spacing also works when a reply strips the head/style.
+    # Desktop framing is progressive enhancement; the recipient controls their
+    # mail app's own gutters, quoted-reply indentation and forced colour changes.
+    wrap_padding = "20px 0" if light_email else "24px 10px"
+    message_padding = "24px 16px" if light_email else "32px 32px 28px"
+    header_padding = "20px 16px" if light_email else "24px 28px"
+    signature_padding = "18px 16px" if light_email else "18px 28px"
+    card_style = ("width:100%;max-width:640px;background:#ffffff;table-layout:fixed;"
+                  "border:0;border-radius:0;overflow:hidden" if light_email else
+                  "width:100%;max-width:640px;background:#ffffff;border-radius:14px;"
+                  "overflow:hidden;border:1px solid #e7e2d8")
     light_head = """
   <head>
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="color-scheme" content="light">
-    <meta name="supported-color-schemes" content="light">
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
     <style>
-      :root { color-scheme:light; supported-color-schemes:light; }
-      @media (prefers-color-scheme:dark) {
-        .wbm-email-outer,.wbm-email-soft { background-color:#f8f5ef!important; }
-        .wbm-email-card,.wbm-email-message,.wbm-email-awards { background-color:#ffffff!important; color:#2d2b28!important; }
-        .wbm-email-signature { color:#45433e!important; }
-        .wbm-email-message a { color:#76591f!important; }
-        .wbm-email-message a[style*="inline-block"] { background-color:#76591f!important; color:#ffffff!important; }
+      :root { color-scheme:light dark; supported-color-schemes:light dark; }
+      .wbm-email-message,.wbm-email-signature { overflow-wrap:anywhere; word-break:normal; }
+      .wbm-email-message a { color:#76591f; }
+      .wbm-email-signature a { color:inherit; }
+      @media (min-width:641px) {
+        .wbm-email-wrap { padding:24px 10px!important; }
+        .wbm-email-card { border:1px solid #e7e2d8!important; border-radius:14px!important; }
+        .wbm-email-header { padding:24px 28px!important; }
+        .wbm-email-message { padding:32px 32px 28px!important; }
+        .wbm-email-signature { padding:18px 28px!important; }
       }
-      @media (max-width:480px) {
-        .wbm-email-message { padding:26px 20px!important; }
+      @media (max-width:640px) {
+        .wbm-email-wrap { padding:0!important; }
+        .wbm-email-card { width:100%!important; max-width:100%!important; border:0!important; border-radius:0!important; }
+        .wbm-email-message { padding:24px 16px!important; }
+        .wbm-email-awards { padding:20px 16px!important; }
+      }
+      @media (prefers-color-scheme:dark) {
+        .wbm-email-outer,.wbm-email-wrap { background-color:#17211d!important; }
+        .wbm-email-card,.wbm-email-message,.wbm-email-awards { background-color:#222e2a!important; color:#edf5f1!important; border-color:#485e51!important; }
+        .wbm-email-signature { background-color:#2b4438!important; color:#edf5f1!important; }
+        .wbm-email-awards div { color:#d8bc79!important; }
+        .wbm-email-message a { color:#d8bc79!important; }
+        .wbm-email-message a[style*="inline-block"] { background-color:#76591f!important; color:#ffffff!important; }
+        .wbm-email-message strong { color:#f1d89f!important; }
       }
     </style>
   </head>""" if light_email else ""
@@ -322,8 +348,8 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
     awards_asset = email_signature_asset(profile, "awards")
     logo = (
         f'<img src="cid:{logo_asset["cid"]}" alt="{html.escape(profile.display_name)}" '
-        f'style="display:block;max-width:{"280px" if booking.brand == Brand.IVORY else "245px"};'
-        f'max-height:{"94px" if booking.brand == Brand.IVORY else "150px"};width:auto;height:auto;margin:0 auto;border:0">'
+        f'style="display:block;max-width:{"280px" if booking.brand == Brand.IVORY else "100%"};'
+        f'max-height:{"94px" if booking.brand == Brand.IVORY else "150px"};width:{"auto" if booking.brand == Brand.IVORY else "245px"};height:auto;margin:0 auto;border:0">'
         if logo_asset else
         f'<strong style="font-family:Arial,sans-serif;font-size:24px;color:#2d2b28">{html.escape(profile.display_name)}</strong>'
     )
@@ -353,21 +379,21 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
   <body class="wbm-email-outer" bgcolor="{outer}" style="margin:0;padding:0;background:{outer};color:#262626">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="wbm-email-outer" bgcolor="{outer}" style="background:{outer}">
       <tr>
-        <td class="wbm-email-soft" bgcolor="{assets['soft']}" align="center" style="padding:24px 10px">
+        <td class="wbm-email-soft wbm-email-wrap" bgcolor="{assets['soft']}" align="center" style="padding:{wrap_padding}">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
-                 class="wbm-email-card" bgcolor="#ffffff" style="width:100%;max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e2d8">
+                 class="wbm-email-card" bgcolor="#ffffff" style="{card_style}">
             <tr>
-              <td class="wbm-email-soft" bgcolor="{assets['soft']}" align="center" style="padding:24px 28px;background:{assets['soft']};border-bottom:3px solid {assets['accent']}">
+              <td class="wbm-email-soft wbm-email-header" bgcolor="{assets['soft']}" align="center" style="padding:{header_padding};background:{assets['soft']};border-bottom:3px solid {assets['accent']}">
                 {logo}
               </td>
             </tr>
             <tr>
-              <td class="wbm-email-message" bgcolor="#ffffff" style="background:#ffffff;padding:32px 32px 28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#2d2b28">
+              <td class="wbm-email-message" bgcolor="#ffffff" style="background:#ffffff;padding:{message_padding};overflow-wrap:anywhere;word-break:normal;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#2d2b28">
                 {_body_html(body)}
               </td>
             </tr>
             <tr>
-              <td class="wbm-email-soft wbm-email-signature" bgcolor="{footer_bg}" style="padding:18px 28px;background:{footer_bg};color:{footer_ink};text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px">
+              <td class="wbm-email-soft wbm-email-signature" bgcolor="{footer_bg}" style="padding:{signature_padding};overflow-wrap:anywhere;word-break:normal;background:{footer_bg};color:{footer_ink};text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px">
                 {signature_html}
               </td>
             </tr>
@@ -479,3 +505,4 @@ def preview_template_email(booking: Booking, profile: BusinessProfile, template:
         render_template(template.body, values), booking, portal_url
     )
     return subject, _plain_body(body), _email_html(body, booking, profile)
+

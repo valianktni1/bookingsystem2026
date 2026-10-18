@@ -1,0 +1,34 @@
+BookingSystem2026 V8.73 - responsive WBM emails
+
+Cumulative: includes the complete V8.72 booking-workspace update.
+
+New WBM emails use the available message width on phones, with 16px readable
+text padding instead of nested desktop gutters. A 640px reading width remains
+on desktop. Inline mobile-friendly defaults also work when a reply strips CSS.
+Long manual text and links wrap without widening or shrinking the whole email.
+
+Default emails retain white message content, cream branding and gold buttons.
+Clients supporting dark-mode CSS receive explicit high-contrast dark colours.
+Each recipient's email app controls forced inversion, outside margins and quote
+indentation. No HTML template can guarantee those app-controlled behaviours.
+Existing sent emails and stripped images inside old quoted replies cannot be
+changed retroactively. Embedded logo/award MIME parts are retained for new mail.
+
+No change to booking/enquiry records, invoice/accounting output, attachments,
+secure links, recipients, SMTP sending, automations or Studio Ninja protections.
+No database migration or planner update.
+
+Validation: five isolated MIME/render unit checks and browser rendering at
+320/390/412/600/1280px in light/dark, including embedded artwork, long content and
+quoted messages with stripped styles. No real emails or app records are created.
+Actual Samsung/Gmail/Outlook inbox rendering still depends on the recipient app.
+
+TRUENAS UPDATE
+Your existing Docker build requires the GitHub repository to be accessible.
+If using your normal temporary-public deployment, make it public first.
+
+curl -fL https://raw.githubusercontent.com/valianktni1/bookingsystem2026/main/DEPLOY-V8.73.sh -o /tmp/wbm-deploy-v873.sh && sudo bash /tmp/wbm-deploy-v873.sh
+
+The script backs up the database/configuration and preserves the old app image,
+builds while the app runs, replaces only the app, checks V8.73 and prints the
+rollback command. Do not git pull in the Dockge stack folder.
