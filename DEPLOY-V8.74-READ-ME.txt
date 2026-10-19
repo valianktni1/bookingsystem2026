@@ -1,0 +1,24 @@
+BookingSystem2026 V8.74 - concise Final Wedding Timings review
+
+The admin Questionnaires view now recognises Final Wedding Timings instead of
+printing the saved calculation data as though it were an answer from the couple.
+
+The review opens with the information Mark actually needs:
+- suggested photography start;
+- ceremony time;
+- expected finish and total coverage;
+- the complete run-sheet timeline;
+- wedding-day contact, coordinator, groups and important notes.
+
+Every answer remains available inside a collapsed section. The raw calculation
+is retained unchanged for troubleshooting but is hidden behind a separate
+Technical calculation details control. Nothing is deleted or rewritten.
+
+The layout is responsive and has explicit light- and dark-mode styling. The
+couples' form, calculations, PDFs, stored answers, bookings, invoices, emails,
+automations and Studio Ninja protections are unchanged.
+
+Validation includes JavaScript syntax checking, isolated release assertions and
+pre-deployment checks inside the newly built Docker image. The deployment script
+backs up and verifies PostgreSQL, retains the old image for rollback, and only
+replaces the app after the new static files pass validation.

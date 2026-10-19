@@ -1,0 +1,28 @@
+/* V8.74 - final timings review: useful information first, workings collapsed. */
+.v874-final-timings{overflow:visible}
+.v874-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:16px 18px;background:#f7faf9}
+.v874-summary article{min-width:0;padding:14px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.v874-summary small,.v874-summary strong{display:block}
+.v874-summary small{color:#60747a;font-size:8px;font-weight:800;letter-spacing:.06em}
+.v874-summary strong{margin-top:6px;color:#17343a;font-size:17px;overflow-wrap:anywhere}
+.v874-warning{display:grid;gap:5px;margin:0 18px 16px;padding:13px 15px;border-left:4px solid #b56d2d;border-radius:8px;color:#663b18;background:#fff2e7}
+.v874-warning strong{font-size:11px}.v874-warning span{font-size:10px;line-height:1.55}
+.v874-review-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr);gap:13px;padding:0 18px 18px}
+.v874-review-grid>section{min-width:0;padding:15px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.v874-review-grid h4{margin:0 0 11px;color:#17343a;font-size:13px}
+.v874-timeline>div{display:grid;grid-template-columns:54px minmax(0,1fr);gap:10px;padding:9px 0;border-top:1px solid #edf1f2}
+.v874-timeline>div:first-child{border-top:0}.v874-timeline b{color:#17343a;font-size:11px}.v874-timeline strong,.v874-timeline small{display:block}.v874-timeline strong{font-size:10px}.v874-timeline small{margin-top:3px;color:#60747a;font-size:9px;line-height:1.45}
+.v874-review-grid dl{display:grid;gap:0;margin:0}.v874-review-grid dl>div{padding:9px 0;border-top:1px solid #edf1f2}.v874-review-grid dl>div:first-child{border-top:0}.v874-review-grid dt{color:#60747a;font-size:8px;font-weight:800}.v874-review-grid dd{margin:4px 0 0;color:#17343a;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+.v874-review-actions{display:flex;justify-content:flex-end;padding:0 18px 16px}.v874-review-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:42px;text-decoration:none}
+.v874-all-answers,.v874-technical{margin:0 18px 14px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.v874-all-answers summary,.v874-technical summary{cursor:pointer;padding:14px 15px;color:#17343a;font-size:10px;font-weight:800}
+.v874-all-answers[open] summary,.v874-technical[open] summary{border-bottom:1px solid var(--line)}
+.v874-all-answers dl{border-radius:0;border:0}.v874-technical{margin-bottom:18px;background:#f8faf9}.v874-technical p{margin:13px 15px 0;color:#60747a;font-size:9px;line-height:1.5}.v874-technical pre{max-height:360px;margin:12px 15px 15px;padding:13px;overflow:auto;border-radius:8px;color:#344b50;background:#edf2f1;font:9px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}
+html[data-wbm-theme="dark"] .v874-summary{background:rgba(23,33,29,1)}
+html[data-wbm-theme="dark"] .v874-summary article,html[data-wbm-theme="dark"] .v874-review-grid>section,html[data-wbm-theme="dark"] .v874-all-answers,html[data-wbm-theme="dark"] .v874-technical{border-color:var(--wbm-border);background:rgba(34,46,42,1)}
+html[data-wbm-theme="dark"] .v874-summary small,html[data-wbm-theme="dark"] .v874-timeline small,html[data-wbm-theme="dark"] .v874-review-grid dt,html[data-wbm-theme="dark"] .v874-technical p{color:var(--wbm-text)}
+html[data-wbm-theme="dark"] .v874-summary strong,html[data-wbm-theme="dark"] .v874-review-grid h4,html[data-wbm-theme="dark"] .v874-timeline b,html[data-wbm-theme="dark"] .v874-review-grid dd,html[data-wbm-theme="dark"] .v874-all-answers summary,html[data-wbm-theme="dark"] .v874-technical summary{color:#edf5f1}
+html[data-wbm-theme="dark"] .v874-timeline>div,html[data-wbm-theme="dark"] .v874-review-grid dl>div,html[data-wbm-theme="dark"] .v874-all-answers[open] summary,html[data-wbm-theme="dark"] .v874-technical[open] summary{border-color:var(--wbm-border)}
+html[data-wbm-theme="dark"] .v874-warning{color:#fff1df;background:rgba(76,48,27,1)}
+html[data-wbm-theme="dark"] .v874-technical pre{color:#edf5f1;background:rgba(23,33,29,1)}
+@media(max-width:760px){.v874-summary{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}.v874-summary article{padding:12px}.v874-summary strong{font-size:16px}.v874-warning{margin:0 12px 12px}.v874-review-grid{grid-template-columns:1fr;padding:0 12px 12px}.v874-review-actions{padding:0 12px 12px}.v874-review-actions a{width:100%;min-height:50px}.v874-all-answers,.v874-technical{margin:0 12px 12px}.v874-technical{margin-bottom:14px}.v874-all-answers dl>div{grid-template-columns:1fr;gap:5px}.v874-final-timings>header{padding:15px 14px}}

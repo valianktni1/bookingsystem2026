@@ -1,2 +1,2 @@
-BookingSystem2026 V8.73 - Responsive personal email layout and readable light/dark colours
-Build: 2026.10.18-mobile-email-v8.73
+BookingSystem2026 V8.74 - concise Final Wedding Timings review
+Build: 2026.10.19-final-timings-review-v8.74
