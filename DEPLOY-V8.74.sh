@@ -56,9 +56,7 @@ echo '2/5 Building V8.74 while the current app stays running...'
 "${compose[@]}" build --no-cache app
 
 echo '3/5 Verifying the new image before touching the live container...'
-new_image=$("${compose[@]}" images -q app | head -1)
-test -n "$new_image"
-docker run --rm --entrypoint python "$new_image" -c '
+"${compose[@]}" run --rm --no-deps --entrypoint python app -c '
 from pathlib import Path
 root = Path("/app/app/static")
 script = (root / "v874.js").read_text()
