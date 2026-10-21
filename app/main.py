@@ -156,6 +156,8 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title=settings.app_name, version="2.8.73", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_planner_routes(app)
+from .planner_timings import register_routes as register_planner_timing_routes
+register_planner_timing_routes(app)
 
 
 @app.middleware("http")
@@ -4979,6 +4981,11 @@ def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
     apply_quote_reply_safety(db, bookings, today=today, now=now)
     for booking in bookings:
         for reminder_key, scheduled_for in _due_reminders(db, booking, today):
+            if _reminder_template_key(db, reminder_key) == "check_in_30":
+                from .planner_timings import hold_timing_invitation
+                if hold_timing_invitation(db, booking, today):
+                    skipped += 1
+                    continue
             rule = _workflow_rule_for_reminder(db, reminder_key)
             if rule["mode"] == "off":
                 skipped += 1
