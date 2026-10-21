@@ -172,7 +172,7 @@ def run_timings_jobs():
             Booking.automation_suppressed.is_(False),Booking.event_date>=now.date(),
             Booking.status.in_((RecordStatus.CONFIRMED,RecordStatus.IN_PROGRESS)),
             (PlannerTimingLink.booking_id.is_(None))|(PlannerTimingLink.next_at<=now))
-            .order_by(PlannerTimingLink.next_at,Booking.event_date,Booking.id).limit(25)).all()
+            .order_by(PlannerTimingLink.next_at.asc().nullsfirst(),Booking.event_date,Booking.id).limit(25)).all()
         for b in rows:
             if bridge.eligible(db,b): check_booking(db,b,config)
             else:
