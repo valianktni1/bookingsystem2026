@@ -154,7 +154,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.73", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.75", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
 register_planner_timing_routes(app)
@@ -5563,3 +5563,4 @@ def original_enquiry(booking_id: str, _: Admin = Depends(current_admin),
         return {"source": "saved_notification", "subject": notice.subject,
                 "body": notice.body, "received_at": notice.sent_at.isoformat()}
     return {"source": "unavailable"}
+

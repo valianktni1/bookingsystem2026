@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from fastapi import Depends, HTTPException
 from pydantic import ValidationError
-from sqlalchemy import DateTime, ForeignKey, JSON, String, select
+from sqlalchemy import DateTime, ForeignKey, JSON, String, select, func
 from sqlalchemy.orm import Mapped, mapped_column
 from .database import Base, SessionLocal, get_db
 from .models import Admin, Booking, Brand, Client, FormSubmission, RecordKind, RecordStatus, Task
@@ -41,7 +41,7 @@ def checked_payload(db,b):
     # An email is a discovery hint, never the sole identifier. Reject ambiguous
     # active native bookings before asking the planner to bind a unique account.
     others=db.scalars(select(Booking).join(Client).where(
-        Client.email.ilike(b.client.email.strip()),Booking.event_date==b.event_date,
+        func.lower(func.trim(Client.email))==b.client.email.strip().lower(),Booking.event_date==b.event_date,
         Booking.brand==b.brand,Booking.kind==b.kind,Booking.legacy_source.is_(None),
         Booking.status.in_((RecordStatus.CONFIRMED,RecordStatus.IN_PROGRESS)))).all()
     if len(others)!=1 or others[0].id!=b.id:
@@ -67,6 +67,11 @@ def store_submission(db,b,snapshot):
     # answers. A second source never silently replaces an existing submission.
     db.scalar(select(Booking).where(Booking.id==b.id).with_for_update())
     db.refresh(b)
+    # Another receiver may have committed while this transaction waited for the row lock.
+    previous=db.get(PlannerTimingReceipt,sid)
+    if previous:
+        if previous.booking_id!=b.id or previous.snapshot!=snapshot: raise ValueError('Submission identifier conflict. Review the planner link.')
+        return False
     if b.archived_at or not bridge.eligible(db,b) or snapshot.get('wedding_date')!=b.event_date.isoformat() or snapshot.get('email')!=b.client.email.strip().lower():
         raise ValueError('The booking changed during transfer. Review it before receiving these timings.')
     existing=db.scalar(select(FormSubmission).where(FormSubmission.booking_id==b.id,FormSubmission.form_type=='final_timings'))
@@ -112,6 +117,9 @@ def store_submission(db,b,snapshot):
 
 
 def check_booking(db,b,config):
+    # Serialize first-link creation and polling across the worker and reminder loop.
+    db.scalar(select(Booking).where(Booking.id==b.id).with_for_update())
+    db.refresh(b)
     now=bridge.utcnow();link=db.get(PlannerTimingLink,b.id)
     if not link:
         link=PlannerTimingLink(booking_id=b.id,next_at=now,state={});db.add(link);db.flush()
@@ -168,6 +176,7 @@ def run_timings_jobs():
         for b in rows:
             if bridge.eligible(db,b): check_booking(db,b,config)
             else:
+                db.scalar(select(Booking).where(Booking.id==b.id).with_for_update())
                 link=db.get(PlannerTimingLink,b.id)
                 if not link: link=PlannerTimingLink(booking_id=b.id,next_at=now,state={});db.add(link)
                 link.next_at=now+timedelta(hours=6);link.state={'status':'not_eligible','active':False};db.commit()
