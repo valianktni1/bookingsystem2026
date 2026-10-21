@@ -189,8 +189,10 @@ def process_one(db, booking_id, config, now):
 
 
 def run_planner_jobs():
+    from .planner_timings import run_timings_jobs
     with SessionLocal() as db:
         config = connection(db)
+        if config.get('timings_enabled'): run_timings_jobs()
         if not config.get('enabled') or not config.get('credential'):
             return
         schedule_new(db, config)
@@ -217,6 +219,7 @@ class ConnectionIn(BaseModel):
     model_config = ConfigDict(extra='forbid')
     enabled: bool
     key: str | None = Field(default=None, max_length=200)
+    timings_enabled: bool | None = None
 
 
 def register_planner_routes(app):
@@ -224,7 +227,8 @@ def register_planner_routes(app):
     def get_connection(_: Admin = Depends(current_admin), db=Depends(get_db)):
         config = connection(db)
         return {'enabled': bool(config.get('enabled')), 'key_saved': bool(config.get('credential')),
-                'planner_url': URL, 'delay_minutes': DELAY_MINUTES, 'enabled_since': config.get('enabled_since')}
+                'planner_url': URL, 'delay_minutes': DELAY_MINUTES, 'enabled_since': config.get('enabled_since'),
+                'timings_enabled':bool(config.get('timings_enabled')), 'timings_fallback_days':21}
 
     @app.put('/api/planner-invitations/settings')
     def save_connection(payload: ConnectionIn, _: Admin = Depends(current_admin), db=Depends(get_db)):
@@ -243,6 +247,15 @@ def register_planner_routes(app):
                 raise HTTPException(422, 'Cannot enable: check the planner connection key, SMTP, terms and privacy notice.')
             if not config.get('enabled'):
                 config['enabled_since'] = utcnow().isoformat()
+        if payload.timings_enabled is not None:
+            if payload.timings_enabled:
+                try:
+                    response=call_planner(config,'GET','/api/integrations/wbm/status')
+                    if response.status_code!=200 or response.json().get('capabilities',{}).get('timings')!=1:
+                        raise ValueError()
+                except Exception:
+                    raise HTTPException(422,'Update the planner first and check the connection before enabling timings.')
+            config['timings_enabled']=payload.timings_enabled
         config['enabled'] = payload.enabled
         row = db.get(SystemSetting, KEY)
         if row:
@@ -271,3 +284,4 @@ def register_planner_routes(app):
         job.next_at = max(utcnow(), aware(job.due_at)); job.error = None; job.attempts = 0
         db.commit()
         return {'ok': True}
+
