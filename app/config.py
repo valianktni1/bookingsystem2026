@@ -76,9 +76,13 @@ class Settings(BaseSettings):
     growth_integration_key: str | None = None
     growth_sync_minutes: int = Field(default=5, ge=1, le=1440)
     growth_sync_from_date: date | None = date(2026, 9, 7)
+    control_centre_enabled: bool = False
+    control_centre_key: str | None = None
 
     @model_validator(mode="after")
     def reject_placeholder_production_secrets(self):
+        if self.control_centre_enabled and len(self.control_centre_key or "") < 32:
+            raise ValueError("CONTROL_CENTRE_KEY must contain at least 32 characters")
         if self.automatic_message_end_hour <= self.automatic_message_start_hour:
             raise ValueError("AUTOMATIC_MESSAGE_END_HOUR must be later than AUTOMATIC_MESSAGE_START_HOUR")
         if self.app_env.lower() == "production":

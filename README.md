@@ -689,3 +689,17 @@ receipts, document upload, archiving, business settings, dashboard totals and lo
 - Calendar and availability controls
 - Gallery creation and status automation
 - Two-factor authentication and configurable backup/export tools
+
+## Private Control Centre feed
+
+The optional `GET /api/integrations/control-centre/overview` endpoint provides a
+limited, read-only WBM summary to Mark's dashboard. It is disabled by default.
+Enable with `CONTROL_CENTRE_ENABLED=true` and a separate random
+`CONTROL_CENTRE_KEY` of at least 32 characters. Send that key in the
+`X-Control-Centre-Key` header. The key grants no other admin access.
+
+The feed excludes test, archived, cancelled and non-WBM records, and returns
+bounded workflow queues, invoice balances in pence and the next five weddings.
+It omits contact details, notes, answers, documents and email content.
+Pairing and deployment guidance lives in the dashboard repository's
+`CONNECT-BOOKING.md`. Both apps must be updated and configured.
