@@ -154,7 +154,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.75", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.76", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
 register_planner_timing_routes(app)
@@ -918,6 +918,8 @@ def health():
                 settings.imap_wbm_password or settings.smtp_wbm_password or
                 settings.imap_ivory_password or settings.smtp_ivory_password)),
             "accounts_integration_enabled": settings.accounts_integration_enabled,
+            "control_centre_api_version": 1,
+            "control_centre_enabled": settings.control_centre_enabled,
             "accounts_auto_sync": settings.accounts_integration_auto_sync,
             "growth_integration_enabled": settings.growth_integration_enabled,
             "growth_auto_sync": settings.growth_integration_auto_sync,
@@ -1852,7 +1854,7 @@ def workflow_queues(_: Admin = Depends(current_admin), db: Session = Depends(get
         "overdue_payments": [],
         "final_calls": [],
     }
-    today = date.today()
+    today = business_today()
     recent_progress_cutoff = datetime.now(timezone.utc) - timedelta(days=2)
 
     def recent_progress(timestamp: datetime | None) -> bool:
@@ -5563,4 +5565,8 @@ def original_enquiry(booking_id: str, _: Admin = Depends(current_admin),
         return {"source": "saved_notification", "subject": notice.subject,
                 "body": notice.body, "received_at": notice.sent_at.isoformat()}
     return {"source": "unavailable"}
+
+
+from .control_centre import register_control_centre_routes
+register_control_centre_routes(app, workflow_queues)
 
