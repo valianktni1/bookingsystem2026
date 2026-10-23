@@ -32,6 +32,7 @@ from .business_time import (automatic_delivery_allowed, business_date,
 from .booking_forms import public_booking_form, validate_booking_answers, validate_booking_form
 from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
 from .planner_integration import planner_invitation_loop, register_planner_routes, eligible as planner_booking_eligible
+from .post_wedding_reviews import (TEMPLATE_KEY as POST_WEDDING_REVIEW_KEY, REVIEW_REQUEST_KEYS, enforce_review_deadline, record_review_sent)
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .date_blocks import register_date_block_routes
@@ -3160,6 +3161,7 @@ WBM_TEMPLATE_USAGE: dict[str, tuple[str, str]] = {
     "booking_link": ("manual", "Manual option when you deliberately send a booking link"),
     "booking_form_reminder": ("manual", "Manual Wedding Booking Form reminder; reviewed and sent by you for one couple"),
     "contract_reminder": ("manual", "Manual reminder offered when the form is complete but the agreement is unsigned"),
+    "post_wedding_review": ("automatic", "Married-life check-in 14 days after the wedding, with deadline-aware awards voting and Facebook/Google reviews"),
     "review_request": ("manual", "After-wedding review request; Mark reviews and edits the exact message before deliberately sending it"),
     "quote_followup_1": ("automatic", "Automatic quote follow-up one day after a successful quote"),
     "quote_followup_final": ("automatic", "Automatic final quote follow-up nine days after a successful quote"),
@@ -3747,7 +3749,7 @@ def send_client_composed_email(booking_id: str, payload: ClientEmailWithAttachme
                   "manual_only": manual_only,
                   "reason": payload.manual_reason.strip() if manual_only else None,
               })
-        if template_key == "review_request":
+        if template_key in REVIEW_REQUEST_KEYS:
             sent_at = datetime.now(timezone.utc)
             workflow = dict(booking.workflow_state or {})
             after_wedding = dict(workflow.get("after_wedding") or {})
@@ -4665,10 +4667,41 @@ def _workflow_definition_for_reminder(db: Session, reminder_key: str) -> dict:
     return definition_for(reminder_key) or {"label": reminder_key}
 
 
+def _review_request_already_sent(db: Session, booking: Booking) -> bool:
+    state = ((booking.workflow_state or {}).get("after_wedding") or {}).get("review_request") or {}
+    if state.get("sent_at"):
+        return True
+    return bool(db.scalar(select(EmailLog.id).where(
+        EmailLog.booking_id == booking.id,
+        EmailLog.template_key.in_(tuple(REVIEW_REQUEST_KEYS)),
+        EmailLog.status == "sent",
+    ).limit(1)) or db.scalar(select(ReminderLog.id).where(
+        ReminderLog.booking_id == booking.id,
+        ReminderLog.reminder_key == POST_WEDDING_REVIEW_KEY,
+        ReminderLog.status == "sent",
+    ).limit(1)))
+
+
+def _post_wedding_review_eligible(db: Session, booking: Booking) -> bool:
+    return bool(
+        booking.brand == Brand.WBM and booking.kind == RecordKind.WEDDING
+        and booking.status in (RecordStatus.CONFIRMED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED)
+        and booking.event_date and not booking.archived_at and not booking.legacy_source
+        and automations_allowed(booking) and not _review_request_already_sent(db, booking)
+    )
+
+
 def _attempt_reminder(db: Session, booking: Booking, reminder: ReminderLog) -> bool:
     """Attempt one durable reminder and retain enough state for safe retry."""
     template_key = _reminder_template_key(db, reminder.reminder_key)
     now = datetime.now(timezone.utc)
+    if template_key == POST_WEDDING_REVIEW_KEY:
+        due = (booking.event_date + timedelta(days=workflow_rule(db, POST_WEDDING_REVIEW_KEY)["days"])) if booking.event_date else None
+        if not _post_wedding_review_eligible(db, booking) or not due or business_today() < due:
+            reminder.status = "skipped"
+            reminder.next_attempt_at = None
+            db.commit()
+            return False
     reminder.status = "sending"
     reminder.retry_count = int(reminder.retry_count or 0) + 1
     reminder.last_attempt_at = now
@@ -4693,6 +4726,8 @@ def _attempt_reminder(db: Session, booking: Booking, reminder: ReminderLog) -> b
         reminder.status = "sent"
         reminder.sent_at = now
         reminder.error = None
+        if template_key in REVIEW_REQUEST_KEYS:
+            record_review_sent(booking, sent_at=now, subject=subject, sent_by="automatic workflow")
         db.add(EmailLog(
             booking_id=booking.id,
             template_key=template_key,
@@ -4904,6 +4939,9 @@ def _workflow_candidates(db: Session, booking: Booking) -> list[tuple[str, date]
             candidates.append((key, booking.balance_due_date - timedelta(days=workflow_rule(db, key)["days"])))
         overdue_rule = workflow_rule(db, "balance_overdue_2")
         candidates.append(("balance_overdue_2", booking.balance_due_date + timedelta(days=overdue_rule["days"])))
+    if _post_wedding_review_eligible(db, booking):
+        candidates.append((POST_WEDDING_REVIEW_KEY, booking.event_date + timedelta(
+            days=workflow_rule(db, POST_WEDDING_REVIEW_KEY)["days"])))
     candidates.extend(_custom_workflow_candidates(db, booking))
     return candidates
 
@@ -5032,6 +5070,8 @@ def run_due_reminders(db: Session, *, today: date | None = None) -> dict:
                 tasks_created += 1
             elif _attempt_reminder(db, booking, reminder):
                 sent += 1
+            elif reminder.status == "skipped":
+                skipped += 1
             else:
                 failed += 1
     result = {"sent": sent, "skipped": skipped, "failed": failed}
@@ -5287,6 +5327,8 @@ def _review_reminder_booking(db: Session, reminder_id: str) -> tuple[ReminderLog
     custom = custom_workflow(db, reminder.reminder_key)
     if custom and _custom_workflow_anchor(db, booking, custom) is None:
         raise HTTPException(409, "This custom workflow is no longer relevant for the booking")
+    if template_key == POST_WEDDING_REVIEW_KEY and not _post_wedding_review_eligible(db, booking):
+        raise HTTPException(409, "This couple has already received a review request or is no longer eligible")
     if template_key.startswith("quote_followup_") and any(
             quote.status == "accepted" for quote in booking.quotes):
         raise HTTPException(409, "The quote has now been accepted, so this follow-up is no longer needed")
@@ -5414,6 +5456,7 @@ def retry_failed_communication(
     db.commit()
     try:
         tracking_token = None if owner_notification else secrets.token_urlsafe(32)
+        email.body = enforce_review_deadline(email.body, booking, email.template_key)
         send_rendered_email(
             booking, profile, email.recipient, email.subject, email.body,
             open_tracking_url=(email_open_url(tracking_token) if tracking_token else None),

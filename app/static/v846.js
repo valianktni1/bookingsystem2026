@@ -91,7 +91,7 @@
   async function sendReviewRequestV846(record, body) {
     try {
       const centre = await api(`/api/bookings/${record.id}/email-centre`);
-      const template = (centre.templates || []).find(item => item.template_key === "review_request");
+      const template = (centre.templates || []).find(item => item.template_key === "post_wedding_review") || (centre.templates || []).find(item => item.template_key === "review_request");
       if (!template) throw new Error("The After-wedding review request template is missing or inactive");
       showModal(
         "Review the review-request email",
@@ -107,7 +107,7 @@
               method: "POST",
               body: JSON.stringify({
                 mode: "template",
-                template_key: "review_request",
+                template_key: template.template_key,
                 subject: value("#v846-review-subject").trim(),
                 body: value("#v846-review-body").trim(),
               }),
@@ -121,7 +121,7 @@
             throw error;
           }
         },
-        `Review the exact wording for ${centre.client_name}. This is never an automatic email.`
+        `Review the exact wording for ${centre.client_name}. This copy is sent only when you press Send review request. The automatic 14-day check skips couples already contacted.`
       );
       setModalButtonV846("Send review request");
     } catch (error) {
@@ -149,7 +149,7 @@
         <article class="${stateData.photos.status === "delivered" ? "complete" : "waiting"}"><i>${stateData.photos.status === "delivered" ? "✓" : "1"}</i><span><small>PHOTOGRAPHS</small><strong>${esc(deliveryLabelV846(stateData.photos, "photos"))}</strong>${deliveryLinkV846(stateData.photos.gallery_url, "gallery")}</span></article>
         <article class="${["delivered", "not_required"].includes(stateData.video.status) ? "complete" : "waiting"}"><i>${["delivered", "not_required"].includes(stateData.video.status) ? "✓" : "2"}</i><span><small>VIDEO / FILMS</small><strong>${esc(deliveryLabelV846(stateData.video, "video"))}</strong>${deliveryLinkV846(stateData.video.video_url, "video")}</span></article>
         <article class="${["delivered", "not_required"].includes(stateData.album.status) ? "complete" : "waiting"}"><i>${["delivered", "not_required"].includes(stateData.album.status) ? "✓" : "3"}</i><span><small>WEDDING ALBUM</small><strong>${esc(deliveryLabelV846(stateData.album, "album"))}</strong>${stateData.album.notes ? `<em>${esc(stateData.album.notes)}</em>` : ""}</span></article>
-        <article class="${stateData.review_request.status === "sent" ? "complete" : "optional"}"><i>${stateData.review_request.status === "sent" ? "✓" : "☆"}</i><span><small>REVIEW REQUEST · OPTIONAL</small><strong>${stateData.review_request.status === "sent" ? `Sent ${fmtDateTime(stateData.review_request.sent_at)}` : "Not sent"}</strong><em>This never blocks completion.</em></span></article>
+        <article class="${stateData.review_request.status === "sent" ? "complete" : "optional"}"><i>${stateData.review_request.status === "sent" ? "✓" : "☆"}</i><span><small>REVIEW REQUEST</small><strong>${stateData.review_request.status === "sent" ? `Sent ${fmtDateTime(stateData.review_request.sent_at)}` : "Not sent"}</strong><em>Normally sent 14 days after the wedding. This never blocks completion.</em></span></article>
       </div>
       ${data.manual_only ? `<div class="v846-manual-note"><strong>Studio Ninja protection remains on</strong><span>Delivery tracking is available here. Any review email must still be sent deliberately through Email client with the usual manual confirmation.</span></div>` : ""}
       <footer><button type="button" class="secondary" data-v846-edit>Update delivery &amp; album</button>${!data.manual_only ? `<button type="button" class="secondary" data-v846-review ${stateData.photos.status !== "delivered" ? "disabled" : ""}>${stateData.review_request.status === "sent" ? "Review & send again" : "Review & send review request"}</button>` : ""}${data.completed ? `<span class="v846-complete-label">✓ Completed and safely retained</span>` : `<span class="v846-complete-label">Completion is controlled by the single Mark wedding complete button above.</span>`}</footer>`;

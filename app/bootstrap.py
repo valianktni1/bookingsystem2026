@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .email_defaults import upgrade_personal_email_defaults
+from .post_wedding_reviews import TEMPLATE_KEY as POST_WEDDING_REVIEW_KEY, SUBJECT as POST_WEDDING_REVIEW_SUBJECT, BODY as POST_WEDDING_REVIEW_BODY
 from .config import get_settings
 from .content import WBM_CONTRACT_BODY, WBM_CONTRACT_TITLE, WBM_CONTRACT_VERSION
 from .enquiry_forms import default_enquiry_form
@@ -206,6 +207,7 @@ A £150 deposit secures your date."""),
     db.commit()
 
     template_rows = {
+        POST_WEDDING_REVIEW_KEY: ("14-day wedding review & awards request", POST_WEDDING_REVIEW_SUBJECT, POST_WEDDING_REVIEW_BODY),
         "quote": ("Quote email", "Your {business_name} quote", "Hi {client_first_name},\n\nThank you for getting in touch. Your quote for {package_name} is {quoted_total}.\n\nYou can review the details, complete your booking form and accept the agreement using your booking link:\n{portal_url}\n\nIf you have any questions, just reply to this email.\n\nMark\n{business_name}\n{business_phone}"),
         "booking_link": ("Booking link", "Your {business_name} booking link", "Hi {client_first_name},\n\nHere is your booking link:\n{portal_url}\n\nPlease complete the booking form and read and accept the agreement. Your date is secured as soon as I receive your first payment.\n\nMark\n{business_name}"),
         "booking_form_reminder": ("Wedding Booking Form reminder", "A quick reminder about your Wedding Booking Form", "Hi {client_first_name},\n\nI hope you are both well. When you have a moment, please complete your Wedding Booking Form using your secure wedding booking link:\n\n[COMPLETE YOUR WEDDING BOOKING FORM]({portal_url})\n\nIt keeps all of the important details together in your wedding file. If you have any questions or need a hand with anything, simply reply to this email.\n\nThanks,\nMark\nWeddings By Mark"),
@@ -235,7 +237,7 @@ A £150 deposit secures your date."""),
             if brand == Brand.IVORY and key in ("final_questionnaire", "enquiry_received", "quote_accepted",
                                                 "booking_form_reminder",
                                                 "new_enquiry_admin", "quote_followup_1",
-                                                "review_request",
+                                                "review_request", POST_WEDDING_REVIEW_KEY,
                                                 "quote_accepted_admin", "booking_form_submitted_admin",
                                                 "final_timings_submitted_admin", "contract_signed_admin",
                                                 "quote_followup_final", "deposit_due_1", "check_in_120", "check_in_30",
@@ -248,7 +250,7 @@ A £150 deposit secures your date."""),
                 EmailTemplate.brand == brand, EmailTemplate.template_key == key
             ))
             if not existing_template and (fresh_install or key in (
-                "contract_completed", "check_in_30", "quote_accepted_admin",
+                POST_WEDDING_REVIEW_KEY, "contract_completed", "check_in_30", "quote_accepted_admin",
                 "booking_form_submitted_admin", "final_timings_submitted_admin",
                 "contract_signed_admin", "booking_form_reminder",
             )):

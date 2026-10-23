@@ -284,11 +284,11 @@ def test_v846_assets_and_manual_controls_are_loaded_last():
     script = (ROOT / "app/static/v846.js").read_text(encoding="utf-8")
     css = (ROOT / "app/static/v846.css").read_text(encoding="utf-8")
     assert "/static/v846.css?v=after-wedding-v8-46" in index
-    assert "/static/v846.js?v=workflow-cleanup-v8-50-2" in index
+    assert "/static/v846.js?v=post-wedding-review-14-days" in index
     assert index.rfind("/static/v846.js") > index.rfind("/static/v845.js")
     assert "Update delivery &amp; album" in script
     assert "Review & send review request" in script
-    assert "This is never an automatic email" in script
+    assert "This copy is sent only when you press Send review request" in script
     assert "They never block Mark wedding complete" in script
     assert "Completion is controlled by the single Mark wedding complete button above." in script
     assert "data-v846-complete" not in script

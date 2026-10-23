@@ -1,0 +1,57 @@
+WEDDINGS BY MARK — 14-DAY MARRIED-LIFE, AWARDS AND REVIEW EMAIL
+
+The approved "Hey Guys" email is sent once, 14 days after the wedding, with
+County Brides first, Facebook reviews second and the supplied Google review
+link third. Both partners are invited to vote separately. The awards wording
+includes the approved "second year running" sentence.
+
+The whole County Brides section, including both-partners voting and the deadline,
+is omitted for sends after 30 April 2027 in Europe/London. The actual sending
+date controls this, not merely the wedding date. Scheduled retries re-render the
+email at send time; retries of retained wording remove the approved expired section.
+Facebook and Google reviews continue after the cutoff. This is a fixed 2027
+campaign; it does not automatically reopen in 2028.
+
+Google: https://g.page/r/CWXyai3xrskCEBM/review
+Facebook: https://www.facebook.com/weddingsbymarkmanchester/reviews/
+County Brides: https://www.countybrides.com/awards/
+
+The new template is "14-day wedding review & awards request" (post_wedding_review).
+It is created safely on existing installations without replacing edited templates.
+It uses {county_brides_request} and {review_request_intro} for the date-dependent
+paragraphs. Keep these placeholders if editing the master template.
+The separate older manual review_request template is retained.
+
+The rule appears in Communications > Workflow Studio under After the wedding.
+Default mode is Automatic, 14 days after wedding. Existing Automatic / Review first /
+Task only / Off controls remain available. No other workflow defaults are changed.
+Manual requests also record the shared review-request status, so an earlier
+manual review email prevents the automatic request from duplicating it.
+Automatic sends update the after-wedding panel and email audit history.
+Deliberately choosing Review & send again still permits a manual resend.
+
+Eligible records: native Weddings By Mark weddings marked confirmed, in progress
+or completed, with a wedding date, not archived, cancelled or paused. Existing
+Studio Ninja/import protection remains intact. This does not enable bulk email
+to old imported records. A previous successful manual or automatic review request
+suppresses the automatic request even if the wedding date is later edited.
+
+Delivery uses the EXISTING reminder service: REMINDERS_ENABLED must be true and
+SMTP configured. The existing delivery window defaults to 09:00-19:00 UK time,
+with the existing scan interval (default six hours). No real emails are sent by
+the deployment script or tests. After deployment the background scheduler sends
+eligible due emails during the configured window.
+The existing seven-day reminder catch-up window applies if the system was down
+on the fourteenth day; much older weddings are not bulk-contacted on startup.
+
+No database schema migration is needed. The approved compressed shared awards
+graphic, payment references, signatures and quote follow-up exclusions remain.
+
+Validation: 19 new tests cover day 13/day 14, duplicate scans, prior manual sends,
+completed and ineligible records, changed dates, existing-template preservation,
+the workflow Off control, UK midnight, cutoff dates, later years, SMTP failure,
+retry across the cutoff, both MIME alternatives and old retained-body retries.
+Regression checks also cover Workflow Studio, custom workflows, manual after-wedding
+actions, quote controls, email attachments, signatures and rendering. Three legacy
+UI/version assertions fail on the untouched original archive too; these are unrelated
+to this change and are not claimed as passing.

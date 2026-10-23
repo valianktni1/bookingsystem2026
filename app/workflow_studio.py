@@ -35,6 +35,10 @@ TRIGGERS = {item["key"]: item for item in TRIGGER_DEFINITIONS}
 
 
 WORKFLOW_DEFINITIONS: tuple[dict, ...] = (
+    {"key": "post_wedding_review", "group": "After the wedding", "label": "Married-life check-in & reviews",
+     "description": "One email 14 days after the wedding. Awards voting is included only through 30 April 2027; Facebook and Google reviews continue afterwards.",
+     "anchor": "wedding_date", "anchor_label": "wedding", "direction": "after",
+     "default_mode": "automatic", "default_days": 14},
     {"key": "quote_followup_1", "group": "Enquiry follow-up", "label": "First quote check-in",
      "description": "A friendly check that the couple received their quote.",
      "anchor": "quote_sent", "anchor_label": "quote sent", "direction": "after",

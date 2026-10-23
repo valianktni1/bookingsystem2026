@@ -9,6 +9,7 @@ from datetime import timedelta
 from email.message import EmailMessage
 from pathlib import Path
 
+from .post_wedding_reviews import review_template_values, enforce_review_deadline
 from .config import get_settings
 from .models import Booking, Brand, BusinessProfile, EmailTemplate
 from .services import payment_reference
@@ -179,6 +180,7 @@ def template_values(booking: Booking, profile: BusinessProfile, portal_url: str 
         "bank_sort_code": bank.get("sort_code") or "as shown on your invoice",
         "bank_account_number": bank.get("account_number") or "as shown on your invoice",
     }
+    values.update(review_template_values(booking))
     values.update(extra_values or {})
     return values
 
@@ -413,6 +415,7 @@ def build_email_message(booking: Booking, profile: BusinessProfile, subject: str
                         open_tracking_url: str | None = None,
                         template_key: str | None = None) -> EmailMessage:
     """Create a branded multipart email with embedded, client-safe PNG artwork."""
+    body = enforce_review_deadline(body, booking, template_key)
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = f"{profile.display_name} <{username}>"
@@ -481,6 +484,7 @@ def render_template_content(booking: Booking, profile: BusinessProfile,
     body = ensure_client_account_link(
         render_template(template.body, values), booking, portal_url
     )
+    body = enforce_review_deadline(body, booking, template.template_key)
     return subject, body
 
 
@@ -489,7 +493,7 @@ def send_rendered_email(booking: Booking, profile: BusinessProfile, recipient: s
                         open_tracking_url: str | None = None,
                         reply_to: str | None = None,
                         template_key: str | None = None) -> None:
-    """Send a previously rendered, audit-retained message exactly as written."""
+    """Retry retained wording while enforcing the expired awards deadline."""
     username, _ = smtp_credentials(booking.brand)
     if not smtp_ready(booking.brand):
         raise RuntimeError(f"SMTP is not configured for {profile.display_name}")
@@ -503,10 +507,6 @@ def send_rendered_email(booking: Booking, profile: BusinessProfile, recipient: s
 def preview_template_email(booking: Booking, profile: BusinessProfile, template: EmailTemplate,
                            portal_url: str | None = None) -> tuple[str, str, str]:
     """Render the exact subject, text and branded HTML without sending anything."""
-    values = template_values(booking, profile, portal_url)
-    subject = render_template(template.subject, values)
-    body = ensure_client_account_link(
-        render_template(template.body, values), booking, portal_url
-    )
+    subject, body = render_template_content(booking, profile, template, portal_url)
     return subject, _plain_body(body), _email_html(body, booking, profile, template_key=template.template_key)
 
