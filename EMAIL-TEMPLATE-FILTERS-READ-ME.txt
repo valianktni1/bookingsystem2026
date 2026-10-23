@@ -1,0 +1,31 @@
+EMAIL TEMPLATE FILTERS
+
+The Email templates panel now has All emails, Automatic, Manual, Workflow actions
+and Inactive buttons, with category counts. Find a template searches names,
+subjects and internal keys within the chosen category. Clear filters restores
+the full list for the selected business. The current filter and search survive
+list refreshes, including saving an edit, within the current browser page.
+
+Classification comes from the API's existing usage_kind labels, including
+Workflow Studio and custom workflow choices. Inactive templates are grouped
+separately. An active template with no recognised label is shown under Manual.
+The display filter makes no API writes and does not change scheduling or sending.
+Agreement templates, SMS templates and the separate quote-template manager keep
+their existing controls.
+
+Controls use 16px text and 48px minimum button heights, visible keyboard focus,
+pressed-state announcements, a live result count and a clear empty state.
+The selected category meets at least 4.5:1 text contrast in light and dark themes.
+Email-template names and their Preview/Edit/Delete controls are also larger.
+
+Validation: the browser test loads the actual communications renderer and styles
+against read-only API fixtures. It checks all categories/counts, search, empty
+and reset states, inactive/fallback classification, escaped names, brand filtering,
+selection across refreshes, existing preview/edit actions, keyboard controls,
+contrast, 48px controls and no overflow at 320, 390, 768 and 1440px in both themes.
+JavaScript syntax checks also passed. No real emails were sent.
+
+Deploy using DEPLOY-EMAIL-TEMPLATE-FILTERS.sh. It backs up the existing database,
+keeps the old image for rollback, builds a pinned revision, checks the new assets
+and their loading order, restarts only the app and verifies it is responding.
+No database schema change is required. Reload Communications after deployment.
