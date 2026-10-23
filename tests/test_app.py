@@ -296,9 +296,9 @@ def test_phase_two_b_flow(monkeypatch):
         assert "guest QR-code uploads" in wedding_contract["body"]
         quote_template = next(row for row in templates.json()["templates"]
                               if row["brand"] == "wbm" and row["template_key"] == "quote")
-        assert "planning a wedding can feel overwhelming" in quote_template["body"]
-        assert "[VIEW YOUR FULL QUOTE HERE]({portal_url})" in quote_template["body"]
-        assert "{bank_account_name}" in quote_template["body"]
+        assert "I've put your quote together below" in quote_template["body"]
+        assert "[View your quote]({portal_url})" in quote_template["body"]
+        assert "{payment_reference}" in quote_template["body"]
         reminder_keys = {row["template_key"] for row in templates.json()["templates"]
                          if row["brand"] == "wbm" and row["is_active"]}
         assert {"quote_followup_1", "quote_followup_final", "deposit_due_1", "check_in_120",
@@ -327,7 +327,7 @@ def test_phase_two_b_flow(monkeypatch):
         preview = client.get(f"/api/communications/templates/{quote_template['id']}/preview")
         assert preview.status_code == 200
         assert "/api/businesses/wbm/email-signature/assets/logo" in preview.json()["html"]
-        assert ">VIEW YOUR FULL QUOTE HERE</a>" in preview.json()["html"]
+        assert ">View your quote</a>" in preview.json()["html"]
         assert ">https://booking.weddingsbymark.uk/client/example-preview-link</a>" not in preview.json()["html"]
         assert preview.json()["test_recipient"] == "mark@perfectweddingsbymark.uk"
         custom_template = client.post("/api/communications/templates", json={

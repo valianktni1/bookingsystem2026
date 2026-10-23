@@ -8,7 +8,7 @@ def test_light_wbm_email_preserves_links_plain_text_and_logo():
     message = build_email_message(_booking(), _profile(), 'Your wedding quote', body, 'mark@example.com', open_tracking_url='https://example.com/open.gif')
     markup = message.get_body(preferencelist=('html',)).get_content()
     assert 'content="light dark"' in markup
-    assert 'background:#f8f5ef;color:#45433e' in markup
+    assert 'background:#ffffff;color:#45433e' in markup
     assert 'background:#242321' not in markup
     assert 'class="wbm-email-message" bgcolor="#ffffff"' in markup
     assert 'https://example.com/client/test?tab=quote' in markup

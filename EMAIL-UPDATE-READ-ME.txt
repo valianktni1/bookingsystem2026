@@ -1,0 +1,48 @@
+WEDDINGS BY MARK — PERSONAL EMAIL UPDATE
+Prepared 23 October 2026 from bookingsystem2026-main.zip.
+
+WHAT CHANGED
+The quote and two quote follow-ups use the shorter wording shown in the preview.
+Weddings By Mark emails fill the available message width, with 5px text margins.
+Logo and contact details remain. Awards artwork is omitted only for the two
+quote follow-up template keys (quote_followup_1 and quote_followup_final).
+Manual emails, quotes and other emails retain the awards according to the
+existing signature settings. Selecting a follow-up template manually uses that
+template's simpler presentation too. Ivory Digital keeps its existing layout.
+
+PAYMENTS AND EXISTING DATA
+The quote still uses {payment_reference} from the existing booking logic.
+No payment-reference calculation, payment deadline, automation schedule, bank
+account, attachment handling or signature setting has been changed.
+Existing saved templates upgrade on application startup only when BOTH the
+subject and body match the former shipped defaults. Personally edited wording
+and inactive flags remain intact. Previously saved per-booking quote wording
+is also retained. Check Communications after deployment if you have custom text.
+No database schema migration is required.
+
+INSTALLATION
+This is an updated SOURCE REPOSITORY, not a live deployment or database backup.
+Merge the changed app files and new app/email_defaults.py into your source repo,
+then build and deploy that updated revision using your existing deployment process.
+The historical DEPLOY scripts in this repo pin older commits; running one of
+those unchanged will NOT deploy this email update. Use the new source revision.
+Keep your existing .env, database, stored files and business settings.
+The included patch file shows every source/test change against your uploaded ZIP.
+Before deployment, use your normal backup process. After deployment, check the
+quote and follow-up previews and send yourself a test via Communications.
+
+VALIDATION
+41 focused Python checks passed, covering the updated defaults and migration,
+actual MIME parts, manual emails, quote sending, attachments, reference values,
+signature settings, previews, retries and individual follow-up controls.
+Browser checks passed at 320, 390, 412, 600, 768, 1280 and 1440px in light/dark
+mode, plus quoted replies with styles removed and long text. Separate checks
+verified all three actual email drafts at 320, 390, 768 and 1440px, with 5px
+text margins and no horizontal overflow.
+The broad legacy tests/test_app.py suite has two pre-existing failures: an old
+logo filename assertion and an old health/build response assertion. Both were
+reproduced on an untouched copy of the supplied ZIP. Three other checks passed.
+No real emails were sent. No live system was changed.
+
+Email apps may impose additional margins or alter colours; browser rendering
+does not guarantee identical rendering in every version of Outlook/Gmail/Apple Mail.

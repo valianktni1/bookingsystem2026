@@ -14,6 +14,9 @@ from .models import Booking, Brand, BusinessProfile, EmailTemplate
 from .services import payment_reference
 
 
+QUOTE_FOLLOWUP_KEYS = frozenset({"quote_followup_1", "quote_followup_final"})
+
+
 BRANDING_DIR = Path(__file__).parent / "static" / "branding"
 BRAND_ASSETS = {
     Brand.WBM: {
@@ -292,20 +295,21 @@ def _plain_body(body: str) -> str:
 
 
 def _email_html(body: str, booking: Booking, profile: BusinessProfile,
-                open_tracking_url: str | None = None) -> str:
+                open_tracking_url: str | None = None,
+                template_key: str | None = None) -> str:
     assets = BRAND_ASSETS[booking.brand]
     light_email = booking.brand == Brand.WBM
-    outer = "#f8f5ef" if light_email else "#f3f1ed"
-    footer_bg = "#f8f5ef" if light_email else "#242321"
+    outer = "#ffffff" if light_email else "#f3f1ed"
+    footer_bg = "#ffffff" if light_email else "#242321"
     footer_ink = "#45433e" if light_email else "#ffffff"
     # Mobile-first inline spacing also works when a reply strips the head/style.
-    # Desktop framing is progressive enhancement; the recipient controls their
+    # The email uses all available width; the recipient controls their
     # mail app's own gutters, quoted-reply indentation and forced colour changes.
-    wrap_padding = "20px 0" if light_email else "24px 10px"
-    message_padding = "24px 16px" if light_email else "32px 32px 28px"
-    header_padding = "20px 16px" if light_email else "24px 28px"
-    signature_padding = "18px 16px" if light_email else "18px 28px"
-    card_style = ("width:100%;max-width:640px;background:#ffffff;table-layout:fixed;"
+    wrap_padding = "0" if light_email else "24px 10px"
+    message_padding = "22px 5px" if light_email else "32px 32px 28px"
+    header_padding = "18px 5px" if light_email else "24px 28px"
+    signature_padding = "12px 5px" if light_email else "18px 28px"
+    card_style = ("width:100%;background:#ffffff;table-layout:fixed;"
                   "border:0;border-radius:0;overflow:hidden" if light_email else
                   "width:100%;max-width:640px;background:#ffffff;border-radius:14px;"
                   "overflow:hidden;border:1px solid #e7e2d8")
@@ -319,19 +323,6 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
       .wbm-email-message,.wbm-email-signature { overflow-wrap:anywhere; word-break:normal; }
       .wbm-email-message a { color:#76591f; }
       .wbm-email-signature a { color:inherit; }
-      @media (min-width:641px) {
-        .wbm-email-wrap { padding:24px 10px!important; }
-        .wbm-email-card { border:1px solid #e7e2d8!important; border-radius:14px!important; }
-        .wbm-email-header { padding:24px 28px!important; }
-        .wbm-email-message { padding:32px 32px 28px!important; }
-        .wbm-email-signature { padding:18px 28px!important; }
-      }
-      @media (max-width:640px) {
-        .wbm-email-wrap { padding:0!important; }
-        .wbm-email-card { width:100%!important; max-width:100%!important; border:0!important; border-radius:0!important; }
-        .wbm-email-message { padding:24px 16px!important; }
-        .wbm-email-awards { padding:20px 16px!important; }
-      }
       @media (prefers-color-scheme:dark) {
         .wbm-email-outer,.wbm-email-wrap { background-color:#17211d!important; }
         .wbm-email-card,.wbm-email-message,.wbm-email-awards { background-color:#222e2a!important; color:#edf5f1!important; border-color:#485e51!important; }
@@ -345,24 +336,33 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
   </head>""" if light_email else ""
     signature = email_signature_config(profile)
     logo_asset = email_signature_asset(profile, "logo")
-    awards_asset = email_signature_asset(profile, "awards")
+    awards_asset = (None if light_email and template_key in QUOTE_FOLLOWUP_KEYS
+                    else email_signature_asset(profile, "awards"))
+    logo_margin = "0" if light_email else "0 auto"
     logo = (
         f'<img src="cid:{logo_asset["cid"]}" alt="{html.escape(profile.display_name)}" '
         f'style="display:block;max-width:{"280px" if booking.brand == Brand.IVORY else "100%"};'
-        f'max-height:{"94px" if booking.brand == Brand.IVORY else "150px"};width:{"auto" if booking.brand == Brand.IVORY else "245px"};height:auto;margin:0 auto;border:0">'
+        f'max-height:{"94px" if booking.brand == Brand.IVORY else "150px"};width:{"auto" if booking.brand == Brand.IVORY else "175px"};height:auto;margin:{logo_margin};border:0">'
         if logo_asset else
         f'<strong style="font-family:Arial,sans-serif;font-size:24px;color:#2d2b28">{html.escape(profile.display_name)}</strong>'
     )
+    alignment = "left" if light_email else "center"
+    header_bg = "#ffffff" if light_email else assets["soft"]
+    header_border = "1px solid #e7e2d8" if light_email else f"3px solid {assets['accent']}"
+    awards_padding = "16px 5px" if light_email else "22px 28px 26px"
+    awards_width = "240px" if light_email else "340px"
+    awards_margin = "0" if light_email else "0 auto"
+    awards_heading = "display:none;" if light_email else ""
     awards = ""
     if awards_asset:
         awards = f"""
           <tr>
-            <td class="wbm-email-awards" bgcolor="#ffffff" style="padding:22px 28px 26px;border-top:1px solid #ece6da;text-align:center;background:#ffffff">
-              <div style="font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.4px;color:#7c6a49;font-weight:bold;margin-bottom:12px">
+            <td class="wbm-email-awards" bgcolor="#ffffff" style="padding:{awards_padding};border-top:1px solid #ece6da;text-align:{alignment};background:#ffffff">
+              <div style="{awards_heading}font-family:Arial,sans-serif;font-size:11px;line-height:16px;letter-spacing:1.4px;color:#7c6a49;font-weight:bold;margin-bottom:12px">
                 PROUDLY AWARD-WINNING
               </div>
               <img src="cid:{awards_asset['cid']}" width="340" alt="{html.escape(profile.display_name)} awards"
-                   style="display:block;width:100%;max-width:340px;height:auto;margin:0 auto;border:0">
+                   style="display:block;width:100%;max-width:{awards_width};height:auto;margin:{awards_margin};border:0">
             </td>
           </tr>"""
     signature_html = "<br>".join(html.escape(line) for line in signature["text"].splitlines())
@@ -383,7 +383,7 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"
                  class="wbm-email-card" bgcolor="#ffffff" style="{card_style}">
             <tr>
-              <td class="wbm-email-soft wbm-email-header" bgcolor="{assets['soft']}" align="center" style="padding:{header_padding};background:{assets['soft']};border-bottom:3px solid {assets['accent']}">
+              <td class="wbm-email-soft wbm-email-header" bgcolor="{header_bg}" align="{alignment}" style="padding:{header_padding};background:{header_bg};border-bottom:{header_border}">
                 {logo}
               </td>
             </tr>
@@ -393,7 +393,7 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
               </td>
             </tr>
             <tr>
-              <td class="wbm-email-soft wbm-email-signature" bgcolor="{footer_bg}" style="padding:{signature_padding};overflow-wrap:anywhere;word-break:normal;background:{footer_bg};color:{footer_ink};text-align:center;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px">
+              <td class="wbm-email-soft wbm-email-signature" bgcolor="{footer_bg}" style="padding:{signature_padding};overflow-wrap:anywhere;word-break:normal;background:{footer_bg};color:{footer_ink};text-align:{alignment};font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px">
                 {signature_html}
               </td>
             </tr>
@@ -410,7 +410,8 @@ def _email_html(body: str, booking: Booking, profile: BusinessProfile,
 def build_email_message(booking: Booking, profile: BusinessProfile, subject: str, body: str,
                         username: str, recipient: str | None = None,
                         reply_to: str | None = None,
-                        open_tracking_url: str | None = None) -> EmailMessage:
+                        open_tracking_url: str | None = None,
+                        template_key: str | None = None) -> EmailMessage:
     """Create a branded multipart email with embedded, client-safe PNG artwork."""
     message = EmailMessage()
     message["Subject"] = subject
@@ -423,10 +424,12 @@ def build_email_message(booking: Booking, profile: BusinessProfile, subject: str
         plain = f"{plain.rstrip()}\n\n{signature_text}"
     message.set_content(plain)
     message.add_alternative(
-        _email_html(body, booking, profile, open_tracking_url), subtype="html"
+        _email_html(body, booking, profile, open_tracking_url, template_key), subtype="html"
     )
     html_part = message.get_payload()[-1]
     for kind in ("logo", "awards"):
+        if kind == "awards" and booking.brand == Brand.WBM and template_key in QUOTE_FOLLOWUP_KEYS:
+            continue
         asset = email_signature_asset(profile, kind)
         if asset:
             html_part.add_related(asset["data"] if "data" in asset else asset["path"].read_bytes(), maintype="image", subtype=asset["subtype"],
@@ -453,7 +456,7 @@ def send_template_email(booking: Booking, profile: BusinessProfile, template: Em
     )
     message = build_email_message(booking, profile, subject, body, username,
                                   recipient=recipient, reply_to=reply_to,
-                                  open_tracking_url=open_tracking_url)
+                                  open_tracking_url=open_tracking_url, template_key=template.template_key)
     for attachment in attachments or []:
         maintype, subtype = attachment["content_type"].split("/", 1)
         message.add_attachment(attachment["data"], maintype=maintype, subtype=subtype,
@@ -484,14 +487,15 @@ def render_template_content(booking: Booking, profile: BusinessProfile,
 def send_rendered_email(booking: Booking, profile: BusinessProfile, recipient: str,
                         subject: str, body: str,
                         open_tracking_url: str | None = None,
-                        reply_to: str | None = None) -> None:
+                        reply_to: str | None = None,
+                        template_key: str | None = None) -> None:
     """Send a previously rendered, audit-retained message exactly as written."""
     username, _ = smtp_credentials(booking.brand)
     if not smtp_ready(booking.brand):
         raise RuntimeError(f"SMTP is not configured for {profile.display_name}")
     message = build_email_message(
         booking, profile, subject, body, username, recipient=recipient,
-        open_tracking_url=open_tracking_url, reply_to=reply_to,
+        open_tracking_url=open_tracking_url, reply_to=reply_to, template_key=template_key,
     )
     send_email_message(message, booking.brand)
 
@@ -504,5 +508,5 @@ def preview_template_email(booking: Booking, profile: BusinessProfile, template:
     body = ensure_client_account_link(
         render_template(template.body, values), booking, portal_url
     )
-    return subject, _plain_body(body), _email_html(body, booking, profile)
+    return subject, _plain_body(body), _email_html(body, booking, profile, template_key=template.template_key)
 

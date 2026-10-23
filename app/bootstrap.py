@@ -4,6 +4,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .email_defaults import upgrade_personal_email_defaults
 from .config import get_settings
 from .content import WBM_CONTRACT_BODY, WBM_CONTRACT_TITLE, WBM_CONTRACT_VERSION
 from .enquiry_forms import default_enquiry_form
@@ -457,6 +458,13 @@ Weddings By Mark"""
             "use the invoice number shown in your wedding account as the payment reference",
             "use **{payment_reference}** as your bank-transfer payment reference",
         )
+
+    # Run after the older quote upgrades. Matching both fields protects edits.
+    for personal_template in db.scalars(select(EmailTemplate).where(
+            EmailTemplate.brand == Brand.WBM,
+            EmailTemplate.template_key.in_(("quote", "quote_followup_1", "quote_followup_final")),
+    )).all():
+        upgrade_personal_email_defaults(personal_template)
 
     booking_link_template = db.scalar(select(EmailTemplate).where(
         EmailTemplate.brand == Brand.WBM,

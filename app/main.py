@@ -5418,6 +5418,7 @@ def retry_failed_communication(
             booking, profile, email.recipient, email.subject, email.body,
             open_tracking_url=(email_open_url(tracking_token) if tracking_token else None),
             reply_to=(booking.client.email if owner_notification else None),
+            template_key=email.template_key,
         )
     except Exception as exc:
         email.error = str(exc)[:2000]
