@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 cd "${WBM_STACK_DIR:-/mnt/apps/dockge/data/bookingsystem2026}"
 umask 077
-RELEASE_COMMIT="7e42fe49dc824b7f47f62f10bf0985fd3529eaba"
+RELEASE_COMMIT="e556d0ac0759ae1a6811f88802bec1965d788ef1"
 
 if [[ ! -f .env ]]; then
   echo 'STOP: .env is missing. Run this in the existing live BookingSystem2026 stack.'
@@ -67,6 +67,9 @@ assert QUOTE_FOLLOWUP_KEYS == {"quote_followup_1", "quote_followup_final"}
 assert "{payment_reference}" in PERSONAL_EMAIL_DEFAULTS["quote"][1]
 assert "I am thrilled" not in PERSONAL_EMAIL_DEFAULTS["quote"][1]
 assert "22px 5px" in Path("/app/app/email_service.py").read_text()
+awards = Path("/app/app/static/branding/weddings-by-mark-awards.jpg")
+assert 0 < awards.stat().st_size <= 129000
+assert awards.read_bytes().startswith(b"\xff\xd8")
 print("Personal email update imports and feature checks passed")
 '
 
@@ -82,6 +85,9 @@ from pathlib import Path
 health = json.load(urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=4))
 assert health["status"] == "ok"
 assert "22px 5px" in Path("/app/app/email_service.py").read_text()
+awards = Path("/app/app/static/branding/weddings-by-mark-awards.jpg")
+assert 0 < awards.stat().st_size <= 129000
+assert awards.read_bytes().startswith(b"\xff\xd8")
 from app.email_defaults import PERSONAL_EMAIL_DEFAULTS
 assert "{payment_reference}" in PERSONAL_EMAIL_DEFAULTS["quote"][1]
 ' > /dev/null 2>&1; then
