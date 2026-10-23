@@ -26,7 +26,7 @@ BRANDING_DIR = Path(__file__).parent / "static" / "branding"
 BRAND_ASSETS = {
     Brand.WBM: {
         "logo": BRANDING_DIR / "weddings-by-mark-logo.png",
-        "awards": BRANDING_DIR / "weddings-by-mark-awards.png",
+        "awards": BRANDING_DIR / "weddings-by-mark-awards.jpg",
         "accent": colors.HexColor("#b6924f"),
         "ink": colors.HexColor("#24211c"),
         "pale": colors.HexColor("#f7f3eb"),

@@ -22,7 +22,7 @@ BRAND_ASSETS = {
     Brand.WBM: {
         "logo": BRANDING_DIR / "weddings-by-mark-logo.png",
         "logo_cid": "weddings-by-mark-logo",
-        "awards": BRANDING_DIR / "weddings-by-mark-awards.png",
+        "awards": BRANDING_DIR / "weddings-by-mark-awards.jpg",
         "awards_cid": "weddings-by-mark-awards",
         "accent": "#b6924f",
         "soft": "#f8f5ef",
