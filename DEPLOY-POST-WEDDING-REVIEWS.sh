@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 cd "${WBM_STACK_DIR:-/mnt/apps/dockge/data/bookingsystem2026}"
 umask 077
-RELEASE_COMMIT="504fd5eb10e499d7583871c6abba056accfd5959"
+RELEASE_COMMIT="0cabf01fb5d804a366cff50479cab8b32d261cec"
 
 if [[ ! -f .env ]]; then
   echo 'STOP: .env is missing. Run this in the existing live BookingSystem2026 stack.'
@@ -80,6 +80,12 @@ example = SimpleNamespace(brand="wbm", event_date=date(2027, 4, 16))
 assert "both vote separately" in review_template_values(example, today=date(2027, 4, 30))["county_brides_request"]
 assert not review_template_values(example, today=date(2027, 5, 1))["county_brides_request"]
 assert GOOGLE_REVIEW_URL == "https://g.page/r/CWXyai3xrskCEBM/review"
+from datetime import timedelta
+from app.main import template_preview_booking
+from app.models import Brand
+from app.business_time import business_today
+preview_booking = template_preview_booking(None, Brand.WBM, TEMPLATE_KEY)
+assert preview_booking.event_date == business_today() - timedelta(days=14)
 print("Post-wedding review email imports, 14-day timing and voting deadline checks passed")
 '
 
