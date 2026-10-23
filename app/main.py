@@ -3247,17 +3247,22 @@ def list_templates(brand: Brand | None = None, _: Admin = Depends(current_admin)
                            "body": x.body, "is_active": x.is_active} for x in contracts]}
 
 
-def template_preview_booking(db: Session, brand: Brand) -> Booking:
-    booking = db.scalar(select(Booking).options(selectinload(Booking.client))
+def template_preview_booking(db: Session, brand: Brand,
+                             template_key: str | None = None) -> Booking:
+    # This template represents a wedding that has already happened. Do not
+    # borrow a future client's date or mutate a real record to build a preview.
+    post_wedding_example = brand == Brand.WBM and template_key == POST_WEDDING_REVIEW_KEY
+    booking = None if post_wedding_example else db.scalar(select(Booking).options(selectinload(Booking.client))
                         .where(Booking.brand == brand)
                         .order_by(Booking.created_at.desc()).limit(1))
     if booking:
         return booking
     wedding = brand == Brand.WBM
     example = Booking(brand=brand, kind=RecordKind.WEDDING if wedding else RecordKind.DIGITAL,
-                      status=RecordStatus.ENQUIRY,
+                      status=RecordStatus.COMPLETED if post_wedding_example else RecordStatus.ENQUIRY,
                       title="Sophie & James" if wedding else "Example Website Client",
-                      event_date=date.today() + timedelta(days=180) if wedding else None,
+                      event_date=((business_today() - timedelta(days=14) if post_wedding_example
+                                   else date.today() + timedelta(days=180)) if wedding else None),
                       venue_or_project="Peckforton Castle" if wedding else "Website design project",
                       package_name="Gold Package" if wedding else "Website Design",
                       quoted_total=Decimal("899") if wedding else Decimal("399"),
@@ -3276,7 +3281,7 @@ def preview_template(template_id: str, _: Admin = Depends(current_admin), db: Se
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == template.brand))
     if not profile:
         raise HTTPException(404, "Business profile not found")
-    booking = template_preview_booking(db, template.brand)
+    booking = template_preview_booking(db, template.brand, template.template_key)
     portal_url = f"{settings.app_url.rstrip('/')}/client/example-preview-link"
     subject, body, email_html = preview_template_email(booking, profile, template, portal_url)
     email_html = _email_preview_asset_urls(email_html, profile)
@@ -3294,7 +3299,7 @@ def test_template(template_id: str, payload: TemplateTestIn, admin: Admin = Depe
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == template.brand))
     if not profile:
         raise HTTPException(404, "Business profile not found")
-    booking = template_preview_booking(db, template.brand)
+    booking = template_preview_booking(db, template.brand, template.template_key)
     try:
         subject, _ = send_template_email(
             booking, profile, template,

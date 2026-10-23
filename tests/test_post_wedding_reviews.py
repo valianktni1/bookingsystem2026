@@ -189,3 +189,37 @@ def test_rendered_email_retry_enforces_deadline_in_both_mime_parts(setup,monkeyp
         emails.send_rendered_email(b,profile,b.client.email,reviews.SUBJECT,body,template_key=reviews.TEMPLATE_KEY)
     for kind in ('plain','html'):
         assert reviews.COUNTY_BRIDES_URL not in sent[0].get_body(preferencelist=(kind,)).get_content()
+
+
+@pytest.mark.parametrize('today,has_voting',[
+    (date(2026,10,23),True),(date(2027,4,30),True),(date(2027,5,1),False),
+])
+def test_communications_preview_and_test_use_past_example_not_latest_future_booking(setup,monkeypatch,today,has_voting):
+    sent,client=setup;freeze(monkeypatch,today)
+    assert client.post('/api/auth/login',json={
+        'email':'mark@example.com','password':'SecureTestPassword!123',
+    }).status_code==200
+    future_date=today+timedelta(days=180)
+    with SessionLocal() as db:
+        b=wedding(db,future_date)
+        booking_id=b.id
+        template=db.scalar(select(EmailTemplate).where(EmailTemplate.template_key==reviews.TEMPLATE_KEY))
+        template_id=template.id
+        example=main.template_preview_booking(db,Brand.WBM,reviews.TEMPLATE_KEY)
+        assert example.event_date==today-timedelta(days=14)
+        assert example.status==RecordStatus.COMPLETED
+        assert main.template_preview_booking(db,Brand.WBM,'quote').id==booking_id
+    preview=client.get(f'/api/communications/templates/{template_id}/preview')
+    assert preview.status_code==200
+    assert preview.json()['body'].startswith('Hey Guys,')
+    assert (reviews.COUNTY_BRIDES_URL in preview.json()['html'])==has_voting
+    assert ('both vote separately' in preview.json()['body'])==has_voting
+    result=client.post(f'/api/communications/templates/{template_id}/test',json={'recipient':'mark@example.com'})
+    assert result.status_code==200,result.text
+    assert len(sent)==1 and sent[0]['To']=='mark@example.com'
+    assert (reviews.COUNTY_BRIDES_URL in text(sent[0]))==has_voting
+    with SessionLocal() as db:
+        b=db.get(Booking,booking_id)
+        assert b.event_date==future_date and b.status==RecordStatus.CONFIRMED
+        assert not b.workflow_state['after_wedding'].get('review_request')
+        assert not db.scalar(select(EmailLog.id).where(EmailLog.booking_id==booking_id))
