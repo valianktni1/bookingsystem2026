@@ -77,7 +77,21 @@
     try {
       const res=await resources(),sent=latestEmailLog(d,'quote')?.status==='sent';
       let chosen=null;
-      showModal(sent?'Edit sent quote':'Prepare quote',`<label class="full">Quote template<select id="v857-offer-choice"><option value="">Current quote / choose manually</option>${options(res.templates)}</select></label><div class="full" id="v857-offer-fields">${fields(res,d.quote_preparation||{})}</div>`,async()=>{
+      const compact=r.brand==='wbm'&&r.kind==='wedding'&&!r.legacy_source;
+      function updateSummary(){
+        if(!compact)return;
+        const packages=res.catalog.packages.filter(p=>selected('offer-package').includes(p.id));
+        const charges=name=>selected(name).reduce((sum,id)=>sum+Number($(`[data-v857-price="${name}-${id}"]`,$('#modal')).value||0),0);
+        const adjustment=charges('offer-required')-charges('offer-discount');
+        const bank=$('#offer-bank');
+        const count=(n,singular,plural)=>`${n} ${n===1?singular:plural}`;
+        $('#v878-offer-summary').innerHTML=`<h3>${esc(chosen?.name||'Current quote choices')}</h3><ul>${packages.map(p=>`<li><span>${esc(p.name)}</span><strong>${money(Number(p.price)+adjustment)}</strong></li>`).join('')||'<li>Choose at least one package below.</li>'}</ul><p>${count(selected('offer-optional').filter(id=>!selected('offer-required').includes(id)).length,'optional extra','optional extras')} · ${count(selected('offer-required').length,'compulsory extra','compulsory extras')} · ${count(selected('offer-discount').length,'discount','discounts')}</p><p><strong>Payment account:</strong> ${esc(bank.options[bank.selectedIndex]?.textContent||'Keep saved account')}</p><small>Prices include compulsory extras and discounts. Optional extras are added only if the couple chooses them.</small>`;
+      }
+      function offerFields(offer){
+        if(!compact)return fields(res,offer);
+        return `<section class="v878-offer-summary" id="v878-offer-summary" aria-live="polite"></section><details class="v878-customise" ${chosen||res.templates.length?'':'open'}><summary>Customise this quote</summary>${fields(res,offer)}</details>`;
+      }
+      showModal(sent?'Edit sent quote':'Prepare quote',`<label class="full">Quote template<select id="v857-offer-choice"><option value="">Current quote / choose manually</option>${options(res.templates)}</select></label><div class="full" id="v857-offer-fields">${offerFields(d.quote_preparation||{})}</div>`,async()=>{
         const payload=collect();
         if(chosen){payload.email_subject=chosen.subject;payload.email_body=chosen.body}
         await api(`/api/bookings/${r.id}/quote/preparation`,{method:'PUT',body:JSON.stringify(payload)});
@@ -86,7 +100,8 @@
         if(!sent)await reviewAndSendQuoteEmail(r,body);
       },sent?'Changes update the existing quote link. Accepted quotes remain locked.':'Choose what this couple can see, then review the email before sending.');
       $('#dynamic-form footer .primary').textContent=sent?'Save quote changes':'Save quote & review email';
-      $('#v857-offer-choice').onchange=e=>{chosen=res.templates.find(x=>x.id===e.target.value)||null;$('#v857-offer-fields').innerHTML=fields(res,chosen||d.quote_preparation||{})};
+      $('#v857-offer-choice').onchange=e=>{chosen=res.templates.find(x=>x.id===e.target.value)||null;$('#v857-offer-fields').innerHTML=offerFields(chosen||d.quote_preparation||{});updateSummary()};
+      if(compact){$('#v857-offer-fields').addEventListener('change',updateSummary);$('#v857-offer-fields').addEventListener('input',updateSummary);updateSummary()}
     }catch(e){error(e)}
   };
   async function editBanks(){
@@ -103,4 +118,5 @@
     $('#content').insertAdjacentHTML('afterbegin','<section class="panel v857-toolbar"><div><h2>Bank accounts for new quotes</h2><p>Choose your current or new business account when preparing a quote.</p></div><button class="primary" id="v857-banks">Manage two bank accounts</button></section>');$('#v857-banks').onclick=editBanks;
   }return result};
 })();
+
 

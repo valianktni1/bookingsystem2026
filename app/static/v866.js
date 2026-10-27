@@ -75,7 +75,7 @@
       const rows=[...(d.messages||[])].sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.id||'').localeCompare(String(a.id||''))).slice(0,3);
       host.innerHTML=rows.length?rows.map(m=>`<button type="button" class="v866-message"><strong>${esc(m.subject||'(No subject)')}</strong><small>${m.direction==='received'?'Received':'Sent'} · ${esc(fmtDateTime(m.date))}</small><span>Open conversation →</span></button>`).join(''):'<p>No linked correspondence yet.</p>';
       if(d.incoming_error)host.insertAdjacentHTML('beforeend','<p>Some mailbox messages could not be loaded. Open Messages for details.</p>');
-      host.querySelectorAll('button').forEach(b=>b.onclick=()=>selectRecordTab(r,'Emails',true));
+      host.querySelectorAll('button').forEach((b,index)=>b.onclick=()=>window.WBMFlowV878?window.WBMFlowV878.openMessage(r,rows[index].id):selectRecordTab(r,'Emails',true));
     }).catch(()=>{if(host.isConnected)host.innerHTML='<p>Recent messages could not be loaded. Open Messages to retry.</p>';});
   };
   const select=selectRecordTab;
@@ -94,3 +94,4 @@
   let pending=false;
   new MutationObserver(()=>{if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;const drawer=document.querySelector('#drawer');if(drawer&&!drawer.classList.contains('hidden')&&!drawer.querySelector('[data-wbm-appearance]'))decorate(state.current);});}).observe(document.querySelector('#drawer'),{childList:true});
 })();
+

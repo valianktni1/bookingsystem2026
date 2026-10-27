@@ -263,7 +263,7 @@ def register_mail_routes(app: FastAPI) -> None:
             EmailLog.status == "sent",
             EmailLog.template_key.notin_(tuple(OWNER_NOTIFICATION_KEYS)),
             func.lower(EmailLog.recipient).in_(client_emails),
-        ).order_by(EmailLog.sent_at).limit(limit)).all()
+        ).order_by(EmailLog.sent_at.desc(), EmailLog.id.desc()).limit(limit)).all()
         for row in logs:
             sent.append({
                 "id": f"email-log:{row.id}",
@@ -295,7 +295,7 @@ def register_mail_routes(app: FastAPI) -> None:
             MailboxReply.brand == booking.brand,
             MailboxReply.status == "sent",
             func.lower(MailboxReply.recipient).in_(client_emails),
-        ).order_by(MailboxReply.sent_at).limit(limit)).all()
+        ).order_by(MailboxReply.sent_at.desc(), MailboxReply.id.desc()).limit(limit)).all()
         reply_message_ids = {str(row.message_id) for row in replies if row.message_id}
         for row in replies:
             if row.email_log_id:
@@ -573,3 +573,4 @@ def register_mail_routes(app: FastAPI) -> None:
             "copied_to_sent": reply_row.copied_to_sent,
             "sent_at": reply_row.sent_at.isoformat(),
         }
+
