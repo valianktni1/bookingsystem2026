@@ -22,7 +22,7 @@ from starlette.background import BackgroundTask
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from .quote_templates import bank_snapshot, validate_offer, register_quote_template_routes, capture_invoice_bank
+from .quote_templates import bank_snapshot, validate_offer, register_quote_template_routes, capture_invoice_bank, public_quote_bank_details
 from .bootstrap import bootstrap
 from .backup import BACKUP_BUILD, BackupBusyError, create_complete_backup
 from .backup_jobs import (get_complete_backup_file, get_complete_backup_job,
@@ -155,7 +155,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.76", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.77", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
 register_planner_timing_routes(app)
@@ -3892,7 +3892,10 @@ def client_booking_data(booking: Booking, db: Session):
         Document.booking_id == booking.id,
         Document.is_client_visible.is_(True),
     ).order_by(Document.document_date.desc(), Document.created_at.desc())).all()
-    return {"business": {"name": profile.display_name, "brand": profile.brand.value,
+    accepted_invoice_id = (status_data.get("quote") or {}).get("invoice_id")
+    accepted_invoice = next((item for item in client_invoices if item.id == accepted_invoice_id), None)
+    return {"quote_bank_details": public_quote_bank_details(booking, profile, accepted_invoice),
+            "business": {"name": profile.display_name, "brand": profile.brand.value,
                          "email": profile.email, "phone": profile.phone},
             "record": {"title": booking.title, "kind": booking.kind.value,
                        "status": booking.status.value,
@@ -5618,4 +5621,5 @@ def original_enquiry(booking_id: str, _: Admin = Depends(current_admin),
 
 from .control_centre import register_control_centre_routes
 register_control_centre_routes(app, workflow_queues)
+
 
