@@ -31,7 +31,7 @@ const basePortal={quote:null,quote_preparation:{prepared:false,package_ids:['pac
    else if(key.endsWith('/portal'))data=portal;
    else if(key.endsWith('/conversation')){
     assert(Number(url.searchParams.get('limit'))>=10,'Conversation request must pass server validation');
-    data={client_name:record.title,client_email:record.client.email,client_emails:[record.client.email],messages:[1,2,3,4].map(n=>({id:String(n),subject:'Example message '+n,date:`2026-10-${10+n}T12:00:00Z`,direction:'sent',body:'Example',attachments:[]}))};
+    data={client_name:record.title,client_email:record.client.email,client_emails:[record.client.email],messages:[1,2,3,4].map(n=>({id:String(n),subject:'Example message '+n,date:`2026-10-${10+n}T12:00:00Z`,direction:n===4?'received':'sent',brand:'wbm',uid:'fixture'+n,body:'Example',attachments:[]}))};
    }
    else if(key.endsWith('/email-centre'))data={recipient:record.client.email,client_name:record.title,templates:[{template_key:'quote',display_name:'Quote email',subject:'Standard subject',body:'Standard wording'}],quote_email:{subject:offer.subject,body:offer.body}};
    else if(key.endsWith('/quote-preview-data'))data={catalog:clone(catalog),quote_preparation:portal.quote_preparation,preview_bank:alternate};
@@ -63,16 +63,44 @@ const basePortal={quote:null,quote_preparation:{prepared:false,package_ids:['pac
  assert.equal(calls.filter(c=>c.includes('/conversation')).length,1);
  assert.deepEqual(await p.locator('[data-v866-mail] strong').allTextContents(),['Example message 4','Example message 3','Example message 2']);
  assert.equal(await p.locator('.v872-fold:not([open]) [data-v866-action=timings]').count(),1);
- assert.equal(await p.locator('.v872-board > .v866-left > section').first().locator(':scope > .v866-doc').count(),2);
+ await p.locator('.v878-original-text').filter({hasText:'An example enquiry'}).waitFor();
+ assert.equal(await p.locator('.v878-original').count(),1);
  assert((await p.locator('.v872-board').boundingBox()).y<500,'Useful booking content should start within first phone screen');
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await p.screenshot({path:'/tmp/v872-mobile-light.png'});
+ // Focused workflow: inline original, exact recent message and independent document panes.
+ assert((await p.locator('#drawer-body').boundingBox()).y<350,'Compact header must expose content sooner');
+ assert.equal(writes.length,0);
+ await p.locator('[data-v866-mail] button').first().click();
+ await p.waitForFunction(()=>document.querySelector('[data-conversation-message="4"]')?.open);
+ assert.equal(await p.locator('.couple-conversation-list > details').first().getAttribute('data-conversation-message'),'4');
+ assert.equal(await p.locator('[data-conversation-message="4"]').getAttribute('open'),'');
+ await p.evaluate(()=>{window.fixtureOriginalReply=window.openInboxMessageFromDashboard;window.fixtureReply=null;window.openInboxMessageFromDashboard=(brand,uid)=>window.fixtureReply=[brand,uid]});
+ await p.locator('[data-conversation-message="4"] .v878-reply').click();assert.deepEqual(await p.evaluate(()=>window.fixtureReply),['wbm','fixture4']);
+ await p.evaluate(()=>window.openInboxMessageFromDashboard=window.fixtureOriginalReply);
+
+ await p.locator('[data-tab="Paperwork"]').click();await p.waitForFunction(()=>document.querySelector('#drawer-body')?.dataset.v878Pane==='paperwork'&&document.querySelector('.v811-journey-quote')?.closest('.v855-fold')?.classList.contains('v878-inactive-pane'));assert(await p.locator('.v811-journey-forms').isVisible());assert(!(await p.locator('.v811-journey-quote').isVisible()));
+ await p.locator('.v878-paperwork-tools [data-v878-pane="timings"]').click();assert(await p.locator('.v820-final').isVisible());assert(!(await p.locator('.v811-journey-forms').isVisible()));
+ await p.locator('.v878-paperwork-tools [data-v878-pane="call"]').click();assert(await p.locator('.v823-final-call-pack').isVisible());
+
+ await p.locator('[data-tab="Journey"]').click();await p.waitForFunction(()=>document.querySelector('#drawer-body')?.dataset.v878Pane==='quote'&&document.querySelector('.v811-journey-quote')?.closest('.v855-fold')?.open);assert(await p.locator('.v811-journey-quote').isVisible());assert(!(await p.locator('.v820-final').isVisible()));
+ await p.evaluate(()=>WBMLayoutV855.reveal(document.querySelector('.v811-journey-forms')));assert(await p.locator('.v811-journey-forms').isVisible());
+ await p.evaluate(()=>selectRecordTab(state.current,'Overview'));
+ assert.equal(writes.length,0,'Reading and navigating cannot save or send');
  await p.locator('#record-more').click();assert.equal(await p.locator('#record-actions-menu [data-v861-enquiry]').count(),1);
  await p.locator('#record-actions-menu [data-wbm-appearance]').selectOption('dark');assert.equal(await p.locator('html').getAttribute('data-wbm-theme'),'dark');
  await p.locator('#record-more').click();
- await p.locator('[data-v866-action=enquiry]').click();await p.waitForFunction(()=>document.querySelector('.v861-paper')?.textContent.includes('An example enquiry'));assert((await p.locator('.v861-paper').innerText()).includes('An example enquiry'));await p.locator('#close-modal').click();
+ await p.locator('.v878-original button').click();await p.waitForFunction(()=>document.querySelector('.v861-paper')?.textContent.includes('An example enquiry'));assert((await p.locator('.v861-paper').innerText()).includes('An example enquiry'));await p.locator('#close-modal').click();
  await p.locator('[data-v866-action=quote]').click();await p.locator('#v857-offer-choice').waitFor();
  await p.locator('#v857-offer-choice').selectOption(offer.id);assert.equal(await p.locator('#offer-bank').inputValue(),'alternate');
+ assert.equal(await p.locator('.v878-customise').getAttribute('open'),null,'Named template starts as a concise summary');
+ assert((await p.locator('#v878-offer-summary').innerText()).includes('£425.00'));
+ await p.screenshot({path:'/tmp/v878-template-mobile-dark.png'});
+ await p.locator('.v878-customise > summary').click();
+ await p.locator('[data-v857-price="offer-discount-discount-example"]').fill('75');assert((await p.locator('#v878-offer-summary').innerText()).includes('£400.00'));
+ await p.locator('[data-v857-price="offer-discount-discount-example"]').fill('50');assert((await p.locator('#v878-offer-summary').innerText()).includes('£425.00'));
+ assert.equal(writes.length,0,'Customisation is local until the existing save button is pressed');
+
  await p.locator('#dynamic-form footer .primary').click();await p.locator('.v858-summary').waitFor();
  assert.equal(await p.locator('#quote-email-subject').inputValue(),offer.subject);
  await p.locator('#v857-email-choice').selectOption('email:quote');assert.equal(await p.locator('#quote-email-subject').inputValue(),'Standard subject');await p.locator('#v857-email-choice').selectOption('');assert.equal(await p.locator('#quote-email-subject').inputValue(),offer.subject);
@@ -94,8 +122,18 @@ const basePortal={quote:null,quote_preparation:{prepared:false,package_ids:['pac
  portal={...clone(basePortal),quote:{status:'accepted',total:475,deposit_amount:150,line_items:[{name:'Example package',total:475}],accepted_at:'2026-10-17T12:00:00Z'},submissions:[{id:'booking-form',form_type:'booking_form',data:{},submitted_at:'2026-10-17T12:00:00Z'},{id:'timings-form',form_type:'final_timings',data:{},submitted_at:'2026-10-18T12:00:00Z'}],contract:{accepted_at:'2026-10-17T12:00:00Z',supplier_signed_at:'2026-10-17T13:00:00Z',fully_signed:true},emails:[{template_key:'contract_completed',status:'sent',sent_at:'2026-10-17T14:00:00Z'}]};
  await open();assert.equal(await p.locator('.v872-fold:not([open]) [data-v866-action=agreement]').count(),1);
  assert.equal(await p.locator('.v866-panel > .v866-doc [data-v866-action=timings]').count(),1);
- for(const tab of ['Journey','Emails','Payments','Files','Activity','Overview']){await p.evaluate(tab=>selectRecordTab(state.current,tab),tab);await p.waitForTimeout(60);assert.equal(await p.locator('.v844-section-error').count(),0,'Section error: '+tab);}
- for(const width of [320,390,768,1280]){await p.setViewportSize({width,height:900});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Page overflow '+width);assert.equal(await p.locator('#record-actions-menu [data-v861-enquiry]').count(),1);}
+ for(const tab of ['Quote','Paperwork','Emails','Payments','Files','Activity','Overview']){await p.evaluate(tab=>selectRecordTab(state.current,tab),tab);await p.waitForTimeout(60);assert.equal(await p.locator('.v844-section-error').count(),0,'Section error: '+tab);}
+ for(const width of [320,390,768,1280])for(const theme of ['light','dark']){
+  await p.setViewportSize({width,height:900});
+  await p.evaluate(theme=>{const field=document.querySelector('#drawer [data-wbm-appearance]');field.value=theme;field.dispatchEvent(new Event('change',{bubbles:true}))},theme);
+  for(const tab of ['Quote','Paperwork','Emails','Payments','Files','Activity','Overview']){
+   await p.evaluate(tab=>selectRecordTab(state.current,tab),tab);await p.waitForTimeout(40);
+   assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`Page overflow ${width}/${theme}/${tab}`);
+   assert.equal(await p.locator('.v844-section-error').count(),0,`Section failed ${width}/${theme}/${tab}`);
+   assert.equal(await p.locator('#record-actions-menu [data-v861-enquiry]').count(),1);
+   if(width===390&&tab==='Paperwork'){await p.locator('#drawer').evaluate(el=>el.scrollTo(0,0));await p.screenshot({path:`/tmp/v878-paperwork-mobile-${theme}.png`})}
+  }
+ }
  await p.locator('#drawer').evaluate(el=>el.scrollTo(0,0));await p.screenshot({path:'/tmp/v872-desktop-dark.png'});
  // Imported records must retain the original interface and blocked general automation.
  record={...clone(baseRecord),id:'imported-example',legacy_source:'studio_ninja',automation_suppressed:true};portal=clone(basePortal);
@@ -104,3 +142,4 @@ const basePortal={quote:null,quote_preparation:{prepared:false,package_ids:['pac
  assert.deepEqual(errors,[]);console.log('PASS: isolated native/imported fixtures; mobile 320/390/768 and desktop; themes; single initial portal request; recent messages; document grouping; unchanged quote payload/bank/discount; explicit fake send; all sections; no navigation writes.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
