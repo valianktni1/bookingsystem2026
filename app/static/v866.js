@@ -42,7 +42,7 @@
     const board=body.querySelector('.v830-job-board');if(!board)return;
     const active=[],completed=[],later=[];
     active.push(row('Original enquiry','The original message and submitted answers','enquiry'));
-    active.push(row('Quote & package',quote?'Accepted · saved package details':quoteSent?'Sent · waiting for their choice':prepared?'Prepared · not sent':'Not prepared','quote',quote||quoteSent?'View':prepared?'Review & send':'Prepare'));
+    (quote?completed:active).push(row('Quote & package',quote?'Accepted · saved package details':quoteSent?'Sent · waiting for their choice':prepared?'Prepared · not sent':'Not prepared','quote',quote||quoteSent?'View':prepared?'Review & send':'Prepare'));
     const bookingStarted=Boolean(quote||facts.hasPayment||form||portal.contract);
     (setup.reviewed?completed:bookingStarted?active:later).push(row('Wedding booking form',form?(setup.reviewed?'Reviewed · saved answers':'Submitted · needs your review'):bookingStarted?'Waiting for the couple':'After quote acceptance',form?'form':'forms'));
     (setup.confirmed?completed:bookingStarted?active:later).push(row('Agreement',setup.confirmed?'Signed & confirmation sent':setup.signed?'Signed · check confirmation':portal.contract?'Review signature status':bookingStarted?'Waiting for the couple':'After quote acceptance','agreement'));
@@ -56,7 +56,9 @@
     const left=newBoard.querySelector('.v866-left'),right=newBoard.querySelector('.v866-right');
     // Move existing cards to preserve all edit, finance and private-note handlers.
     const cards=body.querySelector('.v830-top-cards');if(cards)newBoard.querySelector('[data-v872-details]').append(cards);
-    const payment=body.querySelector('.v830-summary-stack');if(payment)right.prepend(payment);
+    const payment=body.querySelector('.v830-summary-stack');if(payment){
+      if(!quote&&!facts.hasPayment&&!(r.invoices||[]).length){const box=document.createElement('details');box.className='v866-panel v872-details v879-later-payments';box.innerHTML='<summary>Payments · after quote acceptance</summary><p>Accepting a quote creates its invoice automatically. Record the first payment when it arrives.</p>';box.append(payment);right.prepend(box)}else right.prepend(payment);
+    }
     const notes=body.querySelector('.v863-private');if(notes)left.append(notes);
     const bank=body.querySelector('.v858-bank');if(bank){const box=document.createElement('details');box.className='v866-panel v872-details';box.innerHTML='<summary>Payment account &amp; quote preview</summary>';box.append(bank);right.append(box);}
     board.before(newBoard);board.remove();body.querySelector('.v863-progress')?.remove();

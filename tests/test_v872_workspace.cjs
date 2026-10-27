@@ -68,6 +68,21 @@ const basePortal={quote:null,quote_preparation:{prepared:false,package_ids:['pac
  assert((await p.locator('.v872-board').boundingBox()).y<500,'Useful booking content should start within first phone screen');
  assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await p.screenshot({path:'/tmp/v872-mobile-light.png'});
+ // V8.79: early enquiries focus on quotes; exceptional invoice actions stay explicit.
+ assert.equal(await p.locator('.v879-later-payments:not([open])').count(),1);
+ await p.evaluate(()=>selectRecordTab(state.current,'Payments'));
+ assert.equal(await p.locator('.v879-payment-actions:not([open]) #new-invoice').count(),1);
+ assert.equal(await p.locator('.v879-record-payment').count(),0);
+ assert((await p.locator('.invoice-cards').innerText()).includes('after the couple accepts'));
+ await p.evaluate(()=>{window.fixtureNewInvoice=newInvoice;window.fixtureInvoiceCalls=0;newInvoice=()=>window.fixtureInvoiceCalls++});
+ await p.locator('.v879-payment-actions > summary').click();await p.locator('#new-invoice').click();
+ assert.equal(await p.evaluate(()=>window.fixtureInvoiceCalls),1,'Explicit separate invoice retains its original handler');
+ await p.evaluate(()=>newInvoice=window.fixtureNewInvoice);
+ // A missing accepted invoice must open Payments, never auto-create another invoice.
+ record.status='confirmed';await open();await p.locator('#next-record-action').click();await p.waitForTimeout(100);
+ assert.equal(await p.locator('#modal:not(.hidden)').count(),0);
+ assert.equal(await p.locator('.v879-payment-actions:not([open])').count(),1);
+ record.status='enquiry';await open();
  // Focused workflow: inline original, exact recent message and independent document panes.
  assert((await p.locator('#drawer-body').boundingBox()).y<350,'Compact header must expose content sooner');
  assert.equal(writes.length,0);
@@ -114,6 +129,11 @@ const basePortal={quote:null,quote_preparation:{prepared:false,package_ids:['pac
  await p.evaluate(()=>reviewAndSendQuoteEmail(state.current,document.querySelector('#drawer-body')));await p.locator('.v858-summary').waitFor();await p.locator('#dynamic-form footer .primary').click();await p.locator('#modal').waitFor({state:'hidden'});
  assert.equal(writes.length,2);assert.equal(writes[1].key,'/api/bookings/example/quote/send');assert.equal(writes[1].data.subject,offer.subject);
  await p.evaluate(()=>WBMReview.viewQuote(state.current));await p.waitForFunction(()=>document.querySelector('.v861-paper')?.textContent.includes('Quote sent'));assert((await p.locator('.v861-paper').innerText()).includes('Quote sent'));await p.locator('#close-modal').click();
+ // A sent quote's next-step link selects Quote even after a previous Paperwork visit.
+ await open();await p.locator('[data-tab=Paperwork]').click();await p.locator('#next-record-action').click();
+ await p.waitForFunction(()=>document.querySelector('#drawer-body')?.dataset.v878Pane==='quote');
+ assert.equal(await p.locator('#drawer-body').getAttribute('data-v878-pane'),'quote');
+ assert(await p.locator('.v811-journey-quote').isVisible());
  // Returning to Overview refreshes server facts; the initial load is not a lasting cache.
  await p.evaluate(()=>selectRecordTab(state.current,'Overview'));assert.equal(calls.filter(c=>c.endsWith('/portal')).length>1,true);
  assert.equal(await p.locator('#record-actions-menu [data-v861-enquiry]').count(),1,'No duplicate shortcuts after tab changes');
@@ -121,6 +141,26 @@ const basePortal={quote:null,quote_preparation:{prepared:false,package_ids:['pac
  record={...clone(baseRecord),invoices:[{id:'invoice-example',number:'EXAMPLE-ONLY',status:'part_paid',total:475,paid:150,balance:325,line_items:[{name:'Example package',total:475}],payments:[{id:'payment-example',amount:150,paid_date:'2026-10-18',payment_type:'bank_transfer'}]}],status:'confirmed',deposit_paid_date:'2026-10-18',quoted_total:475,tasks:[{id:'review',title:'Review timings',workflow_key:'wbm_review_final_timings',completed:false}]};
  portal={...clone(basePortal),quote:{status:'accepted',total:475,deposit_amount:150,line_items:[{name:'Example package',total:475}],accepted_at:'2026-10-17T12:00:00Z'},submissions:[{id:'booking-form',form_type:'booking_form',data:{},submitted_at:'2026-10-17T12:00:00Z'},{id:'timings-form',form_type:'final_timings',data:{},submitted_at:'2026-10-18T12:00:00Z'}],contract:{accepted_at:'2026-10-17T12:00:00Z',supplier_signed_at:'2026-10-17T13:00:00Z',fully_signed:true},emails:[{template_key:'contract_completed',status:'sent',sent_at:'2026-10-17T14:00:00Z'}]};
  await open();assert.equal(await p.locator('.v872-fold:not([open]) [data-v866-action=agreement]').count(),1);
+ assert.equal(await p.locator('.v872-fold:not([open]) [data-v866-action=quote]').count(),1,'Accepted quote folds into completed documents');
+ assert.equal(await p.locator('.v879-later-payments').count(),0);
+ await p.locator('#record-more').click();assert.equal(await p.locator('.v879-record-admin:not([open]) .v845-reschedule').count(),1);await p.locator('#record-more').click();
+ await p.evaluate(()=>selectRecordTab(state.current,'Payments'));
+ assert.equal(await p.locator('.v879-record-payment').innerText(),'Record payment');
+ await p.locator('.v879-record-payment').click();await p.locator('#payment-amount').waitFor();
+ assert.equal(await p.locator('#payment-amount').inputValue(),'325');assert.equal(await p.locator('#payment-method option[value=cash]').count(),1);
+ await p.locator('#close-modal').click();assert.equal(writes.length,2,'Opening a payment must not record it');
+ // Several payable invoices require an explicit invoice choice; paid/void history folds away.
+ record.invoices.push({...clone(record.invoices[0]),id:'second-invoice',number:'SECOND-EXAMPLE'}, {...clone(record.invoices[0]),id:'paid-invoice',number:'PAID-EXAMPLE',status:'paid',paid:475,balance:0});
+ await open();await p.evaluate(()=>selectRecordTab(state.current,'Payments'));
+ assert.equal(await p.locator('.v879-record-payment').innerText(),'Choose invoice to record payment');
+ await p.locator('.v879-record-payment').click();assert.equal(await p.locator('#modal:not(.hidden)').count(),0);
+ await p.locator('#drawer').evaluate(el=>el.scrollTo(0,0));await p.screenshot({path:'/tmp/v879-payments-mobile.png'});
+ // Exercise the header with the same payable-invoice action used by the workflow controller.
+ await p.evaluate(()=>{window.fixtureNext=recordNextAction;recordNextAction=(old=>function(r,p){return {...old(r,p),tab:'Payments',action:'record_payment',label:'Open payments'}})(recordNextAction)});await p.evaluate(()=>openDrawer(state.current.id,'Overview'));
+ await p.locator('#next-record-action').click();await p.waitForTimeout(50);assert.equal(await p.locator('#modal:not(.hidden)').count(),0);await p.evaluate(()=>recordNextAction=window.fixtureNext);
+ assert.equal(await p.locator('.v879-invoice-history:not([open]) [data-v82-invoice=paid-invoice]').count(),1);
+ assert.equal(await p.locator('[data-payment-invoice]').count(),2);
+ record.invoices=record.invoices.slice(0,1);await open();
  assert.equal(await p.locator('.v866-panel > .v866-doc [data-v866-action=timings]').count(),1);
  for(const tab of ['Quote','Paperwork','Emails','Payments','Files','Activity','Overview']){await p.evaluate(tab=>selectRecordTab(state.current,tab),tab);await p.waitForTimeout(60);assert.equal(await p.locator('.v844-section-error').count(),0,'Section error: '+tab);}
  for(const width of [320,390,768,1280])for(const theme of ['light','dark']){
@@ -138,6 +178,8 @@ const basePortal={quote:null,quote_preparation:{prepared:false,package_ids:['pac
  // Imported records must retain the original interface and blocked general automation.
  record={...clone(baseRecord),id:'imported-example',legacy_source:'studio_ninja',automation_suppressed:true};portal=clone(basePortal);
  await p.evaluate(id=>openDrawer(id),record.id);assert.equal(await p.locator('.v872-board').count(),0);assert.equal(await p.locator('#drawer.v866-workspace').count(),0);assert((await p.locator('#drawer').innerText()).includes('protected'));
+ assert.equal(await p.locator('[data-tab=Emails] strong').innerText(),'Messages');
+ await p.evaluate(()=>selectRecordTab(state.current,'Payments'));assert.equal(await p.locator('.v879-payment-actions').count(),0);assert.equal(await p.locator('#new-invoice').count(),1);
  assert.equal(writes.length,2,'Navigation must never write enquiries, bookings, payments, agreements or settings');
  assert.deepEqual(errors,[]);console.log('PASS: isolated native/imported fixtures; mobile 320/390/768 and desktop; themes; single initial portal request; recent messages; document grouping; unchanged quote payload/bank/discount; explicit fake send; all sections; no navigation writes.');
  }finally{await browser.close();}
