@@ -1,0 +1,9 @@
+.v879-payment-actions,.v879-invoice-history{margin-top:16px;padding:14px;border:1px solid var(--wbm-border);border-radius:10px;background:var(--wbm-surface);color:var(--wbm-text);min-width:0}
+.v879-payment-actions>summary,.v879-invoice-history>summary,.v879-record-admin>summary{cursor:pointer;font-weight:700;min-height:44px;padding:10px 0;overflow-wrap:anywhere}
+.v879-payment-actions p,.v879-later-payments p{font-size:14px;line-height:1.55;color:var(--wbm-muted)}
+.v879-invoice-history>.invoice-card{margin-top:12px}
+.v879-record-admin{padding:8px 12px;border-top:1px solid var(--wbm-border);color:var(--wbm-text)}
+.v879-record-admin button{white-space:normal;text-align:left;width:100%;min-height:44px}
+.v879-record-admin .record-primary-actions,.v879-record-admin .record-safety-actions{display:flex;flex-direction:column}
+.v878-flow #record-portal-shortcut[hidden]{display:none!important}
+@media(max-width:650px){.v878-flow .section-actions:has(.v879-record-payment){display:flex;flex-direction:column;align-items:stretch;gap:12px}.v878-flow .v879-record-payment{width:100%;white-space:normal;min-height:44px}.v879-payment-actions,.v879-invoice-history{padding:12px}.v879-payment-actions>button{max-width:100%;white-space:normal}}

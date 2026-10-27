@@ -441,7 +441,17 @@
     const revealSelector = {send_quote:'.v811-journey-quote', countersign:'.v811-journey-forms', review_forms:'.v811-journey-forms', review_booking_form:'.v811-journey-forms', review_final_timings:'.v820-final', open_final_call_pack:'.v823-final-call-pack'}[action];
     if (revealSelector) window.WBMLayoutV855?.reveal($(revealSelector, $("#drawer")));
     if (action === "send_quote") $("#send-quote")?.click();
-    else if (action === "record_payment") ($("[data-payment-invoice]") || $("#new-invoice"))?.click();
+    else if (action === "record_payment") {
+      // Opening Payments must not start a second invoice when a native quote has no payable invoice.
+      const payments = $$('[data-payment-invoice]', $('#drawer-body'));
+      const payment = payments[0];
+      if (window.WBMSetup?.native(r) && payments.length > 1) {
+        payment.scrollIntoView({block:'center',behavior:'smooth'});
+        payment.focus({preventScroll:true});
+      }
+      else if (payment) payment.click();
+      else if (!window.WBMSetup?.native(r)) $("#new-invoice")?.click();
+    }
     else if (action === "countersign") {
       const countersign = $("[data-countersign-contract]");
       if (countersign) countersign.click();
@@ -741,4 +751,5 @@
     }
   }, 250);
 })();
+
 
