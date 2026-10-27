@@ -41,6 +41,15 @@ def invoice_bank_details(invoice, profile):
     return profile.bank_details or {}
 
 
+def public_quote_bank_details(booking, profile, accepted_invoice=None):
+    # An accepted quote must agree with its invoice, even if an admin later
+    # chooses another account for future quotes. Never return both accounts.
+    bank = (invoice_bank_details(accepted_invoice, profile) if accepted_invoice
+            else booking_bank_details(booking, profile))
+    return {key: str(bank.get(key) or "") for key in
+            ("account_name", "sort_code", "account_number")}
+
+
 def accounts(db):
     row = db.get(SystemSetting, BANK_KEY)
     if row:
@@ -151,3 +160,4 @@ def register_quote_template_routes(app):
             row=SystemSetting(key=BANK_KEY); db.add(row)
         row.value={"accounts":values}; db.commit()
         return values
+

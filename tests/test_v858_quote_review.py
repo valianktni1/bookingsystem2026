@@ -1,3 +1,4 @@
+import re
 import os
 from datetime import date, timedelta
 from pathlib import Path
@@ -102,10 +103,12 @@ def test_preview_matches_real_quote_and_does_not_write_or_create_links():
         assert 'preview_bank' not in real
         page=client.get('/quote-preview/'+bid)
         assert page.status_code==200
-        assert 'client.js?v=quote-review-v8-58' in page.text
+        script_url = re.search(r'src="(/static/client\.js\?[^" ]+)"', page.text).group(1)
+        assert script_url in client.get(f'/client/{token}').text
         assert counts()==before
         # A booking ID is not a client portal token and cannot accept the quote.
         assert client.post(f'/api/client/{bid}/quote',json={'package_id':package['id'],'confirmed':True}).status_code==404
         with SessionLocal() as db:
             row=db.get(Booking,bid);row.legacy_source='studio_ninja';row.automation_suppressed=True;db.commit()
         assert client.get(f'/api/bookings/{bid}/quote-preview-data').status_code==409
+
