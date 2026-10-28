@@ -32,6 +32,7 @@ from .business_time import (automatic_delivery_allowed, business_date,
 from .booking_forms import public_booking_form, validate_booking_answers, validate_booking_form
 from .accounts_integration import accounts_sync_loop, register_accounts_integration_routes
 from .planner_integration import planner_invitation_loop, register_planner_routes, eligible as planner_booking_eligible
+from .gallery_integration import gallery_loop, register_routes as register_gallery_routes
 from .post_wedding_reviews import (TEMPLATE_KEY as POST_WEDDING_REVIEW_KEY, REVIEW_REQUEST_KEYS, enforce_review_deadline, record_review_sent)
 from .config import get_settings
 from .database import Base, SessionLocal, engine, get_db
@@ -134,13 +135,17 @@ async def lifespan(_: FastAPI):
     growth_task = asyncio.create_task(growth_sync_loop())
     sms_task = asyncio.create_task(sms_automation_loop())
     planner_task = asyncio.create_task(planner_invitation_loop())
+    gallery_task = asyncio.create_task(gallery_loop())
     yield
+    gallery_task.cancel()
     planner_task.cancel()
     reminder_task.cancel()
     calendar_retry_task.cancel()
     accounts_task.cancel()
     growth_task.cancel()
     sms_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await gallery_task
     with suppress(asyncio.CancelledError):
         await planner_task
     with suppress(asyncio.CancelledError):
@@ -155,7 +160,8 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.79", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.80", lifespan=lifespan, docs_url=None, redoc_url=None)
+register_gallery_routes(app)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
 register_planner_timing_routes(app)
@@ -5621,5 +5627,6 @@ def original_enquiry(booking_id: str, _: Admin = Depends(current_admin),
 
 from .control_centre import register_control_centre_routes
 register_control_centre_routes(app, workflow_queues)
+
 
 
