@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 cd "${WBM_STACK_DIR:-/mnt/apps/dockge/data/bookingsystem2026}"
 umask 077
-RELEASE_COMMIT="c5ff5f951b1f2bea4a62a1a0f5f8d6aa5e9a2605"
+RELEASE_COMMIT="e4ab336fd1773a91b26eb6ba2b1cc50ba87cf48a"
 
 if [[ ! -f .env ]]; then
   echo 'STOP: .env is missing. Run this in the existing live BookingSystem2026 stack.'
