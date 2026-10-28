@@ -1,4 +1,4 @@
-"""Personal WBM gallery connection. Opt-in, new bookings only, durable retries.
+"""Personal WBM gallery connection. Opt-in, wedding-date cutoff, durable retries.
 
 No client emails, gallery deletions or automatic overwrites are performed here.
 """
@@ -6,7 +6,7 @@ import asyncio
 import base64
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 
 import httpx
@@ -23,6 +23,7 @@ from .security import current_admin
 
 KEY = 'gallery_connection'
 URL = 'https://weddingsbymark.uk'
+WEDDINGS_AFTER = date(2026, 12, 1)
 
 
 def utcnow(): return datetime.now(timezone.utc)
@@ -88,6 +89,7 @@ def eligible(db,b):
     if not b or b.brand!=Brand.WBM or b.kind!=RecordKind.WEDDING or b.legacy_source or b.automation_suppressed or b.is_test or b.archived_at:
         return False
     if b.status not in (RecordStatus.CONFIRMED,RecordStatus.IN_PROGRESS): return False
+    if not b.event_date or b.event_date <= WEDDINGS_AFTER: return False
     quote = accepted(db,b)
     invoice = db.get(Invoice,quote.invoice_id) if quote and quote.invoice_id else None
     fee = b.deposit_amount
@@ -153,12 +155,12 @@ def safe_result(data,bid):
 
 def scan(db,settings):
     now=utcnow()
-    # Activation boundary is tied to quote acceptance, so existing weddings are never backfilled.
-    since=settings.get('enabled_since')
-    if not since:return
+    # Include existing native bookings by wedding date, not quote acceptance date.
+    # The connection must still be deliberately enabled by run_jobs().
     quotes=db.scalars(select(Quote).join(Booking,Booking.id==Quote.booking_id).join(Invoice,Invoice.id==Quote.invoice_id)
         .outerjoin(GalleryProvision,GalleryProvision.booking_id==Quote.booking_id).where(
-        Quote.status=='accepted',Quote.accepted_at>=datetime.fromisoformat(since),GalleryProvision.booking_id.is_(None),
+        Quote.status=='accepted',GalleryProvision.booking_id.is_(None),
+        Booking.event_date>WEDDINGS_AFTER,Booking.event_date>=now.date(),
         Booking.brand==Brand.WBM,Booking.kind==RecordKind.WEDDING,Booking.legacy_source.is_(None),
         Booking.automation_suppressed.is_(False),Booking.is_test.is_(False),Booking.archived_at.is_(None),
         Booking.status.in_((RecordStatus.CONFIRMED,RecordStatus.IN_PROGRESS)),Booking.deposit_amount>0,
@@ -246,7 +248,8 @@ def register_routes(app):
         addons=db.scalars(select(AddOnOption).where(AddOnOption.brand==Brand.WBM).order_by(AddOnOption.display_order)).all()
         items=[{'key':'package:'+p.id,'name':p.name,'kind':'Package','active':p.is_active} for p in packages]+[
             {'key':'addon:'+p.code,'name':p.name,'kind':'Adjustment' if p.is_discount else 'Extra','active':p.is_active} for p in addons]
-        return {'enabled':bool(s.get('enabled')),'key_saved':bool(s.get('credential')),'enabled_since':s.get('enabled_since'),'rules':s.get('rules',{}),'items':items}
+        return {'enabled':bool(s.get('enabled')),'key_saved':bool(s.get('credential')),'enabled_since':s.get('enabled_since'),
+                'weddings_after':WEDDINGS_AFTER.isoformat(),'rules':s.get('rules',{}),'items':items}
 
     @app.put('/api/gallery-connection/settings')
     def save_settings(payload:SettingsIn,_:Admin=Depends(current_admin),db=Depends(get_db)):

@@ -1,7 +1,7 @@
-# Personal WBM booking → gallery connection (booking 8.80 / gallery 2.4)
+# Personal WBM booking → gallery connection (booking 8.81 / gallery 2.4)
 
-Deploy gallery first, booking second. Both are off by default. No existing
-bookings are backfilled. No client email is sent by this integration.
+Deploy gallery first, booking second. The connection is off by default. V8.81 includes existing native bookings for
+weddings from 2 December 2026 onwards. No client email is sent by this integration.
 
 ## Set up
 
@@ -13,17 +13,19 @@ bookings are backfilled. No client email is sent by this integration.
    adjustments as well: free albums sometimes live in £0 adjustment entries.
    Travel and ordinary discounts can be Reviewed with every gallery option off.
    A 60-photo album upgrade takes precedence over an included 40-photo album.
-3. Enable new-booking creation and save. Only quotes accepted after first
-   activation qualify. The full booking fee must be recorded against their
+3. Enable gallery creation and save. Wedding dates must be strictly after
+   1 December 2026 (2 December onwards), regardless of when the quote was
+   accepted or the connection enabled. The full booking fee must be recorded against their
    accepted quote's open invoice. Partial fees, protected imports, test records,
-   Ivory projects, cancelled/archived bookings and old accepted quotes are out.
+   Ivory projects, cancelled/archived bookings and weddings on/before 1 December
+   2026 are out. Existing matching galleries are flagged, never duplicated.
 4. For a qualifying booking the worker runs every 30 seconds. It saves both the
    durable request and result. Overview shows the gallery link; Settings shows
    retry/review state. Missing mappings are visible and do not guess from names.
 
 ## What is created
 
-- `John & Nikki 20.10.26` and the lead email only, plus folder/album settings.
+- `John & Nikki 20.12.26` and the lead email only, plus folder/album settings.
 - Wedding Images / Video / SelfieBooth according to the reviewed package/extra.
 - Album Favourites and the actual album controls if an album is included/paid.
 - Guest Uploads only for full-day, plus an upload-only guest share. Address is
@@ -56,14 +58,15 @@ Review checks do not remove photos, favourites, album choices or manual edits.
 Retries call the original immutable create request; they never replace the
 payload after a possibly successful network request. An interrupted job whose
 booking has changed needs manual investigation. Pausing either connection is
-safe: booking keeps its durable retry state. First activation boundary persists
-across pausing/resuming to avoid pulling in pre-integration weddings.
+safe: booking keeps its durable retry state. The wedding-date cutoff applies
+also to retries, so moving an uncreated booking to 1 December or earlier cannot
+create its gallery. Existing linked galleries are never removed.
 
 ## Validation and deployment
 
 Tests use disposable SQLite and mock Mongo, temporary folders and intercepted
 browser APIs. Cover authentication/rotation/pause, album/free/paid mappings,
-deposit/activation/import rules, link collisions, expiry and guest scope,
+deposit/date-cutoff/import rules, link collisions, expiry and guest scope,
 interrupted replay, immutable payloads, manual changes, review acknowledgement
 and both themes/mobile layouts. Real worker → real HTTP intake contract passes
 against temporary stores with exactly one gallery/share and no email records.
