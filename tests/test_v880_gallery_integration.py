@@ -92,6 +92,8 @@ def test_paid_album_upgrade_free_discount_album_and_bad_acknowledgements():
     with SessionLocal() as db:
         b=db.get(Booking,bid);q=bridge.accepted(db,b);i=db.get(Invoice,q.invoice_id);i.line_items=[*i.line_items,{'type':'addon','code':'album','total':0}];db.commit()
         assert bridge.make_payload(db,b,s)['album_mode']=='60'
+        i.line_items=[i.line_items[0],{'type':'discount','manual_amendment':True,'code':'manual_amendment_0','total':-100}];db.commit()
+        assert bridge.make_payload(db,b,s)['album_mode']=='40'
         i.line_items=[i.line_items[0],{'type':'discount','discount':True,'code':'album','total':0}];db.commit()
         assert bridge.make_payload(db,b,s)['album_mode']=='60'
     with pytest.raises(RuntimeError):bridge.safe_result({'booking_id':bid,'gallery_id':'x','status':'created','admin_url':'https://evil.example/admin/gallery/x'},bid)

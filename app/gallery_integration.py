@@ -107,6 +107,9 @@ def make_payload(db,b,settings):
     # Use the current accepted invoice, including any agreed changes made before creation.
     for line in invoice.line_items or []:
         if line.get('type')=='package': continue
+        # A manually entered monetary discount changes price, not deliverables.
+        # Catalogue £0 gifts still use their explicit entitlement mapping below.
+        if line.get('manual_amendment') and line.get('type')=='discount': continue
         # Zero-price complimentary albums can be stored as discount entries.
         # Their explicit rule is still needed; a price sign never determines entitlement.
         if line.get('type') not in ('addon','discount') or not line.get('code'):
