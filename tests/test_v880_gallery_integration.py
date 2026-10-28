@@ -33,10 +33,10 @@ def configure(**changes):
     return s
 
 
-def booking(paid=150,legacy=False,test=False,accepted_at=NOW,full_status=RecordStatus.CONFIRMED):
+def booking(paid=150,legacy=False,test=False,accepted_at=NOW,full_status=RecordStatus.CONFIRMED,day=date(2027,10,20)):
     with SessionLocal() as db:
         c=Client(first_name='John',partner_name='Nikki',email='john@example.com');db.add(c);db.flush()
-        b=Booking(client_id=c.id,brand=Brand.WBM,kind=RecordKind.WEDDING,status=full_status,title='John & Nikki',event_date=date(2027,10,20),deposit_amount=150,legacy_source='studio_ninja' if legacy else None,is_test=test)
+        b=Booking(client_id=c.id,brand=Brand.WBM,kind=RecordKind.WEDDING,status=full_status,title='John & Nikki',event_date=day,deposit_amount=150,legacy_source='studio_ninja' if legacy else None,is_test=test)
         db.add(b);db.flush();i=Invoice(booking_id=b.id,brand=Brand.WBM,sequence=1,number=b.id,total=699,paid=paid,status='part_paid',line_items=[{'type':'package','code':'bronze','total':699}]);db.add(i);db.flush()
         q=Quote(booking_id=b.id,status='accepted',package_id='package',invoice_id=i.id,deposit_amount=150,accepted_at=accepted_at);db.add(q);db.commit();return b.id
 
@@ -52,10 +52,26 @@ def test_creation_exact_payload_and_no_repeated_creation(monkeypatch):
     with SessionLocal() as db:assert db.get(bridge.GalleryProvision,bid).status=='created'
 
 
-@pytest.mark.parametrize('change',[{'paid':50},{'legacy':True},{'test':True},{'accepted_at':NOW-timedelta(days=3)},{'full_status':RecordStatus.ENQUIRY}])
-def test_no_partial_historical_imported_test_or_enquiry(monkeypatch,change):
+@pytest.mark.parametrize('change',[{'paid':50},{'legacy':True},{'test':True},{'full_status':RecordStatus.ENQUIRY},
+                                 {'day':date(2026,11,30)},{'day':date(2026,12,1)}])
+def test_no_partial_before_cutoff_imported_test_or_enquiry(monkeypatch,change):
     configure();bid=booking(**change);send=Mock();monkeypatch.setattr(bridge,'call_gallery',send);bridge.run_jobs();send.assert_not_called()
     with SessionLocal() as db:assert not db.get(bridge.GalleryProvision,bid)
+
+
+def test_december_second_includes_old_accepted_booking_once(monkeypatch):
+    configure();bid=booking(accepted_at=NOW-timedelta(days=180),day=date(2026,12,2))
+    send=Mock(return_value=result(bid));monkeypatch.setattr(bridge,'call_gallery',send)
+    bridge.run_jobs();bridge.run_jobs();assert send.call_count==1
+    assert send.call_args.args[-1]['wedding_date']=='2026-12-02'
+
+
+def test_date_moved_before_cutoff_cannot_send_a_pending_request(monkeypatch):
+    settings=configure();bid=booking()
+    with SessionLocal() as db:
+        bridge.scan(db,settings);b=db.get(Booking,bid);b.event_date=date(2026,12,1);db.commit()
+    send=Mock();monkeypatch.setattr(bridge,'call_gallery',send);bridge.run_jobs();send.assert_not_called()
+    with SessionLocal() as db:assert db.get(bridge.GalleryProvision,bid).status=='needs_attention'
 
 
 def test_off_unconfigured_retry_and_network_replay(monkeypatch):
@@ -111,7 +127,9 @@ def test_admin_settings_key_secrecy_and_explicit_review(monkeypatch):
         raw='wbm_gallery_'+('x'*50)
         assert c.put('/api/gallery-connection/settings',json={'enabled':False,'key':raw,'rules':{}}).status_code==200
         send.assert_not_called()
-        body=c.get('/api/gallery-connection/settings').text;assert raw not in body;assert 'credential' not in body
+        settings_response=c.get('/api/gallery-connection/settings');body=settings_response.text
+        assert settings_response.json()['weddings_after']=='2026-12-01'
+        assert raw not in body;assert 'credential' not in body
         assert c.put('/api/gallery-connection/settings',json={'enabled':True,'rules':{}}).status_code==200
         assert send.call_args.args[1:] == ('GET','/api/integrations/wbm/status')
         configure();bid=booking();send.return_value=result(bid);bridge.run_jobs()
