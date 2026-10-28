@@ -160,7 +160,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.81", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.82", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_gallery_routes(app)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes

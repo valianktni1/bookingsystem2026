@@ -140,3 +140,72 @@ def test_admin_settings_key_secrecy_and_explicit_review(monkeypatch):
         assert c.post('/api/gallery-connection/jobs/'+bid+'/reviewed').status_code==200
         bridge.run_jobs();assert send.call_count==before
         assert c.get('/api/bookings/'+bid+'/gallery').json()['status']=='created'
+
+
+def test_missing_rule_names_and_saved_invoice_items_are_editable(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    configure(rules={});bid=booking()
+    with SessionLocal() as db:
+        q=bridge.accepted(db,db.get(Booking,bid));q.package_id=None
+        i=db.get(Invoice,q.invoice_id)
+        i.line_items=[{'type':'package','code':'old_bronze','name':'Original Bronze package'},
+                      {'type':'discount','code':'old_free_album','name':'Original free album','total':0}]
+        db.commit()
+    send=Mock();monkeypatch.setattr(bridge,'call_gallery',send);bridge.run_jobs();send.assert_not_called()
+    app=FastAPI();bridge.register_routes(app);app.dependency_overrides[bridge.current_admin]=lambda:None
+    with TestClient(app) as c:
+        settings=c.get('/api/gallery-connection/settings').json()
+        rows={item['key']:item for item in settings['items']}
+        assert rows['package:saved-code:old_bronze']['name']=='Original Bronze package'
+        assert rows['addon:old_free_album']['saved_item'] is True
+        jobs=c.get('/api/gallery-connection/jobs').json()
+        assert jobs[0]['missing_rule_keys']==['package:saved-code:old_bronze','addon:old_free_album']
+        assert 'Original Bronze package' in jobs[0]['error'] and 'Original free album' in jobs[0]['error']
+        # Reading diagnostics never changes jobs or creates a gallery.
+        send.assert_not_called()
+        with SessionLocal() as db:assert db.get(bridge.GalleryProvision,bid).status=='needs_attention'
+        rules={'package:saved-code:old_bronze':bridge.Rule(configured=True,photography=True,full_day=True).model_dump(),
+               'addon:old_free_album':bridge.Rule(configured=True,album_mode='40').model_dump()}
+        send.return_value=httpx.Response(200,json={'capabilities':{'gallery_provisioning':1}})
+        saved=c.put('/api/gallery-connection/settings',json={'enabled':True,'rules':rules})
+        assert saved.status_code==200,saved.text
+        assert saved.json()['resumed']==1
+        assert send.call_count==1 and send.call_args.args[1]=='GET'
+        with SessionLocal() as db:
+            j=db.get(bridge.GalleryProvision,bid);assert j.status=='pending';assert not j.payload
+        send.return_value=result(bid);bridge.run_jobs();assert send.call_count==2
+        assert send.call_args.args[-1]['album_mode']=='40'
+        assert send.call_args.args[-1]['full_day'] is True
+        bridge.run_jobs();assert send.call_count==2
+
+
+def test_manual_items_with_same_code_are_scoped_to_each_booking():
+    configure();first=booking();second=booking()
+    keys=[]
+    with SessionLocal() as db:
+        for bid in (first,second):
+            b=db.get(Booking,bid);q=bridge.accepted(db,b);i=db.get(Invoice,q.invoice_id)
+            i.line_items=[*i.line_items,{'type':'addon','manual_amendment':True,'code':'manual_amendment_0','name':'Custom album','total':100}]
+            db.flush();keys.append(bridge.selected_items(db,b)[-1]['key'])
+        assert keys[0]!=keys[1]
+
+
+def test_saving_rules_preserves_choices_key_and_never_requeues_uncertain_network_attempt(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    settings=configure();settings['rules']['addon:older_hidden_item']=bridge.Rule(configured=True,album_mode='40').model_dump()
+    settings=configure(rules=settings['rules']);bid=booking()
+    send=Mock(side_effect=httpx.ReadTimeout('lost acknowledgement'));monkeypatch.setattr(bridge,'call_gallery',send)
+    bridge.run_jobs()
+    with SessionLocal() as db:
+        j=db.get(bridge.GalleryProvision,bid);j.status='needs_attention';stable=dict(j.payload);db.commit()
+    app=FastAPI();bridge.register_routes(app);app.dependency_overrides[bridge.current_admin]=lambda:None
+    send.side_effect=None;send.return_value=httpx.Response(200,json={'capabilities':{'gallery_provisioning':1}})
+    with TestClient(app) as c:
+        visible_rules={k:v for k,v in settings['rules'].items() if k!='addon:older_hidden_item'}
+        response=c.put('/api/gallery-connection/settings',json={'enabled':True,'rules':visible_rules})
+        assert response.json()['resumed']==0
+        with SessionLocal() as db:
+            j=db.get(bridge.GalleryProvision,bid);assert j.payload==stable;assert j.status=='needs_attention'
+            saved=bridge.config(db);assert saved['rules']==settings['rules'];assert saved['credential']==settings['credential']

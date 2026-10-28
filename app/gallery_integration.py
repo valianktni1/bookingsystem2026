@@ -96,31 +96,57 @@ def eligible(db,b):
     return bool(invoice and invoice.status not in ('void','cancelled') and fee>0 and invoice.paid>=fee)
 
 
-def make_payload(db,b,settings):
+class MissingGalleryRules(ValueError):
+    def __init__(self,items):
+        self.items=items
+        names='; '.join(f"{item['kind']}: {item['name']}" for item in items)
+        super().__init__('Review and save gallery setup for: '+names)
+
+
+def selected_items(db,b):
+    """Stable invoice identities, including saved items no longer in the catalogue.
+
+    Never guess entitlement from a name. Unidentified/manual items are scoped
+    to their booking so two different manual amendments cannot share a rule.
+    """
     q = accepted(db,b)
     if not q: raise ValueError('An accepted quote is required.')
     invoice = db.get(Invoice,q.invoice_id) if q.invoice_id else None
     if not invoice: raise ValueError('The accepted quote invoice is missing.')
+    lines=invoice.line_items or []
+    package_line=next((x for x in lines if x.get('type')=='package'),{})
+    package=db.get(PackageOption,q.package_id) if q.package_id else None
+    name=package_line.get('name') or (package.name if package else None) or b.package_name or 'Accepted package'
+    if q.package_id:key='package:'+q.package_id
+    elif package_line.get('code'):key='package:saved-code:'+str(package_line['code'])
+    else:key='package:saved-booking:'+b.id
+    items=[{'key':key,'name':name,'kind':'Package'}]
+    for line in lines:
+        if line.get('type')=='package':continue
+        if line.get('manual_amendment') and line.get('type')=='discount':continue
+        label=str(line.get('name') or 'Unnamed agreed item')
+        kind='Adjustment' if line.get('type')=='discount' else 'Extra'
+        if line.get('code') and not line.get('manual_amendment') and line.get('type') in ('addon','discount'):
+            key='addon:'+str(line['code'])
+        else:
+            fingerprint=hashlib.sha256(json.dumps(line,sort_keys=True,default=str).encode()).hexdigest()[:24]
+            key='agreed:'+b.id+':'+fingerprint
+            label=label+' · '+b.title
+        items.append({'key':key,'name':label,'kind':kind})
+    return list({item['key']:item for item in items}.values())
+
+
+def make_payload(db,b,settings):
+    items=selected_items(db,b)
     if not b.event_date or b.event_date < utcnow().date(): raise ValueError('A future wedding date is required.')
     c=b.client
     if not c.first_name or not c.partner_name or not c.email: raise ValueError('Both first names and the lead email are required.')
     rules=settings.get('rules',{})
-    keys=['package:'+str(q.package_id)]
-    # Use the current accepted invoice, including any agreed changes made before creation.
-    for line in invoice.line_items or []:
-        if line.get('type')=='package': continue
-        # A manually entered monetary discount changes price, not deliverables.
-        # Catalogue £0 gifts still use their explicit entitlement mapping below.
-        if line.get('manual_amendment') and line.get('type')=='discount': continue
-        # Zero-price complimentary albums can be stored as discount entries.
-        # Their explicit rule is still needed; a price sign never determines entitlement.
-        if line.get('type') not in ('addon','discount') or not line.get('code'):
-            raise ValueError('An agreed invoice item needs manual gallery review before creation.')
-        keys.append('addon:'+line['code'])
+    missing=[item for item in items if not rules.get(item['key'],{}).get('configured')]
+    if missing:raise MissingGalleryRules(missing)
     selected=[]
-    for key in keys:
-        rule=rules.get(key,{})
-        if not rule.get('configured'): raise ValueError('Review and save gallery settings for every selected package and extra.')
+    for item in items:
+        rule=rules[item['key']]
         selected.append(Rule(**rule))
     modes={r.album_mode for r in selected if r.album_mode!='off'}
     data={'booking_id':b.id,'first_name':c.first_name.strip(),'partner_first_name':c.partner_name.strip(),
@@ -133,9 +159,12 @@ def make_payload(db,b,settings):
 
 def revision(db,b,settings):
     q=accepted(db,b);i=db.get(Invoice,q.invoice_id) if q and q.invoice_id else None
+    keys={'package:'+str(q.package_id if q else '')}|{'addon:'+str(x.get('code')) for x in (i.line_items or [] if i else [])}
+    try:keys.update(item['key'] for item in selected_items(db,b))
+    except ValueError:pass
     source={'quote':q.id if q else None,'invoice':i.id if i else None,'items':i.line_items if i else [],
         'date':str(b.event_date),'names':[b.client.first_name,b.client.partner_name],'email':b.client.email,
-        'rules':{k:v for k,v in settings.get('rules',{}).items() if k=='package:'+str(q.package_id if q else '') or k in {'addon:'+str(x.get('code')) for x in (i.line_items or [] if i else [])}},
+        'rules':{k:v for k,v in settings.get('rules',{}).items() if k in keys},
         'eligible':eligible(db,b)}
     return hashlib.sha256(json.dumps(source,sort_keys=True,default=str).encode()).hexdigest()
 
@@ -236,8 +265,30 @@ async def gallery_loop():
         await asyncio.sleep(30)
 
 
-def job_json(job):
-    return {'booking_id':job.booking_id,'status':job.status,'error':job.error,'result':job.result or {}}
+def job_json(job,db=None,settings=None):
+    data={'booking_id':job.booking_id,'status':job.status,'error':job.error,'result':job.result or {},'missing_rule_keys':[]}
+    if db is not None and job.status=='needs_attention':
+        b=db.get(Booking,job.booking_id)
+        if b and eligible(db,b):
+            try:make_payload(db,b,settings or config(db))
+            except MissingGalleryRules as exc:
+                data['error']=str(exc);data['missing_rule_keys']=[item['key'] for item in exc.items]
+            except ValueError as exc:data['error']=str(exc)
+    return data
+
+
+def requeue_configured_jobs(db,settings):
+    count=0
+    for job in db.scalars(select(GalleryProvision).where(GalleryProvision.status=='needs_attention')).all():
+        # Empty payload proves this job stopped before any create request.
+        # A lost response or existing gallery must still require explicit review.
+        if job.payload or job.result:continue
+        b=db.get(Booking,job.booking_id)
+        if not eligible(db,b):continue
+        try:make_payload(db,b,settings)
+        except ValueError:continue
+        job.status='pending';job.next_at=utcnow();job.error=None;job.attempts=0;count+=1
+    return count
 
 
 def register_routes(app):
@@ -248,6 +299,17 @@ def register_routes(app):
         addons=db.scalars(select(AddOnOption).where(AddOnOption.brand==Brand.WBM).order_by(AddOnOption.display_order)).all()
         items=[{'key':'package:'+p.id,'name':p.name,'kind':'Package','active':p.is_active} for p in packages]+[
             {'key':'addon:'+p.code,'name':p.name,'kind':'Adjustment' if p.is_discount else 'Extra','active':p.is_active} for p in addons]
+        known={item['key'] for item in items}
+        bookings=db.scalars(select(Booking).where(Booking.brand==Brand.WBM,Booking.kind==RecordKind.WEDDING,
+            Booking.legacy_source.is_(None),Booking.event_date>WEDDINGS_AFTER,
+            Booking.status.in_((RecordStatus.CONFIRMED,RecordStatus.IN_PROGRESS)))).all()
+        for b in bookings:
+            if not eligible(db,b):continue
+            try:chosen=selected_items(db,b)
+            except ValueError:continue
+            for item in chosen:
+                if item['key'] in known:continue
+                items.append({**item,'active':True,'saved_item':True});known.add(item['key'])
         return {'enabled':bool(s.get('enabled')),'key_saved':bool(s.get('credential')),'enabled_since':s.get('enabled_since'),
                 'weddings_after':WEDDINGS_AFTER.isoformat(),'rules':s.get('rules',{}),'items':items}
 
@@ -264,23 +326,26 @@ def register_routes(app):
                 if r.status_code!=200 or r.json().get('capabilities',{}).get('gallery_provisioning')!=1:raise ValueError()
             except Exception:raise HTTPException(422,'Cannot enable: update the gallery app, enable its connection and check the key.')
             if not s.get('enabled_since'):s['enabled_since']=utcnow().isoformat()
-        s.update(enabled=payload.enabled,rules={k:v.model_dump() for k,v in payload.rules.items()})
+        # Preserve reviewed historical rules not currently displayed in the form.
+        s.update(enabled=payload.enabled,rules={**s.get('rules',{}),**{k:v.model_dump() for k,v in payload.rules.items()}})
         row=db.get(SystemSetting,KEY)
         if row:row.value=s
         else:db.add(SystemSetting(key=KEY,value=s))
-        db.commit();return {'ok':True}
+        resumed=requeue_configured_jobs(db,s) if payload.enabled else 0
+        db.commit();return {'ok':True,'resumed':resumed}
 
     @app.get('/api/gallery-connection/jobs')
     def jobs(_:Admin=Depends(current_admin),db=Depends(get_db)):
         rows=db.execute(select(GalleryProvision,Booking.title).join(Booking,Booking.id==GalleryProvision.booking_id).order_by(GalleryProvision.next_at.desc()).limit(100)).all()
-        return [{**job_json(j),'couple':title} for j,title in rows]
+        s=config(db)
+        return [{**job_json(j,db,s),'couple':title} for j,title in rows]
 
     @app.get('/api/bookings/{bid}/gallery')
     def booking_gallery(bid:str,_:Admin=Depends(current_admin),db=Depends(get_db)):
         b=db.get(Booking,bid)
         if not b:raise HTTPException(404,'Booking not found.')
         job=db.get(GalleryProvision,bid)
-        return job_json(job) if job else {'status':'not_created','result':{}}
+        return job_json(job,db) if job else {'status':'not_created','result':{}}
 
     @app.post('/api/gallery-connection/jobs/{bid}/retry')
     def retry(bid:str,_:Admin=Depends(current_admin),db=Depends(get_db)):
