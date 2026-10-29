@@ -40,6 +40,7 @@ from .date_blocks import register_date_block_routes
 from .email_service import (email_signature_asset, email_signature_config,
                             preview_template_email, send_rendered_email,
                             send_template_email, smtp_credentials, smtp_ready)
+from .enquiry_delivery import enquiry_email_loop, queue_enquiry_email
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
 from .google_calendar import (google_calendar_configured, register_google_calendar_routes,
                               retry_pending_calendar_syncs, sync_booking_calendar_safely)
@@ -136,7 +137,9 @@ async def lifespan(_: FastAPI):
     sms_task = asyncio.create_task(sms_automation_loop())
     planner_task = asyncio.create_task(planner_invitation_loop())
     gallery_task = asyncio.create_task(gallery_loop())
+    enquiry_email_task = asyncio.create_task(enquiry_email_loop())
     yield
+    enquiry_email_task.cancel()
     gallery_task.cancel()
     planner_task.cancel()
     reminder_task.cancel()
@@ -144,6 +147,8 @@ async def lifespan(_: FastAPI):
     accounts_task.cancel()
     growth_task.cancel()
     sms_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await enquiry_email_task
     with suppress(asyncio.CancelledError):
         await gallery_task
     with suppress(asyncio.CancelledError):
@@ -160,7 +165,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.82", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.83", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_gallery_routes(app)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
@@ -1306,11 +1311,8 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
           {"title": title, "event_date": payload.event_date.isoformat(),
            "heard_about_us": payload.heard_about_us,
            "portal_expires_at": portal_row.expires_at.isoformat()})
-    # The enquiry itself is durable before any comparatively slow SMTP work.
-    # A repeated tap can now see and reuse this submission instead of creating
-    # another client, booking, invoice journey or set of emails.
-    db.commit()
-
+    # The enquiry and exact email jobs commit together below. SMTP is handled
+    # by a durable worker, so the couple does not wait for two mail connections.
     acknowledgement = db.scalar(select(EmailTemplate).where(EmailTemplate.brand == Brand.WBM,
                                                             EmailTemplate.template_key == "enquiry_received",
                                                             EmailTemplate.is_active.is_(True)))
@@ -1323,12 +1325,8 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
         if acknowledgement:
             try:
                 recipient = client_email_recipient(db, booking)
-                subject, email_body, tracking_hash = send_tracked_booking_template_email(
-                    db, booking, profile, acknowledgement, portal_url
-                )
-                db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
-                                recipient=recipient, subject=subject, body=email_body, status="sent",
-                                tracking_token_hash=tracking_hash))
+                queue_enquiry_email(db, booking, profile, acknowledgement,
+                                    recipient=recipient, portal_url=portal_url)
             except Exception as exc:
                 db.add(EmailLog(booking_id=booking.id, template_key=acknowledgement.template_key,
                                 recipient=client_email_recipient(db, booking),
@@ -1338,8 +1336,8 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
         if admin_notification:
             notification_recipient = settings.admin_email
             try:
-                subject, email_body = send_template_email(
-                    booking, profile, admin_notification,
+                queue_enquiry_email(
+                    db, booking, profile, admin_notification,
                     extra_values={
                         "package_interest": payload.package_interest or "Not selected",
                         "selfie_booth_interest": payload.selfie_booth_interest or "Not answered",
@@ -1352,9 +1350,6 @@ def create_public_enquiry(payload: EnquiryIn, request: Request, db: Session = De
                     recipient=notification_recipient,
                     reply_to=client_email_recipient(db, booking),
                 )
-                db.add(EmailLog(booking_id=booking.id, template_key=admin_notification.template_key,
-                                recipient=notification_recipient, subject=subject,
-                                body=email_body, status="sent"))
             except Exception as exc:
                 db.add(EmailLog(booking_id=booking.id, template_key=admin_notification.template_key,
                                 recipient=notification_recipient,
