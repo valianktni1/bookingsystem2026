@@ -41,13 +41,14 @@ button:disabled { opacity:.6; cursor:wait; }
 .venue-manual-toggle:hover { color:#3e321d; background:transparent; }
 .error { min-height:18px; margin:13px 0 0; color:var(--error); text-align:center; font-size:12px; }
 .hidden { display:none!important; }
-.success { min-height:380px; display:grid; place-items:center; align-content:center; text-align:center; }
-.enquiry-complete .success { position:fixed; z-index:1000; left:50%; bottom:16px; width:min(720px,calc(100% - 24px)); max-height:calc(100% - 24px); min-height:min(380px,calc(100% - 24px)); overflow:auto; transform:translateX(-50%); box-shadow:0 20px 70px #203b3e38; }
+.success { min-height:340px; display:grid; grid-template-columns:minmax(0,1fr); place-items:center; align-content:center; text-align:center; }
+.enquiry-complete .success { padding:28px clamp(16px,4vw,32px); position:static; width:100%; max-width:720px; margin-inline:auto; }
 .success>span { width:55px; height:55px; display:grid; place-items:center; border-radius:50%; color:#fff; background:#47756c; font-size:25px; }
 .success h1 { margin:15px 0 4px; color:var(--deep); font-size:30px; }
-.success p { max-width:520px; line-height:1.6; }
+.success p { width:100%; max-width:520px; line-height:1.6; }
+.success>* { min-width:0; max-width:100%; overflow-wrap:anywhere; }
 .success strong { margin-top:7px; }
-@media(max-width:700px){main{padding:12px}.card{padding:22px 17px}header h1{font-size:23px}.form-grid{grid-template-columns:minmax(0,1fr);gap:18px}label.full{grid-column:auto}button{width:100%}.enquiry-complete .success{bottom:8px;width:calc(100% - 16px);min-height:min(340px,calc(100% - 16px));max-height:calc(100% - 16px)}}
+@media(max-width:700px){main{padding:12px}.card{padding:22px 17px}header h1{font-size:23px}.form-grid{grid-template-columns:minmax(0,1fr);gap:18px}label.full{grid-column:auto}button{width:100%}}
 @media(max-width:420px){.payment-note>div{grid-template-columns:1fr;gap:3px}.payment-note b{font-size:12px}}
 
 /* V8.69: natural mobile width, including long selects and the venue widget. */
@@ -60,7 +61,7 @@ label,.venue-summary span,.venue-summary strong,.venue-summary small,.counter { 
 html.embedded body { background:transparent; }
 html.embedded main { width:100%;padding:16px; }
 html.embedded .card { box-shadow:none; }
-html.embedded .enquiry-complete .success { position:static;transform:none;width:100%;max-height:none;min-height:340px; }
+html.embedded .enquiry-complete .success { padding:28px clamp(16px,4vw,32px); position:static;transform:none;width:100%;max-height:none;min-height:340px; }
 @media(max-width:700px) {
  main { padding:16px 12px; }
  .card { padding:20px 0;border:0;border-radius:0;box-shadow:none; }
@@ -75,3 +76,4 @@ html.embedded .enquiry-complete .success { position:static;transform:none;width:
  .privacy { font-size:14px; }
  button { font-size:16px;min-height:52px; }
 }
+

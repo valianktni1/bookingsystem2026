@@ -59,8 +59,10 @@ function tellParentHeight() {
 function tellParentSubmitted() {
   // Existing website embeds understand the height message. Newer embeds also
   // bring the confirmation itself into view on the surrounding website page.
-  tellParent({type: "wbm-enquiry-height", height: 520});
-  tellParent({type: "wbm-enquiry-submitted", height: 520});
+  const height = Math.ceil(document.querySelector("main").getBoundingClientRect().height) + 2;
+  tellParent({type: "wbm-enquiry-height", height});
+  tellParent({type: "wbm-enquiry-submitted", height});
+  if (window.parent === window) document.querySelector("#success").scrollIntoView({block: "start"});
 }
 new ResizeObserver(tellParentHeight).observe(document.querySelector("main"));
 window.addEventListener("resize", tellParentHeight);
@@ -239,3 +241,4 @@ form.addEventListener("submit", async event => {
 });
 
 initialiseForm();
+
