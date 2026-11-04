@@ -1,0 +1,36 @@
+PAYMENTS: BOOKED ADD-ONS / EXTRAS SUMMARY
+
+A read-only Add-ons / extras card now appears directly beneath the Payments
+invoice heading and above the existing invoice cards. It shows the booked extra
+names, quantities where relevant, and saved prices. Later invoice amendments are
+labelled Added later. It works on mobile and desktop, in light and dark themes.
+
+The summary reads retained invoice line items. It includes paid invoices, but
+excludes voided/cancelled invoices, discounts, negative charges and zero quantities.
+A zero-priced separately booked extra is shown as No extra charge. Missing prices
+are shown as Price not recorded rather than a made-up zero.
+
+If an invoice has no itemised lines, the linked accepted quote can supply them.
+Invoice lines take priority over quote lines to prevent duplicate or stale extras.
+Quotes for another invoice and unaccepted quote offers are not used.
+
+For imports without type labels, separately named photobooth, album, extra-hour
+and certain other recognisable extras are displayed. Separate extra-only invoices,
+such as Album add-on, are also recognised. The summary does not scan a package's
+included-features description, infer extras from its total or consult current
+catalogue prices. If older records contain no itemised extras, it says so rather
+than claiming that none were chosen. Two separate invoices remain two sources,
+with invoice references shown when needed.
+
+No invoice data, totals, payments, PDFs, email contents, schedules or existing
+invoice action controls are changed. The update changes only static assets and
+adds a read-only wrapper around the existing Payments renderer.
+
+Validation: 18 invoice/quote/import scenarios passed. The browser test compares
+the existing invoice cards before/after the new summary and verifies unchanged
+input data, existing View invoice / Record payment / New invoice handlers,
+correct placement, no repeated quote extras, escaped/long names, and no horizontal
+overflow at 320, 390, 768 and 1440px in light and dark themes. It performs no API
+calls, writes or email sends. JavaScript syntax checking also passed.
+
+Deploy with DEPLOY-PAYMENT-EXTRAS.sh, then reload the couple's Payments tab.
