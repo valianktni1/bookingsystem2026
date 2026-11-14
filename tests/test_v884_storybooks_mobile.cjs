@@ -35,6 +35,12 @@ for(const width of [320,390,1280]){
   assert(!(await overflow()),"public form overflows at "+width);
   await page.locator('[name="buyer_name"]').fill("Example Buyer");
   await page.locator('[name="buyer_email"]').fill("buyer@example.com");
+  await page.locator('[name="theme"]').selectOption("christmas");
+  assert(await page.locator('[name="wedding_date"]').isHidden());
+  assert(await page.locator('[name="role"]').isHidden());
+  await page.locator('[name="theme"]').selectOption("holiday");
+  assert(await page.locator('[name="destination"]').isVisible());
+  await page.locator('[name="theme"]').selectOption("wedding");
   await page.locator('[name="wedding_date"]').fill("2022-05-06");
   await page.locator('[name="ceremony"]').selectOption("church_separate");
   await page.locator('[name="venue"]').fill("Example Church");
@@ -67,6 +73,8 @@ for(const width of [320,390,1280]){
   }
   await page.getByRole("button",{name:"Add a storybook"}).click();
   const dialog=page.getByRole("dialog");
+  await dialog.locator('[name="theme"]').selectOption("christmas_wedding");
+  assert(await dialog.locator('[name="wedding_date"]').isVisible());
   assert.equal(await dialog.locator('[name="wedding_date"]').inputValue(),"2027-05-22");
   assert.equal(await dialog.locator('[name="venue"]').inputValue(),"Example Hall");
   const rect=await dialog.boundingBox();assert(rect.x>=0&&rect.x+rect.width<=width);

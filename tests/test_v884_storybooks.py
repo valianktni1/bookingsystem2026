@@ -183,3 +183,36 @@ def test_honeypot_permissions_and_testing_mode(setup):
     assert client.get("/api/storybooks").status_code == 401
     assert client.get("/storybook-order").status_code == 200
     assert client.get("/storybooks").status_code == 200
+
+
+@pytest.mark.parametrize("theme", ["christmas", "holiday", "christmas_wedding"])
+def test_new_themes_validate_and_invoice_at_agreed_price(setup, theme):
+    client, _, _, _ = setup
+    payload = request()
+    details = payload["details"]
+    details.update(theme=theme, destination="Cornwall")
+    if theme != "christmas_wedding":
+        for key in ("wedding_date", "venue", "ceremony", "reception"):
+            details.pop(key)
+        for book in details["books"]:
+            book["role"] = "child"
+    else:
+        missing_venue = {**payload, "details": {**details, "venue": None}}
+        assert client.post("/api/public/storybooks", json=missing_venue).status_code == 422
+    invalid = {**payload, "details": {**details, "theme": "unknown"}}
+    assert client.post("/api/public/storybooks", json=invalid).status_code == 422
+    response = client.post("/api/public/storybooks", json=payload)
+    assert response.status_code == 201, response.text
+    row = client.get("/api/storybooks").json()[0]
+    assert row["details"]["theme"] == theme
+    assert row["details"]["destination"] == ("Cornwall" if theme == "holiday" else None)
+    assert row["total"] is None
+    path = f"/api/storybooks/{row['id']}/invoice"
+    invoice = {"due_date": (date.today() + timedelta(days=1)).isoformat()}
+    assert client.post(path, json=invoice).status_code == 422
+    assert client.post(path, json={**invoice, "unit_price":"39.995"}).status_code == 422
+    result = client.post(path, json={**invoice, "unit_price":"39.95"})
+    assert result.status_code == 201, result.text
+    assert result.json()["total"] == 79.90
+    assert result.json()["line_items"][0]["unit_price"] == 39.95
+    assert client.get("/api/storybooks").json()[0]["total"] == 79.90

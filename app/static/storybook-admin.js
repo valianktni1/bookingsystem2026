@@ -56,22 +56,41 @@
     dialog.showModal();
   }
   function invoice(order,reload) {
-    showModal("Create storybook invoice",`<p class="full">${order.quantity} × £34.99 = <strong>${s.price.format(order.total)}</strong> including UK delivery.<br>Bill to: ${esc(order.buyer_name)} · ${esc(order.buyer_email)}</p>
+    const theme=order.details.theme||"wedding";
+    const pricing=theme==="wedding" ? `${order.quantity} × £34.99 = <strong>${s.price.format(order.quantity*34.99)}</strong> including UK delivery.` : `${order.quantity} copies · enter the agreed price per book, including UK delivery.`;
+    showModal("Create storybook invoice",`<p class="full"><strong>${esc(s.themes[theme])}</strong><br>${pricing}<br>Bill to: ${esc(order.buyer_name)} · ${esc(order.buyer_email)}</p>
+      ${theme==="wedding"?"":`<label class="full">Agreed price per book (£)<input id="sb-unit-price" type="number" min="0.01" max="10000" step="0.01" required></label>`}
       <label class="full">Payment due date<input id="sb-invoice-due" type="date" min="${today()}" value="${today()}" required></label>
       <label class="full"><span><input type="checkbox" required> I’ve confirmed the details and timing with the buyer.</span></label>`,
-      async()=>{const i=await api(`/api/storybooks/${order.id}/invoice`,{method:"POST",body:JSON.stringify({due_date:value("#sb-invoice-due")})});closeModal();toast(`Invoice ${i.number} created`);await reload();},
+      async()=>{const i=await api(`/api/storybooks/${order.id}/invoice`,{method:"POST",body:JSON.stringify({due_date:value("#sb-invoice-due"),unit_price:document.querySelector("#sb-unit-price")?.value||null})});closeModal();toast(`Invoice ${i.number} created`);await reload();},
       "Confirm the details and timing with the buyer first. This creates the invoice without emailing it.");
+  }
+  function downloadBrief(order) {
+    const d=order.details, theme=d.theme||"wedding";
+    const lines=["# Storybook design brief","", "Story: "+s.themes[theme]];
+    if(s.isWedding(theme))lines.push("Wedding date: "+date(d.wedding_date),"Venue: "+d.venue,
+      ...(d.reception?["Reception: "+d.reception]:[]));
+    if(d.destination)lines.push("Holiday destination: "+d.destination);
+    d.books.forEach((b,i)=>lines.push("", "## Book "+(i+1),"Child’s name: "+b.name,
+      ...(b.role==="child"?[]:["Wedding role: "+s.role[b.role]]),
+      "Hair: "+(b.hair_other||s.hair[b.hair]),"Identical copies: "+b.quantity,
+      "Dedication: "+(b.dedication||"(none supplied)")));
+    lines.push("","Use the chosen story design. Prepare separate interior and hardback cover proofs for review.");
+    const url=URL.createObjectURL(new Blob([lines.join("\n")],{type:"text/markdown;charset=utf-8"}));
+    const link=document.createElement("a");link.href=url;link.download="storybook-"+order.id+"-design-brief.md";
+    document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   function renderOrders(host, orders, reload) {
     host.innerHTML=orders.map(order=>{
       const d=order.details,i=order.invoice,live=i&&!["void","cancelled"].includes(i.status);
       const closed=["cancelled","dispatched"].includes(order.stage);
       return `<article class="sb-card" data-sb-id="${order.id}"><h3>${esc(order.buyer_name)}</h3>
-      <p><span class="sb-status">${esc(s.statuses[order.stage])}</span> · ${order.quantity} book(s) · <strong>${s.price.format(order.total)}</strong></p>
+      <p><span class="sb-status">${esc(s.statuses[order.stage])}</span> · ${order.quantity} book(s) · <strong>${order.total===null?"Price to confirm":s.price.format(order.total)}</strong></p>
       <p><a href="mailto:${esc(order.buyer_email)}">${esc(order.buyer_email)}</a> · ${d.gift?"Gift order · ":""}${order.wedding_id?"Linked wedding booking":"Standalone request"}</p>
-      <p>Wedding: ${date(d.wedding_date)} · ${esc(d.venue)}${d.reception?" / "+esc(d.reception):""} · ${esc(s.ceremony[d.ceremony])}</p>
+      <p><strong>${esc(s.themes[d.theme||"wedding"])}</strong></p>
+      ${s.isWedding(d.theme||"wedding")?`<p>Wedding: ${date(d.wedding_date)} · ${esc(d.venue)}${d.reception?" / "+esc(d.reception):""} · ${esc(s.ceremony[d.ceremony])}</p>`:d.destination?`<p>Holiday destination: ${esc(d.destination)}</p>`:""}
       <p>Requested by: ${date(d.needed_by)}</p>
-      <details><summary>Personalisation and delivery</summary><ul>${d.books.map(b=>`<li><strong>${esc(b.name)}</strong> · ${esc(s.role[b.role])} · ${esc(b.hair_other||s.hair[b.hair])} · ${b.quantity} copies${b.dedication?"<br>Dedication: "+esc(b.dedication):""}</li>`).join("")}</ul>
+      <details><summary>Personalisation and delivery</summary><ul>${d.books.map(b=>`<li><strong>${esc(b.name)}</strong>${b.role==="child"?"":" · "+esc(s.role[b.role])} · ${esc(b.hair_other||s.hair[b.hair])} · ${b.quantity} copies${b.dedication?"<br>Dedication: "+esc(b.dedication):""}</li>`).join("")}</ul>
       <p>Bill to: ${esc(order.buyer_name)}${order.billing_address?" · "+esc(order.billing_address):""}</p><p>Deliver to: ${esc(order.delivery.name||"To confirm")}${order.delivery.address?" · "+esc(order.delivery.address):""}</p></details>
       ${live?`<p>Invoice ${esc(i.number)} · ${s.price.format(i.paid)} paid · ${s.price.format(i.balance)} outstanding</p>`:""}
       <div class="sb-actions">
@@ -79,6 +98,7 @@
       ${!closed&&!live?`<button class="sb-primary" type="button" data-sb-act="invoice">Create invoice</button><button class="sb-secondary" type="button" data-sb-act="cancelled">Cancel request</button>`:""}
       ${live?`<a class="sb-secondary" href="/api/invoices/${i.id}/pdf">Invoice PDF</a><button class="sb-secondary" type="button" data-sb-act="email">Email invoice</button>
       ${i.balance>0?`<button class="sb-primary" type="button" data-sb-act="payment">Record payment</button>`:`<a class="sb-secondary" href="/api/invoices/${i.id}/receipt.pdf">Receipt PDF</a>`}`:""}
+      ${live&&i.balance<=0&&order.stage!=="cancelled"?`<button class="sb-secondary" type="button" data-sb-act="brief">Download design brief</button>`:""}
       ${order.stage==="paid"?`<button class="sb-primary" type="button" data-sb-act="sent_to_print">Mark sent to print</button>`:""}
       ${order.stage==="sent_to_print"?`<button class="sb-primary" type="button" data-sb-act="dispatched">Mark dispatched</button>`:""}
       </div></article>`;
@@ -86,6 +106,7 @@
     host.querySelectorAll("[data-sb-act]").forEach(button=>button.onclick=()=>run(async()=>{
       const order=orders.find(row=>row.id===button.closest("[data-sb-id]").dataset.sbId);
       const action=button.dataset.sbAct;
+      if(action==="brief")return downloadBrief(order);
       if(action==="edit")return edit(order,reload);
       if(action==="invoice")return invoice(order,reload);
       if(action==="email")return emailInvoice(order.invoice.id);

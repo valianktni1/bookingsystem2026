@@ -4,7 +4,7 @@
   const allowed=()=>data?.storybooks_available;
   const card=()=>`<section class="sb-card" data-storybook-extra><h3>Personalised wedding storybook</h3>
     <p>Give your flower girl or pageboy a hardback story with their name on the cover, your wedding date and venue inside, and a little thank-you from you.</p>
-    <p><strong>£34.99 per book including UK delivery.</strong></p>
+    <p><strong>Classic wedding books are £34.99 including UK delivery. Other designs are quoted separately.</strong></p>
     <p class="sb-actions"><a href="${s.sample}" target="_blank" rel="noopener">See a sample</a>
       <button type="button" class="sb-primary" data-sb-open ${quotePreview?"disabled":""}>Add a storybook</button></p>
     <div data-sb-requests></div></section>`;
@@ -28,7 +28,7 @@
     dialog.setAttribute("aria-labelledby","storybook-dialog-title");
     const venue=data.record.venue_or_project||"";
     const details={wedding_date:data.record.event_date,venue,ceremony:venue?"one_venue":""};
-    dialog.innerHTML=`<h2 id="storybook-dialog-title">Add a storybook</h2><p>£34.99 per book including UK delivery. This is a request. Mark will confirm the details before invoicing. Any wedding details you change here apply to the book only.</p>
+    dialog.innerHTML=`<h2 id="storybook-dialog-title">Add a storybook</h2><p>Classic wedding books are £34.99 including UK delivery. Other designs are quoted separately. This is a request. Mark will confirm the details before invoicing. Any wedding details you change here apply to the book only.</p>
       <form>${s.fields(details)}${s.consent}<p class="sb-error" role="alert" data-sb-error></p>
       <div class="sb-actions"><button type="button" class="sb-secondary" data-sb-close>Close</button><button type="submit" class="sb-primary">Send storybook order request</button></div></form>`;
     document.body.append(dialog);
