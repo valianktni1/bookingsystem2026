@@ -29,7 +29,13 @@ from .services import audit, next_invoice_number
 UNIT_PRICE = Decimal("34.99")
 SOURCE = "storybook_order"
 OWNER_KEY = "new_storybook_admin"
-ITEM_NAME = "Personalised Wedding Storybook (hardback)"
+THEMES = {
+    "wedding": "Wedding Storybook",
+    "christmas_wedding": "Christmas Wedding",
+    "christmas": "Christmas Adventure",
+    "holiday": "Holiday Adventure",
+}
+WEDDING_THEMES = {"wedding", "christmas_wedding"}
 Text80 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
 Text160 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
 Text600 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=600)]
@@ -54,7 +60,7 @@ class StorybookOrder(Base):
 class BookCopy(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: Text80
-    role: Literal["flower_girl", "pageboy"]
+    role: Literal["flower_girl", "pageboy", "child"]
     hair: Literal["black", "dark_brown", "light_brown", "blonde", "red_ginger", "other"]
     hair_other: Text80 | None = None
     dedication: Text600 | None = None
@@ -71,9 +77,11 @@ class BookCopy(BaseModel):
 
 class BookDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    wedding_date: date
-    ceremony: Literal["one_venue", "church_separate", "other"]
-    venue: Text160
+    theme: Literal["wedding", "christmas_wedding", "christmas", "holiday"] = "wedding"
+    wedding_date: date | None = None
+    ceremony: Literal["one_venue", "church_separate", "other"] | None = None
+    venue: Text160 | None = None
+    destination: Text160 | None = None
     separate_venues: bool = False
     reception: Text160 | None = None
     needed_by: date | None = None
@@ -82,14 +90,26 @@ class BookDetails(BaseModel):
 
     @model_validator(mode="after")
     def check_order(self):
-        if self.ceremony == "church_separate":
-            self.separate_venues = True
-        elif self.ceremony == "one_venue":
+        if self.theme in WEDDING_THEMES:
+            if not (self.wedding_date and self.venue and self.ceremony):
+                raise ValueError("Enter the wedding date, ceremony type and venue.")
+            if any(book.role == "child" for book in self.books):
+                raise ValueError("Choose flower girl or pageboy for each wedding book.")
+            if self.ceremony == "church_separate":
+                self.separate_venues = True
+            elif self.ceremony == "one_venue":
+                self.separate_venues = False
+            if self.separate_venues and not self.reception:
+                raise ValueError("Enter the reception venue as well as the ceremony venue.")
+        else:
+            self.wedding_date = self.ceremony = self.venue = None
             self.separate_venues = False
-        if self.separate_venues and not self.reception:
-            raise ValueError("Enter the reception venue as well as the ceremony venue.")
+            for book in self.books:
+                book.role = "child"
         if not self.separate_venues:
             self.reception = None
+        if self.theme != "holiday":
+            self.destination = None
         if sum(book.quantity for book in self.books) > 24:
             raise ValueError("Please request up to 24 copies per order.")
         return self
@@ -120,6 +140,7 @@ class OrderEdit(BaseModel):
 
 class InvoiceRequest(BaseModel):
     due_date: date
+    unit_price: Decimal | None = Field(default=None, gt=0, le=10000, decimal_places=2)
 
 
 class FulfilmentRequest(BaseModel):
@@ -186,13 +207,15 @@ def stage(order):
 def order_json(order):
     invoice = order.invoice
     buyer = order.billing.client
+    theme = order.details.get("theme", "wedding")
+    total = invoice.total if invoice_open(invoice) else UNIT_PRICE * quantity(order.details) if theme == "wedding" else None
     return {
         "id": order.id, "wedding_id": order.wedding_id,
         "billing_id": order.billing_id,
         "buyer_name": " ".join(filter(None, (buyer.first_name, buyer.last_name))),
         "buyer_email": buyer.email, "billing_address": buyer.address,
         "details": order.details, "delivery": order.delivery,
-        "quantity": quantity(order.details), "total": float(UNIT_PRICE * quantity(order.details)),
+        "quantity": quantity(order.details), "total": float(total) if total is not None else None,
         "stage": stage(order), "created_at": order.created_at.isoformat(),
         "invoice": ({"id": invoice.id, "number": invoice.number, "paid": float(invoice.paid),
                      "total": float(invoice.total), "status": invoice.status,
@@ -229,7 +252,7 @@ def new_order(db, payload, request, *, wedding=None, buyer_name, buyer_email, te
         settings = get_settings()
         enqueue_enquiry_message(
             db, billing, OWNER_KEY, recipient=state.get("test_email") or settings.admin_email,
-            subject="New wedding storybook request",
+            subject=f"New storybook request · {THEMES[payload.details.theme]}",
             body=(f"A new storybook request for {quantity(order.details)} book(s) is ready to review.\n\n"
                   f"Open Storybooks in your booking app: {settings.app_url.rstrip('/')}/storybooks"),
             reply_to=state.get("test_email") or client.email,
@@ -308,11 +331,12 @@ def register_storybook_routes(app, *, resolve_portal, testing_mode, full_invoice
         if row.fulfilment in ("dispatched", "cancelled"):
             raise HTTPException(409, "This order has been dispatched or cancelled.")
         details = payload.details.model_dump(mode="json")
-        if row.fulfilment == "sent_to_print" and details != row.details:
+        if row.fulfilment == "sent_to_print" and details != BookDetails.model_validate(row.details).model_dump(mode="json"):
             raise HTTPException(409, "The book details are frozen after printing. You can still update delivery.")
 
-        if invoice_open(row.invoice) and quantity(details) != quantity(row.details):
-            raise HTTPException(409, "The invoice fixes the number of copies. Close it before changing the quantity.")
+        if invoice_open(row.invoice) and (quantity(details) != quantity(row.details) or
+                                          details["theme"] != row.details.get("theme", "wedding")):
+            raise HTTPException(409, "Close the invoice before changing the theme or number of copies.")
         buyer = row.billing.client
         if invoice_open(row.invoice) and (payload.buyer_name != " ".join(filter(None, (buyer.first_name, buyer.last_name)))
                                         or payload.buyer_email != buyer.email or payload.billing_address != buyer.address):
@@ -341,14 +365,19 @@ def register_storybook_routes(app, *, resolve_portal, testing_mode, full_invoice
         if payload.due_date < today:
             raise HTTPException(422, "Choose a due date on or after today.")
         qty = quantity(row.details)
-        total = UNIT_PRICE * qty
+        theme = row.details.get("theme", "wedding")
+        unit = UNIT_PRICE if theme == "wedding" else payload.unit_price
+        if unit is None:
+            raise HTTPException(422, "Enter the agreed price per book before invoicing.")
+        name = f"Personalised {THEMES[theme]} (hardback)"
+        total = unit * qty
         seq, number = next_invoice_number(db, Brand.WBM)
         invoice = Invoice(booking_id=row.billing_id, brand=Brand.WBM, sequence=seq, number=number,
                           issue_date=today, due_date=payload.due_date, total=total, paid=Decimal("0"),
-                          status="unpaid", description=ITEM_NAME,
+                          status="unpaid", description=name,
                           line_items=[{"type": "addon", "code": "personalised_wedding_storybook",
-                                       "name": ITEM_NAME, "description": f"{qty} × £{UNIT_PRICE} each · UK delivery included",
-                                       "quantity": qty, "unit_price": float(UNIT_PRICE), "total": float(total)}])
+                                       "name": name, "description": f"{qty} × £{unit:.2f} each · UK delivery included",
+                                       "quantity": qty, "unit_price": float(unit), "total": float(total)}])
         db.add(invoice)
         db.flush()
         profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == Brand.WBM))

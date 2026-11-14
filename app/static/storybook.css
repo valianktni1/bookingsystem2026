@@ -31,3 +31,6 @@
 .sb-status{display:inline-block;border-radius:8px;padding:5px 8px;background:#e9f1e9;color:#244a42;font-weight:700}
 .sb-card [hidden],.sb-shell [hidden],.sb-dialog [hidden],.sb-grid [hidden],.sb-child [hidden]{display:none!important}
 @media(max-width:580px){.sb-grid{grid-template-columns:minmax(0,1fr)}.sb-actions>*{max-width:100%}.sb-shell .sb-primary{width:100%}}
+
+.sb-conditional:not([hidden]){display:contents}
+[data-sb-theme-help]{margin:0 0 12px}
