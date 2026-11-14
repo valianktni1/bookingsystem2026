@@ -14,7 +14,7 @@ from .email_service import render_template_content, send_rendered_email
 from .models import Booking, Brand, BusinessProfile, EmailLog, RecordStatus
 
 logger = logging.getLogger(__name__)
-KEYS = ('enquiry_received', 'new_enquiry_admin')
+KEYS = ('enquiry_received', 'new_enquiry_admin', 'new_storybook_admin')
 
 
 class EnquiryEmailJob(Base):
@@ -34,13 +34,23 @@ def queue_enquiry_email(db, booking, profile, template, *, recipient,
         separator = '&' if '?' in portal_url else '?'
         portal_url = f'{portal_url}{separator}email_access={token}'
     subject, body = render_template_content(booking, profile, template, portal_url, extra_values)
-    email = EmailLog(booking_id=booking.id, template_key=template.template_key,
+    return enqueue_enquiry_message(
+        db, booking, template.template_key, recipient=recipient, subject=subject, body=body,
+        reply_to=reply_to, tracking_hash=hashlib.sha256(token.encode()).hexdigest() if token else None,
+        tracking_url=(f"{get_settings().app_url.rstrip('/')}/api/public/email-open/{token}.gif" if token else None),
+    )
+
+
+def enqueue_enquiry_message(db, booking, key, *, recipient, subject, body,
+                            reply_to=None, tracking_hash=None, tracking_url=None):
+    if key not in KEYS:
+        raise ValueError("Unsupported enquiry email")
+    email = EmailLog(booking_id=booking.id, template_key=key,
                      recipient=recipient, subject=subject, body=body, status='queued',
-                     tracking_token_hash=hashlib.sha256(token.encode()).hexdigest() if token else None)
+                     tracking_token_hash=tracking_hash)
     db.add(email)
     db.flush()
-    db.add(EnquiryEmailJob(email_id=email.id, reply_to=reply_to,
-                         open_tracking_url=(f"{get_settings().app_url.rstrip('/')}/api/public/email-open/{token}.gif" if token else None)))
+    db.add(EnquiryEmailJob(email_id=email.id, reply_to=reply_to, open_tracking_url=tracking_url))
     return email
 
 
@@ -58,7 +68,8 @@ def deliver_one(email_id):
         booking = db.get(Booking, email.booking_id)
         try:
             if (not job or not booking or booking.brand != Brand.WBM or booking.legacy_source
-                    or (booking.workflow_state or {}).get('source') != 'website_enquiry'
+                    or (booking.workflow_state or {}).get('source') != (
+                        'storybook_order' if email.template_key == 'new_storybook_admin' else 'website_enquiry')
                     or booking.status == RecordStatus.CANCELLED or booking.archived_at):
                 raise ValueError('This enquiry is no longer eligible for queued email')
             profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == booking.brand))

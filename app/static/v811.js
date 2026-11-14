@@ -3,7 +3,7 @@
   "use strict";
 
   const workspaceViews = new Set([
-    "dashboard", "enquiries", "weddings", "projects", "calendar", "workflows",
+    "dashboard", "storybooks", "enquiries", "weddings", "projects", "calendar", "workflows",
     "mail", "invoices", "documents", "forms", "bookingforms", "timingsforms", "packages",
     "communications", "settings"
   ]);
@@ -589,6 +589,10 @@
       <details class="v828-dashboard-group waiting v854-waiting" ${waitingExpanded ? "open" : ""}><summary><div><small>KEEP AN EYE ON</small><h2>Waiting and upcoming</h2><p>No action is needed until the couple responds or a payment becomes due.</p></div><b>${waitingKeys.reduce((sum, key) => sum + queues[key].length, 0)} items</b></summary><div class="v811-queue-cards">${waitingKeys.map(key => queueCard(key, queues[key])).join("")}</div><div class="v811-worklists">${waitingKeys.map(key => `<article id="queue-${key}" class="panel v811-queue-panel"><div class="panel-title"><div><h2>${esc(queueCopy[key][0])}</h2><p>${esc(queueCopy[key][1])}</p></div><b>${queues[key].length}</b></div>${queues[key].map(queueItem).join("")}</article>`).join("") || `<article class="panel empty"><strong>Nothing is waiting</strong>There are no watched client steps or payments in the next 60 days.</article>`}</div></details>
       <section class="dash-grid v811-dashboard-lower v824-dashboard-tasks"><article class="panel"><div class="panel-title"><div><h2>Private things to do · ${d.open_tasks || 0}</h2><p>These never email a client</p></div><button data-jump="workflows">View all</button></div>${tasks.length ? tasks.slice(0, 7).map(task => taskRow(task, true)).join("") : `<div class="empty"><strong>You're all caught up</strong>No open private tasks.</div>`}</article></section>`;
     const dashboardHost = $("#content");
+    if (state.brand !== "ivory" && Number(d.new_storybooks) > 0) {
+      dashboardHost.insertAdjacentHTML("afterbegin", `<section class="panel sb-card"><h3>Storybook requests</h3><p>${Number(d.new_storybooks)} to review</p><button class="sb-secondary" data-jump="storybooks">Review requests</button></section>`);
+    }
+
     const upcomingPanel = $(".v824-upcoming-weddings", dashboardHost);
     const actionsPanel = $(".v828-dashboard-group.action", dashboardHost);
     if (upcomingPanel && actionsPanel) actionsPanel.after(upcomingPanel);
@@ -751,5 +755,6 @@
     }
   }, 250);
 })();
+
 
 
