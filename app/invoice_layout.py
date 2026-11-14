@@ -55,6 +55,7 @@ def native_invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool
                                 ("RIGHTPADDING", (0, 0), (-1, -1), 0)]))
     story += [header, Spacer(1, 3 * mm), HRFlowable(width="100%", color=accent, thickness=1), Spacer(1, 4 * mm)]
 
+    storybook_sale = (invoice.booking.workflow_state or {}).get("source") == "storybook_order"
     client = invoice.booking.client
     client_name = client.company_name or invoice.booking.title
     client_lines = "<br/>".join(escape(str(x)) for x in [client_name, client.email, client.phone, client.address] if x)
@@ -212,7 +213,8 @@ def native_invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool
             note_parts.insert(
                 0,
                 f"<b>PAYMENT REFERENCE: {escape(reference)}</b><br/>"
-                f"Please use <b>{escape(reference)}</b> for every bank transfer for this wedding.",
+                f"Please use <b>{escape(reference)}</b> for " +
+                ("this storybook payment." if storybook_sale else "every bank transfer for this wedding."),
             )
         if bank_lines and not receipt:
             note_parts.append("<br/>".join(bank_lines))

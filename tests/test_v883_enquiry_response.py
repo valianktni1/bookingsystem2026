@@ -26,7 +26,7 @@ def fixture(monkeypatch):
     with SessionLocal() as db:
         db.add(BusinessProfile(brand=Brand.WBM, display_name='Example studio', invoice_prefix='WBM'))
         db.add(FormTemplate(brand=Brand.WBM, template_key='website_enquiry', display_name='Website', config=DEFAULT_ENQUIRY_FORM))
-        for key in delivery.KEYS:
+        for key in ('enquiry_received', 'new_enquiry_admin'):
             db.add(EmailTemplate(brand=Brand.WBM, template_key=key, display_name=key,
                                 subject='Hello {client_first_name}', body='Received {couple_or_company}. {portal_url} {enquiry_message}'))
         db.commit()

@@ -40,6 +40,7 @@ from .date_blocks import register_date_block_routes
 from .email_service import (email_signature_asset, email_signature_config,
                             preview_template_email, send_rendered_email,
                             send_template_email, smtp_credentials, smtp_ready)
+from .storybooks import available_wedding, is_storybook_sale, new_storybook_count, register_storybook_routes
 from .enquiry_delivery import enquiry_email_loop, queue_enquiry_email
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
 from .google_calendar import (google_calendar_configured, register_google_calendar_routes,
@@ -165,7 +166,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.83", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.84", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_gallery_routes(app)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
@@ -184,7 +185,7 @@ async def protective_response_headers(request: Request, call_next):
     # WordPress site.  X-Frame-Options cannot express a safe cross-origin allow
     # list, so use CSP for this one public document and keep every admin/client
     # page protected by DENY.
-    if request.url.path.rstrip("/") == "/enquiry":
+    if request.url.path.rstrip("/") in {"/enquiry", "/storybook-order"}:
         response.headers["Content-Security-Policy"] = (
             "frame-ancestors 'self' https://perfectweddingsbymark.uk "
             "https://www.perfectweddingsbymark.uk"
@@ -1778,6 +1779,7 @@ def dashboard(_: Admin = Depends(current_admin), db: Session = Depends(get_db)):
     stage_rows = list({row.id: row for row in [*upcoming, *upcoming_weddings]}.values())
     stages = journey_stages(db, stage_rows)
     counts.update({
+        "new_storybooks": new_storybook_count(db),
         "upcoming": [booking_json(x, journey_stage=stages.get(x.id)) for x in upcoming],
         "upcoming_weddings": [booking_json(x, journey_stage=stages.get(x.id)) for x in upcoming_weddings],
         "tasks": [task_json(t) for t in tasks],
@@ -2079,6 +2081,8 @@ def list_bookings(brand: Brand | None = None, kind: RecordKind | None = None,
         selectinload(Booking.tasks), selectinload(Booking.invoices),
     ).order_by(Booking.event_date.asc().nullslast(), Booking.created_at.desc())
     stmt = stmt.where(Booking.archived_at.is_not(None) if archived else Booking.archived_at.is_(None))
+    stmt = stmt.where(or_(Booking.workflow_state["source"].as_string().is_(None),
+                          Booking.workflow_state["source"].as_string() != "storybook_order"))
     if brand:
         stmt = stmt.where(Booking.brand == brand)
     if kind:
@@ -2659,6 +2663,12 @@ def create_payment(invoice_id: str, payload: PaymentIn, admin: Admin = Depends(c
     db.add(payment)
     invoice.paid += payload.amount
     invoice.status = invoice_status(invoice.total, invoice.paid)
+    if is_storybook_sale(invoice.booking):
+        audit(db, "record_payment", "booking", invoice.booking_id,
+              {"invoice": invoice.number, "amount": money(payload.amount), "storybook": True})
+        db.commit()
+        db.expire_all()
+        return invoice_json(full_invoice(db, invoice.id))
     auto_confirmed = False
     arrangement_completed = False
     if invoice.booking:
@@ -2771,7 +2781,7 @@ def delete_payment(payment_id: str, admin: Admin = Depends(current_admin),
         raise HTTPException(404, "Payment not found")
     if payment.legacy_source == "studio_ninja":
         raise HTTPException(409, "Imported Studio Ninja payment history is retained and cannot be deleted")
-    invoice = db.get(Invoice, payment.invoice_id)
+    invoice = db.get(Invoice, payment.invoice_id, with_for_update=True)
     if invoice.status in ("void", "cancelled"):
         raise HTTPException(409, "Payment history on a closed invoice is retained")
     booking = db.get(Booking, invoice.booking_id)
@@ -2779,6 +2789,10 @@ def delete_payment(payment_id: str, admin: Admin = Depends(current_admin),
     invoice.status = invoice_status(invoice.total, invoice.paid)
     db.delete(payment)
     db.flush()
+    if is_storybook_sale(booking):
+        audit(db, "delete_payment", "booking", invoice.booking_id, {"invoice": invoice.number, "storybook": True})
+        db.commit()
+        return
     remaining_payment_date = db.scalar(select(Payment.paid_date).join(
         Invoice, Invoice.id == Payment.invoice_id
     ).where(Invoice.booking_id == invoice.booking_id).order_by(Payment.paid_date).limit(1))
@@ -3895,7 +3909,8 @@ def client_booking_data(booking: Booking, db: Session):
     ).order_by(Document.document_date.desc(), Document.created_at.desc())).all()
     accepted_invoice_id = (status_data.get("quote") or {}).get("invoice_id")
     accepted_invoice = next((item for item in client_invoices if item.id == accepted_invoice_id), None)
-    return {"quote_bank_details": public_quote_bank_details(booking, profile, accepted_invoice),
+    return {"storybooks_available": available_wedding(booking),
+            "quote_bank_details": public_quote_bank_details(booking, profile, accepted_invoice),
             "business": {"name": profile.display_name, "brand": profile.brand.value,
                          "email": profile.email, "phone": profile.phone},
             "record": {"title": booking.title, "kind": booking.kind.value,
@@ -4865,6 +4880,8 @@ def _custom_workflow_candidates(db: Session, booking: Booking) -> list[tuple[str
 
 def _workflow_candidates(db: Session, booking: Booking) -> list[tuple[str, date]]:
     """Calculate the currently relevant scheduled point for each journey."""
+    if is_storybook_sale(booking):
+        return []
     is_studio_ninja = booking.legacy_source == "studio_ninja"
     if is_studio_ninja:
         if not (
@@ -5469,7 +5486,8 @@ def retry_failed_communication(
         send_rendered_email(
             booking, profile, email.recipient, email.subject, email.body,
             open_tracking_url=(email_open_url(tracking_token) if tracking_token else None),
-            reply_to=(booking.client.email if owner_notification else None),
+            reply_to=((client_email_recipient(db, booking) if is_storybook_sale(booking)
+                       else booking.client.email) if owner_notification else None),
             template_key=email.template_key,
         )
     except Exception as exc:
@@ -5566,18 +5584,6 @@ def admin_booking_overview_page(booking_id: str):
     return FileResponse(STATIC_DIR / "index.html")
 
 
-@app.get("/{view}", include_in_schema=False)
-def admin_workspace_page(view: str):
-    allowed = {
-        "dashboard", "enquiries", "weddings", "projects", "calendar",
-        "workflows", "mail", "invoices", "documents", "forms",
-        "bookingforms", "timingsforms", "packages", "communications", "settings",
-    }
-    if view not in allowed:
-        raise HTTPException(404, "Page not found")
-    return FileResponse(STATIC_DIR / "index.html")
-
-
 register_quote_template_routes(app)
 
 
@@ -5625,3 +5631,30 @@ register_control_centre_routes(app, workflow_queues)
 
 
 
+
+
+def storybook_public_pdf(db: Session, invoice_id: str, receipt: bool):
+    invoice = full_invoice(db, invoice_id)
+    if receipt and invoice.paid <= 0:
+        raise HTTPException(404, "No payment is recorded yet")
+    profile = db.scalar(select(BusinessProfile).where(BusinessProfile.brand == invoice.brand))
+    filename = invoice_download_filename(invoice, receipt=receipt)
+    return Response(invoice_pdf(invoice, profile, receipt=receipt), media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"',
+                             "Cache-Control": "private, no-store"})
+
+
+register_storybook_routes(app, resolve_portal=resolve_portal, testing_mode=testing_mode,
+                          full_invoice=full_invoice, invoice_json=invoice_json, public_pdf=storybook_public_pdf)
+
+
+@app.get("/{view}", include_in_schema=False)
+def admin_workspace_page(view: str):
+    allowed = {
+        "dashboard", "storybooks", "enquiries", "weddings", "projects", "calendar",
+        "workflows", "mail", "invoices", "documents", "forms",
+        "bookingforms", "timingsforms", "packages", "communications", "settings",
+    }
+    if view not in allowed:
+        raise HTTPException(404, "Page not found")
+    return FileResponse(STATIC_DIR / "index.html")

@@ -14,6 +14,7 @@ from .models import AuditLog, Booking, Brand, BusinessProfile, EmailLog, EmailTe
 
 OWNER_NOTIFICATION_KEYS = frozenset({
     "new_enquiry_admin",
+    "new_storybook_admin",
     "quote_accepted_admin",
     "booking_form_submitted_admin",
     "final_timings_submitted_admin",
@@ -45,7 +46,7 @@ def send_owner_notification_safely(
     Delivery failure is retained for the existing communication-retry queue and
     is never allowed to roll back a quote, form or signed agreement.
     """
-    if template_key not in OWNER_NOTIFICATION_KEYS - {"new_enquiry_admin"}:
+    if template_key not in OWNER_NOTIFICATION_KEYS - {"new_enquiry_admin", "new_storybook_admin"}:
         raise ValueError("Unknown private owner-notification template")
     recipient = owner_notification_recipient(booking)
     attempted_at = datetime.now(timezone.utc)
@@ -146,3 +147,4 @@ def send_owner_notification_safely(
         ))
         db.commit()
         return {"sent": False, "status": "failed", "error": error}
+
