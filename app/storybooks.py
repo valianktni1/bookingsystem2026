@@ -9,7 +9,7 @@ from time import monotonic
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
 from sqlalchemy import DateTime, ForeignKey, String, or_, select, func
@@ -21,20 +21,15 @@ from .business_time import business_today
 from .config import get_settings
 from .database import Base, get_db
 from .enquiry_delivery import enqueue_enquiry_message
-from .models import Admin, Booking, Brand, BusinessProfile, Client, Invoice, RecordKind, RecordStatus, now, uid
+from .models import Admin, Booking, Brand, BusinessProfile, Client, Invoice, RecordKind, RecordStatus, SystemSetting, now, uid
 from .quote_templates import booking_bank_details
 from .security import current_admin
 from .services import audit, next_invoice_number
+from .storybook_form import KEY as FORM_KEY, THEMES, QuestionKey, SavedAnswer, StorybookForm, ThemeKey, collect_answers, get_form
 
 UNIT_PRICE = Decimal("34.99")
 SOURCE = "storybook_order"
 OWNER_KEY = "new_storybook_admin"
-THEMES = {
-    "wedding": "Wedding Storybook",
-    "christmas_wedding": "Christmas Wedding",
-    "christmas": "Christmas Adventure",
-    "holiday": "Holiday Adventure",
-}
 WEDDING_THEMES = {"wedding", "christmas_wedding"}
 Text80 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
 Text160 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
@@ -77,7 +72,9 @@ class BookCopy(BaseModel):
 
 class BookDetails(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    theme: Literal["wedding", "christmas_wedding", "christmas", "holiday"] = "wedding"
+    theme: ThemeKey = "wedding"
+    theme_title: Text160 | None = None
+    custom_answers: list[SavedAnswer] = Field(default_factory=list, max_length=20)
     wedding_date: date | None = None
     ceremony: Literal["one_venue", "church_separate", "other"] | None = None
     venue: Text160 | None = None
@@ -124,6 +121,8 @@ class RequestDetails(BaseModel):
 
 
 class PublicRequest(RequestDetails):
+    form_revision: str | None = Field(default=None, max_length=64)
+    answers: dict[QuestionKey, Annotated[str, StringConstraints(max_length=1000)]] = Field(default_factory=dict, max_length=20)
     buyer_name: Text160
     buyer_email: EmailStr
 
@@ -227,6 +226,20 @@ def new_order(db, payload, request, *, wedding=None, buyer_name, buyer_email, te
     key = hashlib.sha256(f"{wedding.id if wedding else 'public'}:{payload.submission_id}".encode()).hexdigest()
     if payload.website or db.scalar(select(StorybookOrder.id).where(StorybookOrder.request_key == key)):
         return {"ok": True}
+    if isinstance(payload, PublicRequest):
+        form = get_form(db)
+        if payload.form_revision != form.revision() and (payload.form_revision is not None or db.get(SystemSetting, FORM_KEY)):
+            raise HTTPException(409, "The storybook form has changed. Please reopen it before sending your request.")
+        story = next((story for story in form.stories if story.id == payload.details.theme and story.enabled), None)
+        if story is None:
+            raise HTTPException(422, "Choose one of the available stories.")
+        payload.details.theme_title = story.label
+        payload.details.custom_answers = collect_answers(form, story.id, payload.answers)
+    else:
+        if payload.details.theme not in THEMES:
+            raise HTTPException(422, "Choose one of the stories available in your wedding portal.")
+        payload.details.theme_title = None
+        payload.details.custom_answers = []
     rate_limit(request)
     first, _, last = buyer_name.partition(" ")
     client = Client(first_name=first[:100], last_name=(first[100:] + " " + last).strip()[:100],
@@ -252,7 +265,7 @@ def new_order(db, payload, request, *, wedding=None, buyer_name, buyer_email, te
         settings = get_settings()
         enqueue_enquiry_message(
             db, billing, OWNER_KEY, recipient=state.get("test_email") or settings.admin_email,
-            subject=f"New storybook request · {THEMES[payload.details.theme]}",
+            subject=f"New storybook request · {payload.details.theme_title or THEMES[payload.details.theme]}",
             body=(f"A new storybook request for {quantity(order.details)} book(s) is ready to review.\n\n"
                   f"Open Storybooks in your booking app: {settings.app_url.rstrip('/')}/storybooks"),
             reply_to=state.get("test_email") or client.email,
@@ -270,6 +283,34 @@ def register_storybook_routes(app, *, resolve_portal, testing_mode, full_invoice
     def public_page():
         return FileResponse(Path(__file__).parent / "static" / "storybook.html",
                             headers={"Cache-Control": "no-store"})
+
+    def form_response(form):
+        return {"config": form.model_dump(mode="json"), "revision": form.revision()}
+
+    @app.get("/api/public/storybooks/form")
+    def public_form(response: Response, db=Depends(get_db)):
+        form = get_form(db)
+        response.headers["Cache-Control"] = "no-store"
+        result = form_response(form)
+        result["config"]["stories"] = [story for story in result["config"]["stories"] if story["enabled"]]
+        visible = {story["id"] for story in result["config"]["stories"]}
+        result["config"]["questions"] = [q for q in result["config"]["questions"] if q["story"] is None or q["story"] in visible]
+        return result
+
+    @app.get("/api/storybooks/form")
+    def admin_form(response: Response, _: Admin = Depends(current_admin), db=Depends(get_db)):
+        response.headers["Cache-Control"] = "no-store"
+        return form_response(get_form(db))
+
+    @app.put("/api/storybooks/form")
+    def save_form(payload: StorybookForm, _: Admin = Depends(current_admin), db=Depends(get_db)):
+        row = db.get(SystemSetting, FORM_KEY)
+        if row is None:
+            row = SystemSetting(key=FORM_KEY)
+            db.add(row)
+        row.value = payload.model_dump(mode="json")
+        db.commit()
+        return form_response(payload)
 
     @app.post("/api/public/storybooks", status_code=201)
     def public_order(payload: PublicRequest, request: Request, db=Depends(get_db)):
@@ -330,8 +371,13 @@ def register_storybook_routes(app, *, resolve_portal, testing_mode, full_invoice
         row = get_order(db, order_id)
         if row.fulfilment in ("dispatched", "cancelled"):
             raise HTTPException(409, "This order has been dispatched or cancelled.")
+        previous = BookDetails.model_validate(row.details)
+        if payload.details.theme != previous.theme and payload.details.theme not in THEMES:
+            raise HTTPException(422, "Choose an available story.")
+        payload.details.theme_title = previous.theme_title if payload.details.theme == previous.theme else None
+        payload.details.custom_answers = previous.custom_answers
         details = payload.details.model_dump(mode="json")
-        if row.fulfilment == "sent_to_print" and details != BookDetails.model_validate(row.details).model_dump(mode="json"):
+        if row.fulfilment == "sent_to_print" and details != previous.model_dump(mode="json"):
             raise HTTPException(409, "The book details are frozen after printing. You can still update delivery.")
 
         if invoice_open(row.invoice) and (quantity(details) != quantity(row.details) or
@@ -369,7 +415,8 @@ def register_storybook_routes(app, *, resolve_portal, testing_mode, full_invoice
         unit = UNIT_PRICE if theme == "wedding" else payload.unit_price
         if unit is None:
             raise HTTPException(422, "Enter the agreed price per book before invoicing.")
-        name = f"Personalised {THEMES[theme]} (hardback)"
+        title = row.details.get("theme_title") or THEMES.get(theme, "Storybook")
+        name = f"Personalised {title} (hardback)"
         total = unit * qty
         seq, number = next_invoice_number(db, Brand.WBM)
         invoice = Invoice(booking_id=row.billing_id, brand=Brand.WBM, sequence=seq, number=number,

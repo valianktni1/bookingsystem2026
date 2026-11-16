@@ -216,3 +216,65 @@ def test_new_themes_validate_and_invoice_at_agreed_price(setup, theme):
     assert result.json()["total"] == 79.90
     assert result.json()["line_items"][0]["unit_price"] == 39.95
     assert client.get("/api/storybooks").json()[0]["total"] == 79.90
+
+
+def test_public_editor_preserves_order_and_invoice_when_story_changes(setup):
+    client, _, smtp, _ = setup
+    public = "/api/public/storybooks/form"
+    editor = "/api/storybooks/form"
+    initial = client.get(public)
+    assert initial.headers["cache-control"] == "no-store"
+    assert "ivorydigital.uk" in client.get("/storybook-order").headers["content-security-policy"]
+    assert "ivorydigital.uk" not in client.get("/enquiry").headers["content-security-policy"]
+    config = client.get(editor).json()["config"]
+    story = "story_" + uuid4().hex
+    question = uuid4().hex
+    config["stories"][1]["enabled"] = False
+    config["stories"].append({"id": story, "label": "Birthday Book"})
+    config["questions"] = [{"id": question, "label": "Birthday", "kind": "date", "story": story, "required": True}]
+    with_override = main.app.dependency_overrides.pop(current_admin)
+    try:
+        assert client.get(editor).status_code == 401
+        assert client.put(editor, json=config).status_code == 401
+    finally:
+        main.app.dependency_overrides[current_admin] = with_override
+    updated = client.put(editor, json=config)
+    assert updated.status_code == 200, updated.text
+    revision = updated.json()["revision"]
+    assert revision == client.get(public).json()["revision"]
+    assert not any(s["id"] == "christmas_wedding" for s in client.get(public).json()["config"]["stories"])
+    payload = request()
+    payload["details"]["theme"] = story
+    payload["form_revision"] = initial.json()["revision"]
+    assert client.post("/api/public/storybooks", json=payload).status_code == 409
+    payload["form_revision"] = revision
+    assert client.post("/api/public/storybooks", json=payload).status_code == 422
+    payload["answers"] = {question: "not a date"}
+    assert client.post("/api/public/storybooks", json=payload).status_code == 422
+    payload["answers"][question] = "2027-03-05"
+    payload["details"]["theme_title"] = "Not the saved title"
+    payload["details"]["custom_answers"] = [{"question": "Injected", "answer": "ignored"}]
+    saved = client.post("/api/public/storybooks", json=payload)
+    assert saved.status_code == 201, saved.text
+    config["stories"].pop()
+    config["questions"].clear()
+    assert client.put(editor, json=config).status_code == 200
+    assert client.post("/api/public/storybooks", json=payload).status_code == 201  # safe retry, including after form changes
+    payload["submission_id"] = str(uuid4())
+    payload["form_revision"] = client.get(public).json()["revision"]
+    assert client.post("/api/public/storybooks", json=payload).status_code == 422
+    [order] = client.get("/api/storybooks").json()
+    assert order["details"]["theme_title"] == "Birthday Book"
+    assert order["details"]["custom_answers"] == [{"question": "Birthday", "answer": "2027-03-05"}]
+    assert order["total"] is None
+    base = f"/api/storybooks/{order['id']}"
+    details = order["details"]
+    details.pop("custom_answers")
+    client_edit = client.patch(base, json={"buyer_name": order["buyer_name"], "buyer_email": order["buyer_email"], "details": details})
+    assert client_edit.status_code == 200 and client_edit.json()["details"]["custom_answers"]
+    due = date.today().isoformat()
+    assert client.post(base + "/invoice", json={"due_date": due}).status_code == 422
+    invoice = client.post(base + "/invoice", json={"due_date": due, "unit_price": "39.99"})
+    assert invoice.status_code == 201, invoice.text
+    assert invoice.json()["line_items"][0]["name"] == "Personalised Birthday Book (hardback)"
+    smtp.assert_not_called()

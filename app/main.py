@@ -166,7 +166,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.85", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.86", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_gallery_routes(app)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
@@ -190,6 +190,8 @@ async def protective_response_headers(request: Request, call_next):
             "frame-ancestors 'self' https://perfectweddingsbymark.uk "
             "https://www.perfectweddingsbymark.uk"
         )
+        if request.url.path.rstrip("/") == "/storybook-order":
+            response.headers["Content-Security-Policy"] += " https://ivorydigital.uk https://www.ivorydigital.uk"
         if "X-Frame-Options" in response.headers:
             del response.headers["X-Frame-Options"]
     elif is_inline_pdf:

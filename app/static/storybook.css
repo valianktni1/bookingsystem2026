@@ -34,3 +34,17 @@
 
 .sb-conditional:not([hidden]){display:contents}
 [data-sb-theme-help]{margin:0 0 12px}
+
+.sb-form-editor fieldset{min-width:0;border:1px solid #cfc8bc;border-radius:8px;padding:12px;margin:16px 0}
+.sb-form-editor legend{font-weight:700;padding-inline:6px}
+.sb-form-editor fieldset>p{margin:0 0 12px}
+.sb-editor-row{margin:0 0 12px;padding:10px;border:1px solid #d9d4ca;border-radius:8px;overflow-wrap:anywhere}
+.sb-editor-row>label:not(.sb-editor-check){display:block}
+.sb-dialog .sb-editor-check{display:flex;align-items:center;gap:8px;min-height:44px}
+.sb-editor-check input[type=checkbox]{flex:none;width:18px;height:18px;margin:0}
+.sb-editor-row button{justify-self:start}
+.sb-answer-list{overflow-wrap:anywhere}
+.sb-answer-list dt{font-weight:600}
+.sb-answer-list dd{margin:0 0 8px;white-space:pre-wrap}
+[data-preview] h1,.sb-shell h1{overflow-wrap:anywhere}
+[data-preview]>p,.sb-shell section>p,.sb-form-editor [data-thanks]{white-space:pre-line;overflow-wrap:anywhere}
