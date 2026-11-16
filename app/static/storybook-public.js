@@ -1,7 +1,6 @@
 (() => {
-  const s=window.WBMStorybooks, form=document.querySelector("#storybook-request"), main=document.querySelector("main");
-  form.innerHTML=s.fields({}, {}) + s.consent + '<label class="sb-website" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label><p class="sb-error" role="alert" data-sb-error></p><button class="sb-primary" type="submit">Send storybook order request</button>';
-  const allowed=["https://perfectweddingsbymark.uk","https://www.perfectweddingsbymark.uk"];
+  const s=window.WBMStorybooks, order=document.querySelector("#order"), main=document.querySelector("main");
+  const allowed=["https://perfectweddingsbymark.uk","https://www.perfectweddingsbymark.uk","https://ivorydigital.uk","https://www.ivorydigital.uk"];
   const sendHeight=(type="wbm-enquiry-height")=>{
     if(window.parent===window)return;
     const height=Math.ceil(main.getBoundingClientRect().height)+2;
@@ -11,12 +10,24 @@
   window.addEventListener("message",event=>{
     if(event.source===window.parent&&allowed.includes(event.origin)&&event.data?.type==="wbm-enquiry-resize")sendHeight();
   });
-  s.requestForm(form,"/api/public/storybooks",{publicOrder:true,onSuccess:()=>{
-    document.querySelector("#order").hidden=true;
-    const thanks=document.querySelector("#storybook-thanks");
-    thanks.innerHTML="<h1>Thank you</h1><p>"+s.esc(s.success)+"</p>";
-    thanks.hidden=false;thanks.focus({preventScroll:true});
-    if(window.parent===window)thanks.scrollIntoView({block:"start"});
-    else requestAnimationFrame(()=>sendHeight("wbm-storybook-submitted"));
-  }});
+  async function load(){
+    try{
+      const response=await fetch("/api/public/storybooks/form",{cache:"no-store"});
+      if(!response.ok)throw new Error();
+      const {config,revision}=await response.json();
+      order.innerHTML=s.publicContent(config);
+      s.requestForm(order.querySelector("form"),"/api/public/storybooks",{publicOrder:true,config,revision,onSuccess:()=>{
+        order.hidden=true;
+        const thanks=document.querySelector("#storybook-thanks");
+        thanks.innerHTML="<h1>Thank you</h1><p>"+s.esc(config.thanks)+"</p>";
+        thanks.hidden=false;thanks.focus({preventScroll:true});
+        if(window.parent===window)thanks.scrollIntoView({block:"start"});
+        else requestAnimationFrame(()=>sendHeight("wbm-storybook-submitted"));
+      }});
+    }catch{
+      order.innerHTML='<h1>Order a personalised storybook</h1><p role="alert">The form couldn’t load just now.</p><button type="button" class="sb-primary">Try again</button>';
+      order.querySelector("button").onclick=event=>{event.currentTarget.disabled=true;load();};
+    }
+  }
+  load();
 })();

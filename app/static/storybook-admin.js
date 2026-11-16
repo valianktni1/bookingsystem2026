@@ -3,6 +3,7 @@
   const s=window.WBMStorybooks;
   const esc=s.esc, today=()=>new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/London"}).format(new Date());
   const date=value=>value?new Intl.DateTimeFormat("en-GB",{day:"numeric",month:"short",year:"numeric"}).format(new Date(value+"T12:00:00")):"Not specified";
+  const storyTitle=d=>d.theme_title || s.themes[d.theme||"wedding"] || "Storybook";
   let page=0;
   async function run(action,button) {
     button.disabled=true;
@@ -28,7 +29,7 @@
     dialog.className="sb-dialog";
     dialog.setAttribute("aria-labelledby","sb-review-title");
     dialog.innerHTML=`<h2 id="sb-review-title">Review storybook request</h2>
-    <form>${s.fields(order.details,order,true)}
+    <form>${s.fields(order.details,order,true)}${answerList(order.details)}
       <div class="sb-grid"><label class="sb-wide">Billing address (optional)<textarea maxlength="1000" name="billing_address" rows="2">${esc(order.billing_address)}</textarea></label>
       ${s.input("delivery_name","Delivery recipient",order.delivery.name,'maxlength="160"')}
       <label class="sb-wide">UK delivery address, including postcode<textarea name="delivery_address" maxlength="1000" rows="3">${esc(order.delivery.address)}</textarea></label></div>
@@ -58,7 +59,7 @@
   function invoice(order,reload) {
     const theme=order.details.theme||"wedding";
     const pricing=theme==="wedding" ? `${order.quantity} × £34.99 = <strong>${s.price.format(order.quantity*34.99)}</strong> including UK delivery.` : `${order.quantity} copies · enter the agreed price per book, including UK delivery.`;
-    showModal("Create storybook invoice",`<p class="full"><strong>${esc(s.themes[theme])}</strong><br>${pricing}<br>Bill to: ${esc(order.buyer_name)} · ${esc(order.buyer_email)}</p>
+    showModal("Create storybook invoice",`<p class="full"><strong>${esc(storyTitle(order.details))}</strong><br>${pricing}<br>Bill to: ${esc(order.buyer_name)} · ${esc(order.buyer_email)}</p>
       ${theme==="wedding"?"":`<label class="full">Agreed price per book (£)<input id="sb-unit-price" type="number" min="0.01" max="10000" step="0.01" required></label>`}
       <label class="full">Payment due date<input id="sb-invoice-due" type="date" min="${today()}" value="${today()}" required></label>
       <label class="full"><span><input type="checkbox" required> I’ve confirmed the details and timing with the buyer.</span></label>`,
@@ -67,10 +68,12 @@
   }
   function downloadBrief(order) {
     const d=order.details, theme=d.theme||"wedding";
-    const lines=["# Storybook design brief","", "Story: "+s.themes[theme]];
+    const lines=["# Storybook design brief","", "Story: "+storyTitle(d)];
     if(s.isWedding(theme))lines.push("Wedding date: "+date(d.wedding_date),"Venue: "+d.venue,
       ...(d.reception?["Reception: "+d.reception]:[]));
     if(d.destination)lines.push("Holiday destination: "+d.destination);
+    if(d.custom_answers?.length)lines.push("", "## Extra answers from the original enquiry",
+      ...d.custom_answers.map(item=>`${item.question}: ${item.answer}`));
     d.books.forEach((b,i)=>lines.push("", "## Book "+(i+1),"Child’s name: "+b.name,
       ...(b.role==="child"?[]:["Wedding role: "+s.role[b.role]]),
       "Hair: "+(b.hair_other||s.hair[b.hair]),"Identical copies: "+b.quantity,
@@ -80,6 +83,9 @@
     const link=document.createElement("a");link.href=url;link.download="storybook-"+order.id+"-design-brief.md";
     document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
+  function answerList(d) {
+    return d.custom_answers?.length ? `<h4>Extra answers from the original enquiry</h4><dl class="sb-answer-list">${d.custom_answers.map(item=>`<dt>${esc(item.question)}</dt><dd>${esc(item.answer)}</dd>`).join("")}</dl>` : "";
+  }
   function renderOrders(host, orders, reload) {
     host.innerHTML=orders.map(order=>{
       const d=order.details,i=order.invoice,live=i&&!["void","cancelled"].includes(i.status);
@@ -87,11 +93,11 @@
       return `<article class="sb-card" data-sb-id="${order.id}"><h3>${esc(order.buyer_name)}</h3>
       <p><span class="sb-status">${esc(s.statuses[order.stage])}</span> · ${order.quantity} book(s) · <strong>${order.total===null?"Price to confirm":s.price.format(order.total)}</strong></p>
       <p><a href="mailto:${esc(order.buyer_email)}">${esc(order.buyer_email)}</a> · ${d.gift?"Gift order · ":""}${order.wedding_id?"Linked wedding booking":"Standalone request"}</p>
-      <p><strong>${esc(s.themes[d.theme||"wedding"])}</strong></p>
+      <p><strong>${esc(storyTitle(d))}</strong></p>
       ${s.isWedding(d.theme||"wedding")?`<p>Wedding: ${date(d.wedding_date)} · ${esc(d.venue)}${d.reception?" / "+esc(d.reception):""} · ${esc(s.ceremony[d.ceremony])}</p>`:d.destination?`<p>Holiday destination: ${esc(d.destination)}</p>`:""}
       <p>Requested by: ${date(d.needed_by)}</p>
       <details><summary>Personalisation and delivery</summary><ul>${d.books.map(b=>`<li><strong>${esc(b.name)}</strong>${b.role==="child"?"":" · "+esc(s.role[b.role])} · ${esc(b.hair_other||s.hair[b.hair])} · ${b.quantity} copies${b.dedication?"<br>Dedication: "+esc(b.dedication):""}</li>`).join("")}</ul>
-      <p>Bill to: ${esc(order.buyer_name)}${order.billing_address?" · "+esc(order.billing_address):""}</p><p>Deliver to: ${esc(order.delivery.name||"To confirm")}${order.delivery.address?" · "+esc(order.delivery.address):""}</p></details>
+      ${answerList(d)}<p>Bill to: ${esc(order.buyer_name)}${order.billing_address?" · "+esc(order.billing_address):""}</p><p>Deliver to: ${esc(order.delivery.name||"To confirm")}${order.delivery.address?" · "+esc(order.delivery.address):""}</p></details>
       ${live?`<p>Invoice ${esc(i.number)} · ${s.price.format(i.paid)} paid · ${s.price.format(i.balance)} outstanding</p>`:""}
       <div class="sb-actions">
       ${!closed?`<button class="sb-secondary" type="button" data-sb-act="edit">Review &amp; edit</button>`:""}
@@ -118,8 +124,9 @@
   }
   async function overview() {
     const host=document.querySelector("#content");
-    host.innerHTML='<section class="panel sb-admin-list"><h2>Storybooks</h2><p>Review requests, invoice the buyer and track each book from payment to dispatch.</p><p><a href="/storybook-order" target="_blank" rel="noopener">Open the public order form</a></p><div data-sb-orders>Loading requests…</div><div class="sb-actions" data-sb-pages></div></section>';
+    host.innerHTML='<section class="panel sb-admin-list"><h2>Storybooks</h2><p>Review requests, invoice the buyer and track each book from payment to dispatch.</p><div class="sb-actions"><button class="sb-primary" type="button" data-sb-form-edit>Edit enquiry form</button><a href="/storybook-order" target="_blank" rel="noopener">Open the public order form</a></div><div data-sb-orders>Loading requests…</div><div class="sb-actions" data-sb-pages></div></section>';
     const list=host.querySelector("[data-sb-orders]");
+    host.querySelector("[data-sb-form-edit]").onclick=event=>run(()=>window.WBMStorybookEditor.open(),event.currentTarget);
     try{
       const orders=await api(`/api/storybooks?offset=${page*50}`);
       if(!list.isConnected)return;
