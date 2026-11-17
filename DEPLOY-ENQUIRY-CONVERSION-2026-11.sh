@@ -135,7 +135,11 @@ print("Enquiry update and existing feature checks passed")
 '
 
 echo '4/5 Starting the updated app...'
-"${build_compose[@]}" up -d --no-deps --no-build app
+if ! "${build_compose[@]}" up -d --no-deps --no-build app; then
+  echo 'App restart failed. Restoring the saved app image automatically...'
+  docker compose -f compose.yaml -f "$backup_dir/rollback.yaml" up -d --no-deps --no-build app
+  exit 1
+fi
 
 echo '5/5 Checking the live app...'
 ready=0
@@ -164,8 +168,11 @@ done
 printf '\nRollback command if needed:\nsudo docker compose -f %q -f %q up -d --no-deps --no-build app\n' "$PWD/compose.yaml" "$backup_dir/rollback.yaml"
 
 if [[ "$ready" != 1 ]]; then
-  echo 'Health check did not pass. Use the rollback command above and share the app logs.'
-  "${live_compose[@]}" logs --tail=80 app
+  echo 'Health check did not pass. Restoring the saved app image automatically...'
+  "${live_compose[@]}" logs --tail=80 app || true
+  docker compose -f compose.yaml -f "$backup_dir/rollback.yaml" up -d --no-deps --no-build app
+  "${live_compose[@]}" ps
+  echo 'Saved app image restored. Keep the database backup and review the logs above.'
   exit 1
 fi
 
