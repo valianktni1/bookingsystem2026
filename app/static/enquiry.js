@@ -18,6 +18,13 @@ let parentOrigin = (() => {
 })();
 const growthSources = new Set(["Google", "Facebook", "Instagram", "Bing", "Other website", "Direct / unknown"]);
 
+function requestedWeddingDate() {
+  const value = new URLSearchParams(window.location.search).get("date");
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value ? value : null;
+}
+
 function safeAttribution(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const keys = Object.keys(value);
@@ -181,11 +188,14 @@ async function initialiseForm() {
     const payment = document.querySelector("#payment-note");
     payment.replaceChildren();
     if (body.payment_title || body.payment_options.length) {
-      if (body.payment_title) payment.append(element("strong", "", body.payment_title));
+      payment.append(element("summary", "", `${body.payment_title || "Payment options"} — nothing to pay to enquire`));
       body.payment_options.forEach(option => payment.append(element("div", "payment-option", option)));
       payment.classList.remove("hidden");
     }
     fieldHost.replaceChildren(...body.fields.map(renderField));
+    const dateInput = form.querySelector('[name="event_date"]');
+    const selectedDate = requestedWeddingDate();
+    if (dateInput && selectedDate && !dateInput.value) dateInput.value = selectedDate;
     await loadPackages();
     attachVenue();
     submitButton.disabled = false;
