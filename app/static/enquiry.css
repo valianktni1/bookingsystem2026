@@ -8,9 +8,12 @@ main { width:min(1040px,100%); margin:auto; padding:34px 28px; }
 header small { color:#9b8065; font-size:11px; font-weight:800; letter-spacing:.13em; }
 header h1 { max-width:850px; margin:8px 0 9px; color:#5a696b; font-size:28px; line-height:1.22; letter-spacing:-.025em; }
 header p { margin:0; color:#798789; font-size:14px; }
-.payment-note { display:grid; gap:11px; margin:25px 0; padding:17px 19px; border-left:4px solid #bca98f; border-radius:5px; background:#f7f2e9; }
-.payment-note>strong { color:var(--deep); font-size:14px; }
-.payment-note>div { display:grid; grid-template-columns:65px 1fr; gap:9px; padding-top:9px; border-top:1px solid #ded2bf; }
+header { margin-bottom:24px; }
+.payment-note { margin:25px 0 0; padding:15px 19px; border-left:4px solid #bca98f; border-radius:5px; background:#f7f2e9; }
+.payment-note>summary { color:var(--deep); font-size:14px; font-weight:700; cursor:pointer; }
+.payment-note>summary:focus-visible { outline:3px solid #806f5f; outline-offset:5px; }
+.payment-note>div { padding-top:9px; border-top:1px solid #ded2bf; }
+.payment-note[open]>div:first-of-type { margin-top:13px; }
 .payment-note>div.payment-option { display:block; color:#5f6f70; font-size:12px; line-height:1.5; }
 .payment-note b { color:#806a4d; font-size:11px; }
 .payment-note span { font-size:12px; line-height:1.45; }
@@ -61,6 +64,8 @@ label,.venue-summary span,.venue-summary strong,.venue-summary small,.counter { 
 html.embedded body { background:transparent; }
 html.embedded main { width:100%;padding:16px; }
 html.embedded .card { box-shadow:none; }
+html.embedded .enquiry-logo,html.embedded header small { display:none; }
+html.embedded header { margin-bottom:22px; }
 html.embedded .enquiry-complete .success { padding:28px clamp(16px,4vw,32px); position:static;transform:none;width:100%;max-height:none;min-height:340px; }
 @media(max-width:700px) {
  main { padding:16px 12px; }

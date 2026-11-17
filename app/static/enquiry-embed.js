@@ -7,6 +7,14 @@
   // served by the booking app, so its origin remains trustworthy and stable.
   const allowedOrigin = new URL(script.src, location.href).origin;
   frame.dataset.wbmResizeBound = "true";
+  const weddingDate = new URL(location.href).searchParams.get("wedding_date");
+  if (weddingDate && /^\d{4}-\d{2}-\d{2}$/.test(weddingDate)) {
+    const iframeUrl = new URL(frame.getAttribute("src"), location.href);
+    if (iframeUrl.origin === allowedOrigin) {
+      iframeUrl.searchParams.set("date", weddingDate);
+      frame.src = iframeUrl.href;
+    }
+  }
   Object.assign(frame.style, {display:"block",width:"100%",maxWidth:"100%",minWidth:"0",border:"0"});
   if (frame.closest(".wbm-contact .wbm-enquiry")) {
     const style = document.createElement("style");
