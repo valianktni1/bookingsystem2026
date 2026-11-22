@@ -1,0 +1,23 @@
+.iq-dialog,.iq-dialog *,.iq-workspace *{box-sizing:border-box;min-width:0;overflow-wrap:anywhere}
+.iq-dialog{width:min(820px,calc(100% - 20px));max-width:100%;max-height:calc(100dvh - 20px);overflow:auto;padding:24px;border:1px solid #cfc8bc;border-radius:14px;background:var(--wbm-surface,#fff);color:var(--ink,#233e40);font:inherit}
+.iq-dialog::backdrop{background:#182a29b0}
+.iq-dialog h2{margin-top:0}
+.iq-dialog p{line-height:1.5}
+.iq-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.iq-form>p,.iq-wide{grid-column:1/-1}
+.iq-dialog label{display:grid;gap:6px;font-size:15px}
+.iq-dialog input:not([type=checkbox]),.iq-dialog textarea,.iq-dialog select{font:inherit;font-size:16px;width:100%;min-height:46px;padding:9px;border:1px solid #bdb7ac;border-radius:7px;background:var(--bg,#f8f6f0);color:inherit;max-width:100%}
+.iq-dialog .iq-check{display:flex;align-items:center;gap:8px;min-height:44px}
+.iq-check input{width:19px;height:19px;flex:none}
+.iq-line{padding:12px;border:1px solid #cfc8bc;border-radius:8px;margin:0 0 12px}
+.iq-line legend{font-weight:700;padding:0 4px}
+.iq-actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;align-items:center}
+.iq-actions button,.iq-actions a,.iq-dialog button{font:inherit;min-height:44px;padding:10px 14px;border-radius:8px;white-space:normal;max-width:100%}
+.iq-card{padding:18px;border:1px solid var(--line,#d9d4ca);border-radius:12px;margin:16px 0}
+.iq-card h3{margin-top:0}
+.iq-error{color:var(--danger,#b34c42)}
+.iq-summary{font-weight:600;line-height:1.6}
+@media(max-width:580px){.iq-form{grid-template-columns:minmax(0,1fr)}.iq-dialog{padding:14px}.iq-actions>*{flex:1 1 160px}}
+
+.iq-dialog .primary,.iq-workspace .primary{background:var(--wbm-action,#315b53);color:var(--wbm-action-text,#fff);border:0;cursor:pointer}
+.iq-dialog .secondary,.iq-workspace .secondary{display:inline-flex;align-items:center;text-decoration:none;background:transparent;color:inherit;border:1px solid var(--line,#bdb7ac);cursor:pointer}

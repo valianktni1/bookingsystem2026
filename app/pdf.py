@@ -399,6 +399,10 @@ def invoice_description_lines(value) -> list[str]:
 
 
 def invoice_pdf(invoice: Invoice, profile: BusinessProfile, receipt: bool = False) -> bytes:
+    if (invoice.brand == Brand.IVORY and not invoice.legacy_source and not invoice.booking.legacy_source
+            and invoice.id in (invoice.booking.workflow_state or {}).get("ivory_invoice_metadata", {})):
+        from .ivory_pdf import ivory_invoice_pdf
+        return ivory_invoice_pdf(invoice, profile, receipt)
     if (invoice.brand == Brand.WBM
             and not getattr(invoice, "legacy_source", None)
             and not getattr(invoice.booking, "legacy_source", None)):

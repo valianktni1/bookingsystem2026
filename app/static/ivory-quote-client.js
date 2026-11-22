@@ -1,0 +1,15 @@
+(() => {
+  "use strict";
+  const host=document.querySelector("#quote"), token=location.pathname.split("/").pop(), url="/api/public/ivory-quotes/"+encodeURIComponent(token);
+  const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const money=x=>new Intl.NumberFormat("en-GB",{style:"currency",currency:"GBP"}).format(x||0);
+  async function load(){
+    try{const res=await fetch(url,{cache:"no-store"}),row=await res.json();if(!res.ok)throw new Error(row.detail||"This quote is unavailable. Please contact Mark.");const d=row.details;
+      host.innerHTML=`<h1>${esc(d.title)}</h1><p>${esc(row.reference)} · Prepared for <strong>${esc(d.customer)}</strong></p><p>${esc(d.intro)}</p>${d.lines.map(x=>`<article class="iq-card"><h2>${esc(x.name)}</h2><p>${esc(x.description)}</p><strong>${x.kind==="included"?"Included":money(x.amount)+(x.kind==="monthly"?" / month":"")}</strong><p>${x.selected?"Selected / agreed":"Optional, not selected"}${x.kind==="monthly"?" · Billed separately":""}</p></article>`).join("")}
+      <p class="iq-totals">One-off total: ${money(row.total)}</p>${row.monthly?`<p>Selected monthly services: ${money(row.monthly)}/month, separate from the one-off total.</p>`:""}
+      <p>Payment already received: ${money(d.opening_paid)}${d.opening_paid_date?" · "+esc(d.opening_paid_date):""}</p><p>Remaining one-off balance: <strong>${money(row.total-Number(d.opening_paid))}</strong></p><p>${esc(d.terms)}</p>
+      ${row.status==="accepted"?`<h2>Quote accepted</h2><p>Your invoice is ready.</p><a href="${url}/invoice.pdf">Open invoice PDF</a>`:`<form><label>Your name<input name="name" required maxlength="160" autocomplete="name"></label><label class="iq-check"><input type="checkbox" required> I accept the selected services, prices and payment terms shown above. Optional services marked not selected are excluded.</label><p class="iq-error" role="alert"></p><div class="iq-actions"><button class="primary" type="submit">Accept quote &amp; create invoice</button></div></form>`}`;
+      const form=host.querySelector("form");if(form)form.onsubmit=async event=>{event.preventDefault();const b=form.querySelector("button");b.disabled=true;try{const r=await fetch(url+"/accept",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:form.querySelector("input[name=name]").value,confirmed:true})});const data=await r.json();if(!r.ok)throw new Error(typeof data.detail==="string"?data.detail:"Could not accept the quote. Please contact Mark.");await load();}catch(e){form.querySelector("[role=alert]").textContent=e.message;b.disabled=false;}};
+    }catch(e){host.textContent=e.message;}
+  }load();
+})();

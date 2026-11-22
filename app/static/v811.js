@@ -3,7 +3,7 @@
   "use strict";
 
   const workspaceViews = new Set([
-    "dashboard", "storybooks", "enquiries", "weddings", "projects", "calendar", "workflows",
+    "dashboard", "storybooks", "ivoryquotes", "enquiries", "weddings", "projects", "calendar", "workflows",
     "mail", "invoices", "documents", "forms", "bookingforms", "timingsforms", "packages",
     "communications", "settings"
   ]);
