@@ -40,6 +40,7 @@ from .date_blocks import register_date_block_routes
 from .email_service import (email_signature_asset, email_signature_config,
                             preview_template_email, send_rendered_email,
                             send_template_email, smtp_credentials, smtp_ready)
+from .ivory_quotes import register_routes as register_ivory_routes
 from .storybooks import available_wedding, is_storybook_sale, new_storybook_count, register_storybook_routes
 from .enquiry_delivery import enquiry_email_loop, queue_enquiry_email
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
@@ -166,7 +167,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.86", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.88", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_gallery_routes(app)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
@@ -5646,6 +5647,8 @@ def storybook_public_pdf(db: Session, invoice_id: str, receipt: bool):
                              "Cache-Control": "private, no-store"})
 
 
+register_ivory_routes(app)
+
 register_storybook_routes(app, resolve_portal=resolve_portal, testing_mode=testing_mode,
                           full_invoice=full_invoice, invoice_json=invoice_json, public_pdf=storybook_public_pdf)
 
@@ -5653,7 +5656,7 @@ register_storybook_routes(app, resolve_portal=resolve_portal, testing_mode=testi
 @app.get("/{view}", include_in_schema=False)
 def admin_workspace_page(view: str):
     allowed = {
-        "dashboard", "storybooks", "enquiries", "weddings", "projects", "calendar",
+        "dashboard", "storybooks", "ivoryquotes", "enquiries", "weddings", "projects", "calendar",
         "workflows", "mail", "invoices", "documents", "forms",
         "bookingforms", "timingsforms", "packages", "communications", "settings",
     }

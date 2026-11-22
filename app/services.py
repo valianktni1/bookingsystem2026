@@ -116,24 +116,35 @@ def visible_task_condition():
 
 
 def next_invoice_number(db: Session, brand: Brand) -> tuple[int, str]:
+    # WBM and Ivory share the same allocator. Existing numbers are never rewritten.
     settings = get_settings()
-    counter_key = f"brand:{brand.value}"
-    counter = db.execute(
-        select(InvoiceCounter).where(InvoiceCounter.key == counter_key).with_for_update()
-    ).scalar_one_or_none()
-    if not counter:
-        highest_existing = db.scalar(
-            select(func.max(Invoice.sequence)).where(Invoice.brand == brand)
-        ) or settings.invoice_start
-        counter = InvoiceCounter(
-            key=counter_key,
-            value=max(settings.invoice_start, int(highest_existing)),
-        )
-        db.add(counter)
-        db.flush()
-    counter.value += 1
-    prefix = db.execute(select(BusinessProfile.invoice_prefix).where(BusinessProfile.brand == brand)).scalar_one()
-    return counter.value, f"{prefix}{counter.value:05d}"
+    key = "brand:wbm" if brand in (Brand.WBM, Brand.IVORY) else f"brand:{brand.value}"
+    dialect = db.get_bind().dialect.name
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    elif dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert
+    else:
+        raise RuntimeError("Unsupported invoice-counter database")
+    db.execute(insert(InvoiceCounter).values(key=key, value=settings.invoice_start)
+               .on_conflict_do_nothing(index_elements=["key"]))
+    counter = db.scalar(select(InvoiceCounter).where(InvoiceCounter.key == key).with_for_update())
+    prefix_brand = Brand.WBM if brand in (Brand.WBM, Brand.IVORY) else brand
+    prefix = db.scalar(select(BusinessProfile.invoice_prefix).where(BusinessProfile.brand == prefix_brand))
+    if not prefix:
+        raise ValueError("Set up the Weddings By Mark invoice prefix first.")
+    highest = db.scalar(select(func.max(Invoice.sequence)).where(Invoice.brand == prefix_brand)) or 0
+    # Include Ivory invoices already using a WBM number, including after a rollback.
+    for number in db.scalars(select(Invoice.number).where(Invoice.number.startswith(prefix))):
+        suffix = number[len(prefix):]
+        if suffix.isdigit():
+            highest = max(highest, int(suffix))
+    counter.value = max(counter.value, highest, settings.invoice_start)
+    while True:
+        counter.value += 1
+        number = f"{prefix}{counter.value:05d}"
+        if db.scalar(select(Invoice.id).where(Invoice.number == number)) is None:
+            return counter.value, number
 
 
 def invoice_status(total: Decimal, paid: Decimal) -> str:
