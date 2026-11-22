@@ -96,7 +96,7 @@ assert "Gallery connection & package settings" in Path("/app/app/static/v880.js"
 assert "v880-rules" in Path("/app/app/static/v880.css").read_text()
 from app.enquiry_delivery import EnquiryEmailJob, enquiry_email_loop
 assert EnquiryEmailJob.__tablename__ == "enquiry_email_jobs"
-assert "enquiry-response-v8-83" in Path("/app/app/static/enquiry.html").read_text()
+assert "enquiry-conversion-2026-11-17" in Path("/app/app/static/enquiry.html").read_text()
 assert "queue_enquiry_email" in Path("/app/app/main.py").read_text()
 from app.gallery_integration import WEDDINGS_AFTER
 assert WEDDINGS_AFTER.isoformat() == "2026-12-01"
