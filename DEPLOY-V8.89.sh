@@ -83,7 +83,7 @@ else
 fi
 
 echo '3/5 Verifying the new image before touching the live container...'
-"${build_compose[@]}" run --rm --no-deps --entrypoint python app -c '
+"${build_compose[@]}" run --rm -T --no-deps --entrypoint python app -c '
 from pathlib import Path
 from app.main import app
 from app.quote_templates import public_quote_bank_details
