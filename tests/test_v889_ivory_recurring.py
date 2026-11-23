@@ -104,6 +104,34 @@ def test_acceptance_retries_create_one_plan_and_cycle(ctx):
         assert len(list(db.scalars(select(Invoice))))==1
 
 
+@pytest.mark.parametrize("due_days", [0, 7])
+def test_early_first_invoice_preserves_service_start_and_renewals(ctx, due_days):
+    client, sessions = ctx
+    service_start = date(2026, 11, 30)
+    data = recurring_payload(start=service_start)
+    data["details"]["billing"].update(issue_first_on_acceptance=True, due_days=due_days)
+    row = agree(client, data)
+
+    assert row["invoice"]["total"] == 60
+    assert row["recurring"]["start_date"] == "2026-11-30"
+    assert row["recurring"]["next_billing_date"] == "2026-12-30"
+    assert run_due_cycles(today=service_start, sessions=sessions) == 0
+    with sessions() as db:
+        invoice = db.scalars(select(Invoice)).one()
+        assert invoice.issue_date == TODAY
+        assert invoice.supply_date == service_start
+        assert invoice.due_date == service_start + timedelta(days=due_days)
+        assert db.scalars(select(RecurringCycle)).one().period_end == date(2026, 12, 29)
+
+    renewal = date(2026, 12, 30)
+    assert run_due_cycles(today=renewal, sessions=sessions) == 1
+    with sessions() as db:
+        invoices = list(db.scalars(select(Invoice).order_by(Invoice.issue_date)))
+        assert len(invoices) == 2
+        assert invoices[1].issue_date == renewal
+        assert invoices[1].due_date == renewal + timedelta(days=due_days)
+
+
 def test_future_recurring_only_client_acceptance_returns_no_invoice_until_due(ctx):
     c,sessions=ctx
     p=recurring_payload(3,date(2027,1,31))

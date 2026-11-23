@@ -31,9 +31,12 @@ const input=(w,selector,value,event='input')=>{const el=w.document.querySelector
  input(w,'[name=billing_interval]','0','change');assert.equal(w.document.querySelector('[data-billing]').hidden,true);assert.equal(w.document.querySelector('[name=billing_start]').disabled,true);
  input(w,'[name=billing_interval]','12','change');assert.equal(w.document.querySelector('[data-billing]').hidden,false);
  input(w,'[name=title]','Annual SEO');input(w,'[name=customer]','Example Business');input(w,'[name=email]','example@example.com');input(w,'[name=billing_start]','2030-01-31');
+ const earlyInvoice=w.document.querySelector('[name=issue_first_on_acceptance]');
+ assert.equal(earlyInvoice.checked,false);
+ earlyInvoice.click();
  w.document.querySelector('dialog form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
  const saved=calls.find(c=>c.method==='POST'&&c.url==='/api/ivory-quotes').body.details;
- assert.deepEqual(saved.billing,{interval_months:12,start_date:'2030-01-31',due_days:0,cycle_total:'650'});
+ assert.deepEqual(saved.billing,{interval_months:12,start_date:'2030-01-31',due_days:0,cycle_total:'650',issue_first_on_acceptance:true});
  assert.equal(saved.lines[0].description,'Editable customer scope');assert.equal(emails.length,0);
  w.document.querySelector('[data-schedules]').click();await settle();assert.match(w.document.querySelector('dialog').textContent,/WBM02001/);
  w.document.querySelector('[data-action=edit]').click();await settle();input(w,'[name=total]','700');input(w,'[name=description]','Changed future scope');
@@ -44,11 +47,12 @@ const input=(w,selector,value,event='input')=>{const el=w.document.querySelector
  // Customer sees the exact billing commitment, then a future-start confirmation.
  const client=new JSDOM('<main><section id="quote"></section></main>',{url:'https://example.test/ivory-quote/token',runScripts:'outside-only'});
  const cw=client.window;let accepted=false;
- cw.fetch=async(url,opts)=>{if(opts?.method==='POST'){accepted=true;return {ok:true,json:async()=>({ok:true,number:null})};}return {ok:true,json:async()=>({...rows[0],status:accepted?'accepted':'shared',recurring:accepted?plans[0]:null})};};
+ cw.fetch=async(url,opts)=>{if(opts?.method==='POST'){accepted=true;return {ok:true,json:async()=>({ok:true,number:'WBM02001'})};}return {ok:true,json:async()=>({...rows[0],status:accepted?'accepted':'shared',recurring:accepted?plans[0]:null,invoice:accepted?{number:'WBM02001'}:null})};};
  cw.eval(fs.readFileSync(path.join(root,'ivory-quote-client.js'),'utf8'));await settle();
  assert.match(cw.document.querySelector('#quote').textContent,/£650.00 every 12 month/);
+ assert.match(cw.document.querySelector('#quote').textContent,/first invoice is issued when the quote is accepted/);
  assert.match(cw.document.querySelector('label.iq-check').textContent,/recurring billing frequency/);
  input(cw,'[name=name]','Example Customer');cw.document.querySelector('form').dispatchEvent(new cw.Event('submit',{cancelable:true}));await settle();
- assert.match(cw.document.querySelector('#quote').textContent,/service is scheduled/);assert.equal(cw.document.querySelector('a'),null);
+ assert.match(cw.document.querySelector('#quote').textContent,/Your invoice is ready/);assert.match(cw.document.querySelector('a').href,/invoice\.pdf$/);
  cw.close();console.log('Recurring quote fields, all intervals, custom price, future edits, pause/resume and client acceptance passed.');
 })().catch(e=>{console.error(e);process.exit(1);});

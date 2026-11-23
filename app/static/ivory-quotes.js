@@ -31,7 +31,9 @@
       <div class="iq-wide iq-form" data-billing>
         <p>Applies to selected Monthly services. Enter their monthly rates above; any one-off work is invoiced separately. Each recurring invoice covers the full selected period. No payment is collected automatically.</p>
         ${input("billing_start","First service period starts",d.billing?.start_date||ukToday(),'type="date" required')}
-        ${input("billing_due","Payment due after issue (days)",d.billing?.due_days??0,'type="number" min="0" max="90" required')}
+        ${input("billing_due","Payment allowance (days)",d.billing?.due_days??0,'type="number" min="0" max="90" required')}
+        <label class="iq-check iq-wide"><input type="checkbox" name="issue_first_on_acceptance" ${d.billing?.issue_first_on_acceptance?"checked":""}> Issue the first invoice as soon as the quote is accepted</label>
+        <p>If the first invoice is issued early, the payment allowance starts on the service start date. A 0-day allowance makes payment due on that date. Future billing dates follow the service start date.</p>
         ${input("billing_total","Agreed price for the full billing period (£)",d.billing?.cycle_total??"",'type="number" min="0.01" max="999999" step="0.01" placeholder="Leave blank to use monthly rates × months"')}
         <p data-billing-summary aria-live="polite"></p>
       </div>`}
@@ -77,7 +79,7 @@
         const shared={intro:val(form,"intro"),terms:val(form,"terms"),lines:readLines()};
         if(template){const item={...shared,name:val(form,"template_name")},items=templates.slice();if(templateIndex===null)items.push(item);else items[templateIndex]=item;await api(base+"/templates",{method:"PUT",body:JSON.stringify({items})});el.close();toast("Service template saved");await showTemplates();return;}
         const payload={request_id:requestId,booking_id:val(form,"booking_id")||null,details:{...shared,title:val(form,"title"),customer:val(form,"customer"),email:val(form,"email"),address:val(form,"address"),due_date:val(form,"due_date")||null,opening_paid:val(form,"opening_paid"),opening_paid_date:val(form,"opening_paid_date")||null,change_reason:isRevision?val(form,"change_reason"):""}};
-        if(Number(val(form,"billing_interval")))payload.details.billing={interval_months:Number(val(form,"billing_interval")),start_date:val(form,"billing_start"),due_days:Number(val(form,"billing_due")),cycle_total:val(form,"billing_total")||null};
+        if(Number(val(form,"billing_interval")))payload.details.billing={interval_months:Number(val(form,"billing_interval")),start_date:val(form,"billing_start"),due_days:Number(val(form,"billing_due")),cycle_total:val(form,"billing_total")||null,issue_first_on_acceptance:form.elements.issue_first_on_acceptance.checked};
         if(Number(payload.details.opening_paid)>0&&!payload.details.opening_paid_date)throw new Error("Enter the date the payment was received.");
         await api(isRevision?base+`/${old.id}/revise`:base,{method:"POST",body:JSON.stringify(payload)});
         el.close();toast("Ivory quote draft saved");await overview();
@@ -92,12 +94,12 @@
     d.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{const t=data.items[Number(b.dataset.copy)];d.close();edit({...blank(),...t,template_name:t.name},null,{template:true,templates:data.items,templateIndex:Number(b.dataset.copy)});});
   }
   function recordAgreement(row){
-    const el=dialog(row.billing?"Record agreement and start billing":"Record agreement and create invoice",`<p>${esc(row.details.customer)} · ${money(row.total)} one-off · ${money(row.details.opening_paid)} already received.</p>${row.billing?`<p><strong>Recurring: ${esc(billingSummary(row))}.</strong> Accepting starts the schedule and creates invoices due now. Future invoices are prepared for review at each renewal. No emails or payments are automatic.</p>`:'<p>This creates one invoice using the next WBM number. It does not send an email.</p>'}<form class="iq-form">
+    const el=dialog(row.billing?"Record agreement and start billing":"Record agreement and create invoice",`<p>${esc(row.details.customer)} · ${money(row.total)} one-off · ${money(row.details.opening_paid)} already received.</p>${row.billing?`<p><strong>Recurring: ${esc(billingSummary(row))}.</strong> ${row.billing.issue_first_on_acceptance?"The first recurring invoice is prepared when you record this agreement.":"The first recurring invoice is prepared when the service starts."} Future invoices are prepared for review at each renewal. No emails or payments are automatic.</p>`:'<p>This creates one invoice using the next WBM number. It does not send an email.</p>'}<form class="iq-form">
       ${input("name","Who agreed?","",'required maxlength="160"')}
       <label class="iq-wide">What was agreed and when?<textarea name="note" rows="3" required maxlength="1000"></textarea></label>
       <label class="iq-check iq-wide"><input type="checkbox" required> The client has agreed to these services and prices, and I have checked any opening payment has not been recorded elsewhere.</label>
       <p class="iq-error iq-wide" role="alert"></p><div class="iq-actions iq-wide"><button class="primary" type="submit">${row.billing?"Confirm agreement & start billing":"Create agreed invoice"}</button><button class="secondary" type="button" data-close>Cancel</button></div></form>`);
-    const f=el.querySelector("form");f.querySelector("[data-close]").onclick=()=>el.close();f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('[type="submit"]');b.disabled=true;try{await api(base+`/${row.id}/accept`,{method:"POST",body:JSON.stringify({name:val(f,"name"),note:val(f,"note"),confirmed:true})});el.close();toast("Ivory invoice created");await overview();}catch(err){f.querySelector("[role=alert]").textContent=err.message;}finally{b.disabled=false;}};
+    const f=el.querySelector("form");f.querySelector("[data-close]").onclick=()=>el.close();f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('[type="submit"]');b.disabled=true;try{const accepted=await api(base+`/${row.id}/accept`,{method:"POST",body:JSON.stringify({name:val(f,"name"),note:val(f,"note"),confirmed:true})});el.close();toast(accepted.invoice?"Ivory invoice created":"Agreement recorded and recurring billing scheduled");await overview();}catch(err){f.querySelector("[role=alert]").textContent=err.message;}finally{b.disabled=false;}};
   }
   async function share(row){
     const data=await api(base+`/${row.id}/share`,{method:"POST"});

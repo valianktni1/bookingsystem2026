@@ -31,6 +31,7 @@ class RecurringTerms(BaseModel):
     start_date: date
     due_days: int = Field(default=0, ge=0, le=90)
     cycle_total: Decimal | None = Field(default=None, gt=0, le=999999, decimal_places=2)
+    issue_first_on_acceptance: bool = False
 
 
 class RecurringPlan(Base):
@@ -82,9 +83,14 @@ def billing_text(details: dict) -> str:
     if not billing:
         return ""
     start = date.fromisoformat(str(billing["start_date"]))
+    first_invoice = ""
+    if billing.get("issue_first_on_acceptance"):
+        first_invoice = ("The first invoice is issued on acceptance. Its payment allowance runs from "
+                         "the service start date or invoice issue date, whichever is later. ")
     return (f"Recurring services: £{Decimal(billing['cycle_total']):,.2f} every {billing['interval_months']} month(s), "
-            f"starting {start:%d %B %Y}. Each invoice covers the following {billing['interval_months']} month(s) "
-            f"and is due {billing['due_days']} day(s) after issue. This is separate from any one-off work. "
+            f"starting {start:%d %B %Y}. Each invoice covers {billing['interval_months']} month(s). "
+            f"The standard payment allowance is {billing['due_days']} day(s) after issue. "
+            f"{first_invoice}This is separate from any one-off work. "
             "Payments are recorded only when received; no automatic card or bank collection is made.")
 
 
@@ -117,13 +123,13 @@ def cycle_document(plan, index):
     return start, end, period, line
 
 
-def generate_cycle(db, plan, *, today=None, allow_missed=False):
+def generate_cycle(db, plan, *, today=None, allow_missed=False, issue_on_acceptance=False):
     """Caller holds a plan row lock; period uniqueness protects retries as well."""
     today = today or business_today()
     if plan.status != "active":
         return None
     start, end, period, line = cycle_document(plan, plan.next_cycle)
-    if start > today:
+    if start > today and not (issue_on_acceptance and plan.next_cycle == 0):
         return None
     if end < today and not allow_missed:
         plan.last_error = "A whole billing period was missed. Review it and create the next invoice manually."
@@ -141,7 +147,7 @@ def generate_cycle(db, plan, *, today=None, allow_missed=False):
         raise HTTPException(422, "Save Ivory Digital bank details before creating a recurring invoice.")
     seq, number = next_invoice_number(db, Brand.IVORY)
     invoice = Invoice(booking_id=booking.id, brand=Brand.IVORY, sequence=seq, number=number,
-                      issue_date=today, supply_date=start, due_date=today + timedelta(days=plan.due_days),
+                      issue_date=today, supply_date=start, due_date=max(today, start) + timedelta(days=plan.due_days),
                       description=plan.title, notes=plan.details["terms"] + "\n\n" + period,
                       total=plan.cycle_total, paid=Decimal("0"), status="unpaid", line_items=[line])
     db.add(invoice)
@@ -179,7 +185,7 @@ def start_plan(db, offer):
     db.add(plan)
     db.flush()
     audit(db, "ivory_recurring_started", "booking", plan.booking_id, {"plan_id": plan.id, "billing": billing})
-    return plan, generate_cycle(db, plan)
+    return plan, generate_cycle(db, plan, issue_on_acceptance=billing.get("issue_first_on_acceptance", False))
 
 
 def run_due_cycles(*, today=None, sessions=SessionLocal):

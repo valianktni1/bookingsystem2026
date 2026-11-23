@@ -1,7 +1,7 @@
 """Versioned Ivory offers. Invoice and payment writes happen only on acceptance."""
 import hashlib
 import secrets
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
@@ -349,10 +349,13 @@ def register_routes(app):
             billing = billing_summary(d)
             plan = RecurringPlan(title=d["title"], interval_months=billing["interval_months"],
                                  start_date=date.fromisoformat(billing["start_date"]), cycle_total=Decimal(billing["cycle_total"]), details=d)
-            _, _, period, line = cycle_document(plan, 0)
+            start, _, period, line = cycle_document(plan, 0)
+            today = business_today()
+            due = (max(today, start) + timedelta(days=billing["due_days"])
+                   if billing.get("issue_first_on_acceptance") else None)
             content = document(profile, title="INVOICE PREVIEW", reference="WBM number assigned on creation",
                                customer=d["customer"], email=d["email"], address=d["address"], intro=period,
-                               lines=[{**line, "amount":line["total"]}], terms=d["terms"], issued=business_today(),
+                               lines=[{**line, "amount":line["total"]}], terms=d["terms"], issued=today, due=due,
                                invoice=True, bank=profile.bank_details)
             return Response(content, media_type="application/pdf", headers={"Cache-Control":"no-store"})
         content = document(profile, title="INVOICE PREVIEW", reference="WBM number assigned on creation", customer=d["customer"],
