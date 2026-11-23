@@ -18,7 +18,7 @@ const input=(w,selector,value,event='input')=>{const el=w.document.querySelector
    if(url==='/api/ivory-quotes'&&!body)return rows;
    if(url==='/api/ivory-quotes'&&body){const d=body.details;const r={id:'q1',booking_id:'booking-1',reference:'IDQ-TEST-R1',status:'draft',details:d,total:0,monthly:60,invoice:null,billing:{...d.billing,cycle_total:d.billing.cycle_total||String(60*d.billing.interval_months)}};rows=[r];return r;}
    if(url==='/api/ivory-recurring')return plans;
-   if(url==='/api/ivory-recurring/plan-1'&&opts.method==='PUT'){assert.equal(body.confirmed,true);plans[0]={...plans[0],title:body.title,cycle_total:Number(body.cycle_total),description:body.description,terms:body.terms};return plans[0];}
+   if(url==='/api/ivory-recurring/plan-1'&&opts.method==='PUT'){assert.equal(body.confirmed,true);plans[0]={...plans[0],title:body.title,cycle_total:Number(body.cycle_total),description:body.description,terms:body.terms,issue_seven_days_early:body.issue_seven_days_early,next_invoice_date:'2031-01-24',next_due_date:'2031-01-31'};return plans[0];}
    if(url==='/api/ivory-recurring/plan-1/action'){plans[0].status=body.action==='pause'?'paused':body.action==='resume'?'active':'cancelled';return plans[0];}
    throw Error('Unexpected API '+url);
  };
@@ -34,13 +34,16 @@ const input=(w,selector,value,event='input')=>{const el=w.document.querySelector
  const earlyInvoice=w.document.querySelector('[name=issue_first_on_acceptance]');
  assert.equal(earlyInvoice.checked,false);
  earlyInvoice.click();
+ w.document.querySelector('[name=issue_seven_days_early]').click();
  w.document.querySelector('dialog form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
  const saved=calls.find(c=>c.method==='POST'&&c.url==='/api/ivory-quotes').body.details;
- assert.deepEqual(saved.billing,{interval_months:12,start_date:'2030-01-31',due_days:0,cycle_total:'650',issue_first_on_acceptance:true});
+ assert.deepEqual(saved.billing,{interval_months:12,start_date:'2030-01-31',due_days:0,cycle_total:'650',issue_first_on_acceptance:true,issue_seven_days_early:true});
  assert.equal(saved.lines[0].description,'Editable customer scope');assert.equal(emails.length,0);
  w.document.querySelector('[data-schedules]').click();await settle();assert.match(w.document.querySelector('dialog').textContent,/WBM02001/);
  w.document.querySelector('[data-action=edit]').click();await settle();input(w,'[name=total]','700');input(w,'[name=description]','Changed future scope');
+ w.document.querySelector('[name=issue_seven_days_early]').click();
  w.document.querySelector('dialog form').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();assert.equal(plans[0].cycle_total,700);
+ assert.match(w.document.querySelector('dialog').textContent,/Prepare invoice: 2031-01-24 · Payment due: 2031-01-31/);
  w.document.querySelector('[data-action=pause]').click();await settle();w.document.querySelector('[data-confirm]').click();await settle();assert.equal(plans[0].status,'paused');
  w.document.querySelector('[data-action=resume]').click();await settle();w.document.querySelector('[data-confirm]').click();await settle();assert.equal(plans[0].status,'active');assert.equal(emails.length,0);
  dom.window.close();
@@ -51,6 +54,7 @@ const input=(w,selector,value,event='input')=>{const el=w.document.querySelector
  cw.eval(fs.readFileSync(path.join(root,'ivory-quote-client.js'),'utf8'));await settle();
  assert.match(cw.document.querySelector('#quote').textContent,/£650.00 every 12 month/);
  assert.match(cw.document.querySelector('#quote').textContent,/first invoice is issued when the quote is accepted/);
+ assert.match(cw.document.querySelector('#quote').textContent,/seven days before each service period/);
  assert.match(cw.document.querySelector('label.iq-check').textContent,/recurring billing frequency/);
  input(cw,'[name=name]','Example Customer');cw.document.querySelector('form').dispatchEvent(new cw.Event('submit',{cancelable:true}));await settle();
  assert.match(cw.document.querySelector('#quote').textContent,/Your invoice is ready/);assert.match(cw.document.querySelector('a').href,/invoice\.pdf$/);

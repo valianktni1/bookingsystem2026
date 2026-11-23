@@ -132,6 +132,50 @@ def test_early_first_invoice_preserves_service_start_and_renewals(ctx, due_days)
         assert invoices[1].due_date == renewal + timedelta(days=due_days)
 
 
+def test_prepare_each_invoice_seven_days_early_with_month_end_adjustment(ctx):
+    client, sessions = ctx
+    data = recurring_payload(start=date(2026, 11, 30))
+    data["details"]["billing"]["issue_seven_days_early"] = True
+    row = agree(client, data)
+
+    assert row["invoice"]["total"] == 60
+    assert row["recurring"]["next_invoice_date"] == "2026-12-23"
+    assert row["recurring"]["next_due_date"] == "2026-12-30"
+    assert run_due_cycles(today=date(2026, 12, 22), sessions=sessions) == 0
+    for start in [date(2026, 12, 30), date(2027, 1, 30), date(2027, 2, 28), date(2027, 3, 30)]:
+        assert run_due_cycles(today=start - timedelta(days=7), sessions=sessions) == 1
+        assert run_due_cycles(today=start, sessions=sessions) == 0
+
+    with sessions() as db:
+        invoices = list(db.scalars(select(Invoice).order_by(Invoice.issue_date)))
+        assert len(invoices) == 5
+        assert all(invoice.due_date == invoice.supply_date for invoice in invoices)
+        assert all(invoice.issue_date == invoice.due_date - timedelta(days=7) for invoice in invoices)
+        assert not list(db.scalars(select(EmailLog)))
+        assert not list(db.scalars(select(Payment)))
+
+
+def test_enable_early_invoices_on_existing_schedule(ctx):
+    client, sessions = ctx
+    row = agree(client, recurring_payload())
+    plan = client.get("/api/ivory-recurring").json()[0]
+    assert plan["next_invoice_date"] == "2026-12-23"
+    changes = {key: plan[key] for key in ("title", "cycle_total", "terms", "description")}
+    changes.update(expected_cycle=1, confirmed=True, issue_seven_days_early=True)
+    result = client.put(f'/api/ivory-recurring/{plan["id"]}', json=changes)
+
+    assert result.status_code == 200, result.text
+    assert result.json()["next_billing_date"] == "2026-12-23"
+    assert result.json()["next_invoice_date"] == "2026-12-16"
+    assert run_due_cycles(today=date(2026, 12, 16), sessions=sessions) == 1
+    assert run_due_cycles(today=date(2026, 12, 23), sessions=sessions) == 0
+    with sessions() as db:
+        first = db.get(Invoice, row["invoice"]["id"])
+        assert first.issue_date == first.due_date == TODAY
+        plan_record = db.get(RecurringPlan, plan["id"])
+        assert plan_record.details["lines"] == row["details"]["lines"]
+
+
 def test_future_recurring_only_client_acceptance_returns_no_invoice_until_due(ctx):
     c,sessions=ctx
     p=recurring_payload(3,date(2027,1,31))

@@ -351,8 +351,11 @@ def register_routes(app):
                                  start_date=date.fromisoformat(billing["start_date"]), cycle_total=Decimal(billing["cycle_total"]), details=d)
             start, _, period, line = cycle_document(plan, 0)
             today = business_today()
-            due = (max(today, start) + timedelta(days=billing["due_days"])
-                   if billing.get("issue_first_on_acceptance") else None)
+            due = None
+            if billing.get("issue_seven_days_early"):
+                due = start + timedelta(days=billing["due_days"])
+            elif billing.get("issue_first_on_acceptance"):
+                due = max(today, start) + timedelta(days=billing["due_days"])
             content = document(profile, title="INVOICE PREVIEW", reference="WBM number assigned on creation",
                                customer=d["customer"], email=d["email"], address=d["address"], intro=period,
                                lines=[{**line, "amount":line["total"]}], terms=d["terms"], issued=today, due=due,

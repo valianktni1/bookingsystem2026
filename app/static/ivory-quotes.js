@@ -6,6 +6,7 @@
   const ukToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/London',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const billingLabel={1:"Monthly",3:"Quarterly",6:"Six-monthly",12:"Annually"};
   const billingSummary=row=>row.billing?`${money(row.billing.cycle_total)} every ${row.billing.interval_months} month(s), starting ${row.billing.start_date}`:"";
+  const earlyInvoicesCheckbox=checked=>`<label class="iq-check iq-wide"><input type="checkbox" name="issue_seven_days_early" ${checked?"checked":""}> Prepare invoices seven days before each service period</label>`;
   const input=(name,label,v="",extra="")=>`<label>${label}<input name="${name}" value="${esc(v)}" ${extra}></label>`;
   const val=(el,name)=>el.querySelector(`[name="${name}"]`).value.trim();
   const blank=()=>({title:"",customer:"",email:"",address:"",intro:"",terms:"Balance due before launch. No VAT charged.",opening_paid:"0",opening_paid_date:null,due_date:null,change_reason:"",lines:[{name:"",description:"",amount:"0",kind:"one_off",selected:true}]});
@@ -33,7 +34,8 @@
         ${input("billing_start","First service period starts",d.billing?.start_date||ukToday(),'type="date" required')}
         ${input("billing_due","Payment allowance (days)",d.billing?.due_days??0,'type="number" min="0" max="90" required')}
         <label class="iq-check iq-wide"><input type="checkbox" name="issue_first_on_acceptance" ${d.billing?.issue_first_on_acceptance?"checked":""}> Issue the first invoice as soon as the quote is accepted</label>
-        <p>If the first invoice is issued early, the payment allowance starts on the service start date. A 0-day allowance makes payment due on that date. Future billing dates follow the service start date.</p>
+        ${earlyInvoicesCheckbox(d.billing?.issue_seven_days_early)}
+        <p>For early invoices, a 0-day payment allowance makes payment due on the service start date. The first-invoice option prepares the invoice immediately on acceptance.</p>
         ${input("billing_total","Agreed price for the full billing period (£)",d.billing?.cycle_total??"",'type="number" min="0.01" max="999999" step="0.01" placeholder="Leave blank to use monthly rates × months"')}
         <p data-billing-summary aria-live="polite"></p>
       </div>`}
@@ -79,7 +81,7 @@
         const shared={intro:val(form,"intro"),terms:val(form,"terms"),lines:readLines()};
         if(template){const item={...shared,name:val(form,"template_name")},items=templates.slice();if(templateIndex===null)items.push(item);else items[templateIndex]=item;await api(base+"/templates",{method:"PUT",body:JSON.stringify({items})});el.close();toast("Service template saved");await showTemplates();return;}
         const payload={request_id:requestId,booking_id:val(form,"booking_id")||null,details:{...shared,title:val(form,"title"),customer:val(form,"customer"),email:val(form,"email"),address:val(form,"address"),due_date:val(form,"due_date")||null,opening_paid:val(form,"opening_paid"),opening_paid_date:val(form,"opening_paid_date")||null,change_reason:isRevision?val(form,"change_reason"):""}};
-        if(Number(val(form,"billing_interval")))payload.details.billing={interval_months:Number(val(form,"billing_interval")),start_date:val(form,"billing_start"),due_days:Number(val(form,"billing_due")),cycle_total:val(form,"billing_total")||null,issue_first_on_acceptance:form.elements.issue_first_on_acceptance.checked};
+        if(Number(val(form,"billing_interval")))payload.details.billing={interval_months:Number(val(form,"billing_interval")),start_date:val(form,"billing_start"),due_days:Number(val(form,"billing_due")),cycle_total:val(form,"billing_total")||null,issue_first_on_acceptance:form.elements.issue_first_on_acceptance.checked,issue_seven_days_early:form.elements.issue_seven_days_early.checked};
         if(Number(payload.details.opening_paid)>0&&!payload.details.opening_paid_date)throw new Error("Enter the date the payment was received.");
         await api(isRevision?base+`/${old.id}/revise`:base,{method:"POST",body:JSON.stringify(payload)});
         el.close();toast("Ivory quote draft saved");await overview();
@@ -94,7 +96,7 @@
     d.querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{const t=data.items[Number(b.dataset.copy)];d.close();edit({...blank(),...t,template_name:t.name},null,{template:true,templates:data.items,templateIndex:Number(b.dataset.copy)});});
   }
   function recordAgreement(row){
-    const el=dialog(row.billing?"Record agreement and start billing":"Record agreement and create invoice",`<p>${esc(row.details.customer)} · ${money(row.total)} one-off · ${money(row.details.opening_paid)} already received.</p>${row.billing?`<p><strong>Recurring: ${esc(billingSummary(row))}.</strong> ${row.billing.issue_first_on_acceptance?"The first recurring invoice is prepared when you record this agreement.":"The first recurring invoice is prepared when the service starts."} Future invoices are prepared for review at each renewal. No emails or payments are automatic.</p>`:'<p>This creates one invoice using the next WBM number. It does not send an email.</p>'}<form class="iq-form">
+    const el=dialog(row.billing?"Record agreement and start billing":"Record agreement and create invoice",`<p>${esc(row.details.customer)} · ${money(row.total)} one-off · ${money(row.details.opening_paid)} already received.</p>${row.billing?`<p><strong>Recurring: ${esc(billingSummary(row))}.</strong> ${row.billing.issue_seven_days_early?"Invoices are prepared for review seven days before each service period.":"Invoices are prepared for review when each service period starts."} ${row.billing.issue_first_on_acceptance?"The first invoice is prepared when you record this agreement.":""} No emails or payments are automatic.</p>`:'<p>This creates one invoice using the next WBM number. It does not send an email.</p>'}<form class="iq-form">
       ${input("name","Who agreed?","",'required maxlength="160"')}
       <label class="iq-wide">What was agreed and when?<textarea name="note" rows="3" required maxlength="1000"></textarea></label>
       <label class="iq-check iq-wide"><input type="checkbox" required> The client has agreed to these services and prices, and I have checked any opening payment has not been recorded elsewhere.</label>
@@ -116,10 +118,12 @@
       ${input("total","Price per full billing period (£)",plan.cycle_total,'type="number" required min="0.01" max="999999" step="0.01"')}
       <label class="iq-wide">Service description<textarea name="description" required maxlength="4000" rows="5">${esc(plan.description)}</textarea></label>
       <label class="iq-wide">Payment terms and scope<textarea name="terms" maxlength="4000" rows="4">${esc(plan.terms)}</textarea></label>
-      <label class="iq-check iq-wide"><input type="checkbox" required> These future prices and service changes have been agreed with the customer.</label>
+      ${earlyInvoicesCheckbox(plan.issue_seven_days_early)}
+      <p>Early invoices use the service period start date plus the existing payment allowance to set the due date.</p>
+      <label class="iq-check iq-wide"><input type="checkbox" required> These future billing changes have been agreed with the customer.</label>
       <p role="alert" class="iq-error iq-wide"></p><div class="iq-actions iq-wide"><button class="primary" type="submit">Save future billing changes</button><button class="secondary" type="button" data-close>Cancel</button></div></form>`);
     d.querySelector("[data-close]").onclick=()=>d.close();const f=d.querySelector("form");f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('[type="submit"]');b.disabled=true;try{
-      await api(`/api/ivory-recurring/${plan.id}`,{method:"PUT",body:JSON.stringify({title:val(f,"title"),description:val(f,"description"),terms:val(f,"terms"),cycle_total:val(f,"total"),expected_cycle:plan.next_cycle,confirmed:true})});d.close();toast("Future recurring invoices updated");await showRecurring();
+      await api(`/api/ivory-recurring/${plan.id}`,{method:"PUT",body:JSON.stringify({title:val(f,"title"),description:val(f,"description"),terms:val(f,"terms"),cycle_total:val(f,"total"),issue_seven_days_early:f.elements.issue_seven_days_early.checked,expected_cycle:plan.next_cycle,confirmed:true})});d.close();toast("Future recurring invoices updated");await showRecurring();
     }catch(err){f.querySelector("[role=alert]").textContent=err.message;}finally{b.disabled=false;}};
   }
   function recurringAction(plan,action){
@@ -129,9 +133,9 @@
   }
   async function showRecurring(){
     const plans=await api("/api/ivory-recurring");
-    const d=dialog("Recurring billing",`<p>Invoices are prepared automatically for active schedules when each period starts. Review their PDFs and use Email invoice when ready. Payments are recorded separately when received.</p><div class="iq-actions"><button class="secondary" data-refresh>Refresh</button><button class="secondary" data-close>Close</button></div>
-      ${plans.length?plans.map(p=>`<article class="iq-card"><h3>${esc(p.customer)} — ${esc(p.title)}</h3><p><strong>${money(p.cycle_total)} ${esc(billingLabel[p.interval_months])?.toLowerCase()}</strong> · ${esc(p.status)}</p><p>Next period starts: ${esc(p.next_billing_date)} · Payment due ${p.due_days} day(s) after issue.</p>${p.last_error?`<p role="alert" class="iq-error">${esc(p.last_error)}</p>`:""}
-      <div class="iq-actions">${p.status!=="cancelled"?`<button class="secondary" data-plan="${p.id}" data-action="edit">Edit future invoices</button><button class="secondary" data-plan="${p.id}" data-action="${p.status==="paused"?"resume":"pause"}">${p.status==="paused"?"Resume":"Pause"}</button><button class="secondary" data-plan="${p.id}" data-action="cancel">Cancel schedule</button>${p.status==="active"?`<button class="secondary" data-plan="${p.id}" data-action="generate" ${p.next_billing_date>ukToday()?"disabled":""}>Create next invoice</button>`:""}`:""}<button class="secondary" data-project="${p.booking_id}">Project &amp; payments</button></div>
+    const d=dialog("Recurring billing",`<p>Invoices are prepared automatically on active schedules. Review their PDFs and use Email invoice when ready. Payments are recorded separately when received.</p><div class="iq-actions"><button class="secondary" data-refresh>Refresh</button><button class="secondary" data-close>Close</button></div>
+      ${plans.length?plans.map(p=>`<article class="iq-card"><h3>${esc(p.customer)} — ${esc(p.title)}</h3><p><strong>${money(p.cycle_total)} ${esc(billingLabel[p.interval_months])?.toLowerCase()}</strong> · ${esc(p.status)}</p><p>Next period starts: ${esc(p.next_billing_date)} · ${p.issue_seven_days_early?`Prepare invoice: ${esc(p.next_invoice_date)} · Payment due: ${esc(p.next_due_date)}`:`Payment due ${p.due_days} day(s) after issue.`}</p>${p.last_error?`<p role="alert" class="iq-error">${esc(p.last_error)}</p>`:""}
+      <div class="iq-actions">${p.status!=="cancelled"?`<button class="secondary" data-plan="${p.id}" data-action="edit">Edit future invoices</button><button class="secondary" data-plan="${p.id}" data-action="${p.status==="paused"?"resume":"pause"}">${p.status==="paused"?"Resume":"Pause"}</button><button class="secondary" data-plan="${p.id}" data-action="cancel">Cancel schedule</button>${p.status==="active"?`<button class="secondary" data-plan="${p.id}" data-action="generate" ${(p.next_invoice_date||p.next_billing_date)>ukToday()?"disabled":""}>Create next invoice</button>`:""}`:""}<button class="secondary" data-project="${p.booking_id}">Project &amp; payments</button></div>
       ${p.invoices.map(i=>`<section class="iq-recurring-invoice"><p><strong>${esc(i.number)}</strong> · ${esc(i.period_start)} to ${esc(i.period_end)} · ${esc(i.status)} · Balance ${money(i.balance)}</p>${i.id?`<div class="iq-actions"><a class="secondary" href="/api/invoices/${esc(i.id)}/pdf" target="_blank" rel="noopener">Invoice PDF</a><button class="secondary" data-email="${esc(i.id)}">Email invoice</button></div>`:""}</section>`).join("")||"<p>No invoice is due yet.</p>"}</article>`).join(""):"<p>No recurring schedules yet. Choose New recurring invoice, or add recurring billing to a quote with selected Monthly services.</p>"}`);
     d.querySelector("[data-close]").onclick=()=>d.close();d.querySelector("[data-refresh]").onclick=()=>{d.close();showRecurring();};
     d.querySelectorAll("[data-plan]").forEach(b=>b.onclick=()=>{const p=plans.find(x=>x.id===b.dataset.plan);d.close();if(b.dataset.action==="edit")editRecurring(p);else recurringAction(p,b.dataset.action);});

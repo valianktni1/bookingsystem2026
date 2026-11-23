@@ -22,6 +22,7 @@ from .security import current_admin
 from .services import audit, next_invoice_number
 
 LABELS = {1: "Monthly", 3: "Quarterly", 6: "Six-monthly", 12: "Annually"}
+INVOICE_LEAD = timedelta(days=7)
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +33,7 @@ class RecurringTerms(BaseModel):
     due_days: int = Field(default=0, ge=0, le=90)
     cycle_total: Decimal | None = Field(default=None, gt=0, le=999999, decimal_places=2)
     issue_first_on_acceptance: bool = False
+    issue_seven_days_early: bool = False
 
 
 class RecurringPlan(Base):
@@ -83,14 +85,19 @@ def billing_text(details: dict) -> str:
     if not billing:
         return ""
     start = date.fromisoformat(str(billing["start_date"]))
+    timing = f"The standard payment allowance is {billing['due_days']} day(s) after issue. "
+    if billing.get("issue_seven_days_early"):
+        timing = ("Invoices are prepared seven days before each service period starts. "
+                  f"Payment is due {billing['due_days']} day(s) after the service period starts. ")
     first_invoice = ""
     if billing.get("issue_first_on_acceptance"):
-        first_invoice = ("The first invoice is issued on acceptance. Its payment allowance runs from "
-                         "the service start date or invoice issue date, whichever is later. ")
+        first_invoice = "The first invoice is issued on acceptance. "
+        if not billing.get("issue_seven_days_early"):
+            first_invoice += ("Its payment allowance runs from the service start date "
+                              "or invoice issue date, whichever is later. ")
     return (f"Recurring services: £{Decimal(billing['cycle_total']):,.2f} every {billing['interval_months']} month(s), "
             f"starting {start:%d %B %Y}. Each invoice covers {billing['interval_months']} month(s). "
-            f"The standard payment allowance is {billing['due_days']} day(s) after issue. "
-            f"{first_invoice}This is separate from any one-off work. "
+            f"{timing}{first_invoice}This is separate from any one-off work. "
             "Payments are recorded only when received; no automatic card or bank collection is made.")
 
 
@@ -98,10 +105,18 @@ def plan_for_offer(db, offer_id):
     return db.scalar(select(RecurringPlan).where(RecurringPlan.source_offer_id == offer_id))
 
 
+def issue_seven_days_early(plan):
+    return bool((plan.details.get("billing") or {}).get("issue_seven_days_early"))
+
+
 def public_plan(plan):
+    start = cycle_start(plan.start_date, plan.interval_months, plan.next_cycle)
+    early = issue_seven_days_early(plan)
     return {"id": plan.id, "status": plan.status, "interval_months": plan.interval_months,
             "cycle_total": float(plan.cycle_total), "start_date": plan.start_date.isoformat(),
-            "next_billing_date": cycle_start(plan.start_date, plan.interval_months, plan.next_cycle).isoformat()}
+            "next_billing_date": start.isoformat(), "issue_seven_days_early": early,
+            "next_invoice_date": (start - INVOICE_LEAD if early else start).isoformat(),
+            "next_due_date": (start + timedelta(days=plan.due_days)).isoformat() if early else None}
 
 
 def _booking(db, booking_id):
@@ -129,7 +144,9 @@ def generate_cycle(db, plan, *, today=None, allow_missed=False, issue_on_accepta
     if plan.status != "active":
         return None
     start, end, period, line = cycle_document(plan, plan.next_cycle)
-    if start > today and not (issue_on_acceptance and plan.next_cycle == 0):
+    early = issue_seven_days_early(plan)
+    issue_from = start - INVOICE_LEAD if early else start
+    if issue_from > today and not (issue_on_acceptance and plan.next_cycle == 0):
         return None
     if end < today and not allow_missed:
         plan.last_error = "A whole billing period was missed. Review it and create the next invoice manually."
@@ -146,8 +163,9 @@ def generate_cycle(db, plan, *, today=None, allow_missed=False, issue_on_accepta
     if not (bank.get("account_number") and bank.get("sort_code")):
         raise HTTPException(422, "Save Ivory Digital bank details before creating a recurring invoice.")
     seq, number = next_invoice_number(db, Brand.IVORY)
+    due_from = start if early else max(today, start)
     invoice = Invoice(booking_id=booking.id, brand=Brand.IVORY, sequence=seq, number=number,
-                      issue_date=today, supply_date=start, due_date=max(today, start) + timedelta(days=plan.due_days),
+                      issue_date=today, supply_date=start, due_date=due_from + timedelta(days=plan.due_days),
                       description=plan.title, notes=plan.details["terms"] + "\n\n" + period,
                       total=plan.cycle_total, paid=Decimal("0"), status="unpaid", line_items=[line])
     db.add(invoice)
@@ -235,8 +253,14 @@ class PlanEdit(BaseModel):
     cycle_total: Decimal = Field(gt=0, le=999999, decimal_places=2)
     terms: str = Field(max_length=4000)
     description: str = Field(min_length=1, max_length=4000)
+    issue_seven_days_early: bool | None = None
     expected_cycle: int = Field(ge=0)
     confirmed: Literal[True]
+
+
+def recurring_description(plan):
+    return "\n\n".join(x["name"] + "\n" + x["description"]
+                       for x in plan.details["lines"] if x["selected"] and x["kind"] == "monthly")
 
 
 def register_routes(app):
@@ -260,7 +284,7 @@ def register_routes(app):
             result.append({**public_plan(plan), "booking_id": plan.booking_id, "title": plan.title,
                            "customer": plan.details["customer"], "email": plan.details["email"],
                            "next_cycle": plan.next_cycle, "due_days": plan.due_days, "terms": plan.details["terms"],
-                           "description": "\n\n".join(x["name"] + "\n" + x["description"] for x in plan.details["lines"] if x["selected"] and x["kind"] == "monthly"),
+                           "description": recurring_description(plan),
                            "last_error": plan.last_error, "invoices": invoices})
         return result
 
@@ -302,11 +326,21 @@ def register_routes(app):
         if plan.status == "cancelled" or plan.next_cycle != payload.expected_cycle:
             raise HTTPException(409, "Refresh and review this schedule before editing it.")
         old_total = str(plan.cycle_total)
+        service_changed = (payload.title.strip() != plan.title or payload.cycle_total != plan.cycle_total
+                           or payload.description.strip() != recurring_description(plan).strip())
         plan.title = payload.title.strip()
         plan.cycle_total = payload.cycle_total
-        plan.details = {**plan.details, "terms": payload.terms, "lines": [
-            {"name": plan.title, "description": payload.description, "amount": str(payload.cycle_total / plan.interval_months), "selected": True, "kind": "monthly"}]}
+        details = {**plan.details, "terms": payload.terms}
+        if service_changed:
+            details["lines"] = [{"name": plan.title, "description": payload.description,
+                                 "amount": str(payload.cycle_total / plan.interval_months),
+                                 "selected": True, "kind": "monthly"}]
+        if payload.issue_seven_days_early is not None:
+            details["billing"] = {**(details.get("billing") or {}),
+                                  "issue_seven_days_early": payload.issue_seven_days_early}
+        plan.details = details
         audit(db, "ivory_recurring_edited", "booking", plan.booking_id,
-              {"plan_id": plan.id, "previous_total": old_total, "new_total": str(plan.cycle_total), "from_cycle": plan.next_cycle})
+              {"plan_id": plan.id, "previous_total": old_total, "new_total": str(plan.cycle_total),
+               "from_cycle": plan.next_cycle, "issue_seven_days_early": issue_seven_days_early(plan)})
         db.commit()
         return public_plan(plan)
