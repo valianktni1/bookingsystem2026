@@ -20,6 +20,7 @@ from .models import Admin, Booking, Brand, BusinessProfile, Client, Invoice, Pay
 from .quote_templates import capture_invoice_bank
 from .security import current_admin
 from .services import audit, invoice_status, next_invoice_number
+from .ivory_recurring import RecurringCycle, RecurringTerms, billing_summary, plan_for_offer, public_plan, start_plan
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
 Money = Annotated[Decimal, Field(ge=0, le=999999, decimal_places=2)]
@@ -78,11 +79,19 @@ class OfferDetails(Strict):
     opening_paid: Money = Decimal("0")
     opening_paid_date: date | None = None
     change_reason: str = Field(default="", max_length=1000)
+    billing: RecurringTerms | None = None
 
     @model_validator(mode="after")
     def check_amounts(self):
         total = sum(line.amount for line in self.lines if line.selected and line.kind == "one_off")
-        if total <= 0:
+        monthly = sum(line.amount for line in self.lines if line.selected and line.kind == "monthly")
+        if self.billing and monthly <= 0:
+            raise ValueError("Select at least one monthly service with a monthly rate for recurring billing.")
+        if self.billing and self.billing.start_date.year > 2090:
+            raise ValueError("Choose a recurring start date before 2091.")
+        if self.billing and not self.billing.cycle_total and monthly * self.billing.interval_months > 999999:
+            raise ValueError("The recurring period total must be no more than £999,999.")
+        if total <= 0 and not self.billing:
             raise ValueError("Add at least one selected one-off service with a price.")
         if self.opening_paid > total:
             raise ValueError("The payment cannot be more than the one-off total.")
@@ -180,10 +189,27 @@ def invoice_for(db, row):
 def offer_json(db, row):
     total, monthly = totals(row.contents)
     inv = db.get(Invoice, row.invoice_id) if row.invoice_id else None
+    plan = plan_for_offer(db, row.id)
+    if inv is None and total == 0 and plan:
+        cycle = db.scalar(select(RecurringCycle).where(RecurringCycle.plan_id == plan.id,
+                                                      RecurringCycle.invoice_id.is_not(None)).order_by(RecurringCycle.cycle_index).limit(1))
+        if cycle:
+            inv = db.get(Invoice, cycle.invoice_id)
     return {"id":row.id, "booking_id":row.booking_id, "revision":row.revision, "reference":f"IDQ-{row.group_id[:8].upper()}-R{row.revision}",
             "status":row.status, "details":row.contents, "total":float(total), "monthly":float(monthly),
+            "billing":billing_summary(row.contents), "recurring":public_plan(plan) if plan else None,
             "acceptance":row.acceptance, "invoice":({"id":inv.id, "number":inv.number,"total":float(inv.total),"paid":float(inv.paid),
             "balance":float(inv.total-inv.paid)} if inv else None)}
+
+
+def accept_services(db, row):
+    total, _ = totals(row.contents)
+    invoice = invoice_for(db, row) if total > 0 else None
+    _, recurring_invoice = start_plan(db, row)
+    if invoice is None and recurring_invoice is not None:
+        row.invoice_id = recurring_invoice.id
+        invoice = recurring_invoice
+    return invoice
 
 
 def register_routes(app):
@@ -240,6 +266,8 @@ def register_routes(app):
             return offer_json(db, prior)
         profile_for(db)
         d = payload.details
+        if d.billing and d.billing.start_date < business_today():
+            raise HTTPException(422, "Choose today or a future date to start recurring billing.")
         if payload.booking_id:
             booking = db.scalar(select(Booking).where(Booking.id == payload.booking_id).with_for_update())
             if not booking or booking.brand != Brand.IVORY or booking.legacy_source or booking.archived_at:
@@ -272,6 +300,8 @@ def register_routes(app):
             raise HTTPException(409, "Open the latest revision before editing.")
         if not payload.details.change_reason.strip():
             raise HTTPException(422, "Enter a short reason for the revision.")
+        if payload.details.billing and payload.details.billing.start_date < business_today():
+            raise HTTPException(422, "Choose today or a future date to start recurring billing.")
         booking = db.get(Booking, old.booking_id)
         if str(payload.details.email).lower() != booking.client.email.lower():
             raise HTTPException(422, "Update the project contact before changing the quote recipient.")
@@ -299,7 +329,7 @@ def register_routes(app):
             raise HTTPException(409, "Open the latest quote before recording agreement.")
         if not payload.note.strip():
             raise HTTPException(422, "Record what was agreed and when.")
-        invoice_for(db, row)
+        accept_services(db, row)
         row.status = "accepted"; row.accepted_at = now()
         row.acceptance = {"method":"recorded_by_admin", "name":payload.name, "note":payload.note, "recorded_by":admin.email}
         db.commit()
@@ -314,6 +344,17 @@ def register_routes(app):
         profile = profile_for(db)
         payments = ([SimpleNamespace(paid_date=date.fromisoformat(d["opening_paid_date"]), amount=Decimal(d["opening_paid"]))]
                     if Decimal(d["opening_paid"]) else [])
+        if totals(d)[0] == 0 and d.get("billing"):
+            from .ivory_recurring import RecurringPlan, cycle_document
+            billing = billing_summary(d)
+            plan = RecurringPlan(title=d["title"], interval_months=billing["interval_months"],
+                                 start_date=date.fromisoformat(billing["start_date"]), cycle_total=Decimal(billing["cycle_total"]), details=d)
+            _, _, period, line = cycle_document(plan, 0)
+            content = document(profile, title="INVOICE PREVIEW", reference="WBM number assigned on creation",
+                               customer=d["customer"], email=d["email"], address=d["address"], intro=period,
+                               lines=[{**line, "amount":line["total"]}], terms=d["terms"], issued=business_today(),
+                               invoice=True, bank=profile.bank_details)
+            return Response(content, media_type="application/pdf", headers={"Cache-Control":"no-store"})
         content = document(profile, title="INVOICE PREVIEW", reference="WBM number assigned on creation", customer=d["customer"],
                            email=d["email"], address=d["address"], intro=d["intro"], lines=d["lines"], terms=d["terms"],
                            issued=business_today(), due=date.fromisoformat(d["due_date"]) if d.get("due_date") else None,
@@ -342,20 +383,22 @@ def register_routes(app):
     def public_accept(token: str, payload: Agreement, db=Depends(get_db)):
         row = public(db, token, True)
         if row.status == "accepted":
-            return {"ok":True, "number":db.get(Invoice, row.invoice_id).number}
-        invoice = invoice_for(db, row)
+            existing = db.get(Invoice, row.invoice_id) if row.invoice_id else None
+            return {"ok":True, "number":existing.number if existing else None}
+        invoice = accept_services(db, row)
         row.status = "accepted"; row.accepted_at = now()
         row.acceptance = {"method":"client", "name":payload.name, "accepted_at":row.accepted_at.isoformat()}
         audit(db, "ivory_quote_accepted", "booking", row.booking_id, {"offer_id":row.id, "name":payload.name})
         db.commit()
-        return {"ok":True, "number":invoice.number}
+        return {"ok":True, "number":invoice.number if invoice else None}
 
     @app.get("/api/public/ivory-quotes/{token}/invoice.pdf")
     def public_invoice(token: str, db=Depends(get_db)):
         row = public(db, token)
-        if row.status != "accepted" or not row.invoice_id:
+        data = offer_json(db, row)
+        if row.status != "accepted" or not data["invoice"]:
             raise HTTPException(404, "Accept the quote before viewing its invoice.")
         from .pdf import invoice_pdf
-        invoice = db.get(Invoice, row.invoice_id)
+        invoice = db.get(Invoice, data["invoice"]["id"])
         return Response(invoice_pdf(invoice, profile_for(db)), media_type="application/pdf",
                         headers={"Content-Disposition":f'inline; filename="{invoice.number}.pdf"', "Cache-Control":"no-store"})

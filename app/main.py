@@ -41,6 +41,7 @@ from .email_service import (email_signature_asset, email_signature_config,
                             preview_template_email, send_rendered_email,
                             send_template_email, smtp_credentials, smtp_ready)
 from .ivory_quotes import register_routes as register_ivory_routes
+from .ivory_recurring import recurring_loop, register_routes as register_recurring_routes
 from .storybooks import available_wedding, is_storybook_sale, new_storybook_count, register_storybook_routes
 from .enquiry_delivery import enquiry_email_loop, queue_enquiry_email
 from .enquiry_forms import public_enquiry_form, validate_enquiry_answers, validate_enquiry_form
@@ -140,7 +141,9 @@ async def lifespan(_: FastAPI):
     planner_task = asyncio.create_task(planner_invitation_loop())
     gallery_task = asyncio.create_task(gallery_loop())
     enquiry_email_task = asyncio.create_task(enquiry_email_loop())
+    recurring_task = asyncio.create_task(recurring_loop())
     yield
+    recurring_task.cancel()
     enquiry_email_task.cancel()
     gallery_task.cancel()
     planner_task.cancel()
@@ -149,6 +152,8 @@ async def lifespan(_: FastAPI):
     accounts_task.cancel()
     growth_task.cancel()
     sms_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await recurring_task
     with suppress(asyncio.CancelledError):
         await enquiry_email_task
     with suppress(asyncio.CancelledError):
@@ -167,7 +172,7 @@ async def lifespan(_: FastAPI):
         await sms_task
 
 
-app = FastAPI(title=settings.app_name, version="2.8.88", lifespan=lifespan, docs_url=None, redoc_url=None)
+app = FastAPI(title=settings.app_name, version="2.8.89", lifespan=lifespan, docs_url=None, redoc_url=None)
 register_gallery_routes(app)
 register_planner_routes(app)
 from .planner_timings import register_routes as register_planner_timing_routes
@@ -927,7 +932,7 @@ def full_booking(db: Session, booking_id: str) -> Booking:
 @app.get("/api/health")
 def health():
     sms_status = sms_status_json()
-    return {"status": "ok", "phase": "2B", "smtp_configured": smtp_ready(),
+    return {"status": "ok", "version": app.version, "phase": "2B", "smtp_configured": smtp_ready(),
             "reminders_enabled": settings.reminders_enabled,
             "maps_configured": bool(settings.google_maps_api_key),
             "imap_configured": bool(settings.imap_host and (
@@ -5648,6 +5653,7 @@ def storybook_public_pdf(db: Session, invoice_id: str, receipt: bool):
 
 
 register_ivory_routes(app)
+register_recurring_routes(app)
 
 register_storybook_routes(app, resolve_portal=resolve_portal, testing_mode=testing_mode,
                           full_invoice=full_invoice, invoice_json=invoice_json, public_pdf=storybook_public_pdf)

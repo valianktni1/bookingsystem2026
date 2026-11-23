@@ -1,3 +1,7 @@
+## V8.89: Ivory Digital recurring billing
+
+Monthly, quarterly, six-monthly and annual invoices with editable period prices, explicit acceptance, service periods, pause/cancel controls and review before sending. Existing wedding workflows and issued invoices are retained. See [recurring billing guide](docs/ivory-recurring-v889.md) and DEPLOY-V8.89.sh.
+
 ## V8.67: agreed discounts after quote acceptance
 
 Payments → Amend invoice now offers saved extras/discounts and custom discounts. Enter a positive discount amount; the server stores a negative invoice line and recalculates the balance. Original package lines, invoice number and recorded payments are preserved. Includes the complete V8.66 workspace and appearance update. See DEPLOY-V8.67-READ-ME.txt.

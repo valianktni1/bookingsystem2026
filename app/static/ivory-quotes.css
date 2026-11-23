@@ -17,6 +17,8 @@
 .iq-card h3{margin-top:0}
 .iq-error{color:var(--danger,#b34c42)}
 .iq-summary{font-weight:600;line-height:1.6}
+.iq-dialog [hidden]{display:none!important}
+.iq-recurring-invoice{border-top:1px solid var(--line,#d9d4ca);padding-top:10px;margin-top:12px}
 @media(max-width:580px){.iq-form{grid-template-columns:minmax(0,1fr)}.iq-dialog{padding:14px}.iq-actions>*{flex:1 1 160px}}
 
 .iq-dialog .primary,.iq-workspace .primary{background:var(--wbm-action,#315b53);color:var(--wbm-action-text,#fff);border:0;cursor:pointer}

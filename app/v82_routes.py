@@ -539,6 +539,9 @@ def register_v82_routes(app: FastAPI) -> None:
                 409,
                 "This invoice belongs to an accepted package quote and must be voided, not deleted.",
             )
+        from .ivory_recurring import RecurringCycle
+        if db.scalar(select(RecurringCycle.id).where(RecurringCycle.invoice_id == invoice.id).limit(1)):
+            raise HTTPException(409, "This invoice belongs to a recurring service period. Void it instead so the period stays recorded.")
 
         number = invoice.number
         booking_id = invoice.booking_id

@@ -1,3 +1,4 @@
-BookingSystem2026 V8.76 - read-only Control Centre summary
-Build: 2026.10.22-control-centre-feed-v8.76
-Previous planner and Final Wedding Timings improvements are retained.
+BookingSystem2026 V8.89 - Ivory Digital recurring billing
+Build: 2026.11.23-ivory-recurring-v8.89
+Monthly, quarterly, six-monthly and annual service invoices, prepared for review.
+Existing wedding workflows, invoices, payments and service templates are retained.

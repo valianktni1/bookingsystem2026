@@ -101,8 +101,12 @@ def document(profile, *, title, reference, customer, email, address, intro, line
 
 
 def offer_pdf(details, profile, reference):
+    from .ivory_recurring import billing_text
+    terms = details["terms"]
+    if details.get("billing"):
+        terms += "\n\n" + billing_text(details)
     return document(profile,title="QUOTATION",reference=reference,customer=details["customer"],email=details["email"],address=details["address"],
-                    intro=details["intro"],lines=details["lines"],terms=details["terms"])
+                    intro=details["intro"],lines=details["lines"],terms=terms)
 
 
 def ivory_invoice_pdf(invoice, profile, receipt=False):
